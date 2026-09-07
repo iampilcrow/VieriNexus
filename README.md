@@ -2,6 +2,8 @@
 
 VieriNexus is the in-progress unified home for the Vieri FFXIV plugin suite.
 
+Its ninth migration source is VieriNavPlotter: a reusable named-route library for recording, manually plotting, previewing, and assigning navigation paths across Nexus modules.
+
 The first public build is an early testing foundation. Install it alongside the existing Vieri plugins; it does not replace or disable them yet.
 
 The foundation build intentionally does not replace live automation. It provides the application shell, Home experience, module registry, dependency gate, character-scoped settings, shared world snapshots, resource ownership, migration discovery, and versioned IPC contracts needed for safe incremental consolidation.

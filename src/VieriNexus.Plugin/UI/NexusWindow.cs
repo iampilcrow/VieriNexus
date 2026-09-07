@@ -18,6 +18,7 @@ internal sealed class NexusWindow : Window
         ("OVERVIEW", "Progression", "Progression"),
         ("OVERVIEW", "Queue", "Queue"),
         ("MODULES", "Combat", "Combat"),
+        ("MODULES", "Routes & Navigation", "Routes"),
         ("MODULES", "Market", "Market"),
         ("MODULES", "Custom UI", "Custom UI"),
         ("MODULES", "Communications", "Communications"),
@@ -201,7 +202,7 @@ internal sealed class NexusWindow : Window
         }
 
         ImGui.Spacing();
-        NexusTheme.SectionTitle("Modules", "Eight current products, migrating behind one control plane");
+        NexusTheme.SectionTitle("Modules", "Nine current products, migrating behind one control plane");
         DrawModuleGrid();
 
         ImGui.Spacing();
@@ -216,7 +217,7 @@ internal sealed class NexusWindow : Window
             BeginPanel("SAFETY STATE");
             ImGui.TextUnformatted("Resource owners: 0");
             ImGui.TextUnformatted("Active goals: 0");
-            ImGui.TextUnformatted("Pending migrations: 8");
+            ImGui.TextUnformatted("Pending migrations: 9");
             ImGui.TextColored(NexusTheme.Green, "No live behavior has been replaced.");
             EndPanel();
             ImGui.EndTable();

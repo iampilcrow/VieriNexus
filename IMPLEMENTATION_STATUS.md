@@ -8,8 +8,9 @@
 - All Nexus windows remain hidden until a targetable character has settled in the world.
 - Mandatory dependency setup gate with six core required providers and a separately labeled recommended-integration catalog audited from every current Vieri product.
 - Dependency health detection and focused Install/Enable/Manage actions through Dalamud's plugin installer.
-- Eight neutral built-in module registrations.
-- Read-only discovery of all eight predecessor configuration sources.
+- Nine neutral built-in module registrations, including Routes & Navigation.
+- Read-only discovery of all nine predecessor configuration sources, including VieriNavPlotter.
+- Route migration requirements preserve searchable names, stable IDs, notes, tags, ordered points, territory, playback settings, and explicit assignments without enabling disabled overrides.
 - Explicit Discord credential preservation notice and migration boundary.
 - Global and content-ID/world-scoped character configuration.
 - Immutable, revisioned world snapshots with unknown-state handling.

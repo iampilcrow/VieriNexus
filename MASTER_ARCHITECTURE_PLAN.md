@@ -17,6 +17,8 @@ The migration should use a strangler approach during development:
 
 The migration adapters are temporary scaffolding, not part of the desired installed topology. The completed product requires only VieriNexus plus genuine third-party dependencies.
 
+Navigation is a first-class shared service. User-authored named routes are reusable assets rather than hard-coded overrides, and progression, duties, gear, market, gathering, crafting, farming, and future modules may consume them through one ownership-controlled route library.
+
 An all-at-once merge is rejected. It would combine several mature state machines, UI hooks, game-thread assumptions, and update pipelines before Nexus has proved its scheduler or recovery model.
 
 ## 2. Product boundary

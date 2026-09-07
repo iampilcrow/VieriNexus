@@ -5,7 +5,7 @@
     {
       "name": "VieriAutoDuty",
       "repository": "https://github.com/iampilcrow/VieriAutoDuty.git",
-      "commit": "4e838558748e2a94fa66eefb97b8f6e80a4179d6",
+      "commit": "87372e9659778cffcbcabad3a9171350a11d5bc4",
       "upstreamRepository": "https://github.com/erdelf/AutoDuty.git",
       "upstreamCommit": "2b0943ed113da76f3ce9df0df2f302151f828292"
     },
@@ -26,7 +26,7 @@
     {
       "name": "VieriCodex",
       "repository": "https://github.com/iampilcrow/VieriCodex.git",
-      "commit": "e58a835b1f734a5a18a60b7d5cee3d2824055a05",
+      "commit": "e31ffd82fadcfba5c6cf1439c3788ff7b669e61d",
       "upstreamRepository": "https://github.com/PunishXIV/Questionable.git",
       "upstreamCommit": "15c3d707f053d122be5b010857f5c9b3d2beef35"
     },
@@ -57,6 +57,13 @@
       "commit": "2bf7be0bd95e42ce29d1223347189da3183887d0",
       "upstreamRepository": "https://github.com/PunishXIV/WrathCombo.git",
       "upstreamCommit": "736597dee5d5ee90cd043becf27e8d973fda43e0"
+    },
+    {
+      "name": "VieriNavPlotter",
+      "repository": "https://github.com/iampilcrow/VieriNavPlotter.git",
+      "commit": "bb1de62ca99ff9a18c7d5a8fdbb7f234219e53c3",
+      "upstreamRepository": null,
+      "upstreamCommit": null
     }
   ]
 }

@@ -21,6 +21,7 @@ internal sealed class LegacyConfigurationInventory
         ("delvui", "VieriDelvUI", "Custom UI", ["VieriDelvUI.json", "VieriDelvUI"]),
         ("link", "VieriLink", "Communications", ["VieriLink.json", "VieriLink"]),
         ("rotation", "VieriRotationHelper", "Rotation Engine", ["VieriRotationHelper.json", "VieriRotationHelper"]),
+        ("navplotter", "VieriNavPlotter", "Routes and Navigation", ["VieriNavPlotter.json", "VieriNavPlotter"]),
     ];
 
     private readonly string configRoot;
