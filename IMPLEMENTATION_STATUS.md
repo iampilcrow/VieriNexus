@@ -11,6 +11,7 @@
 - Nine neutral built-in module registrations, including Routes & Navigation.
 - Read-only discovery of all nine predecessor configuration sources, including VieriNavPlotter.
 - Route migration requirements preserve searchable names, stable IDs, notes, tags, ordered points, territory, playback settings, and explicit assignments without enabling disabled overrides.
+- VieriNavPlotter's visible built-in baseline includes all 27 current AutoDuty gear-vendor destinations and distinguishes the two authored multi-point approaches from destination-only navmesh behavior.
 - Explicit Discord credential preservation notice and migration boundary.
 - Global and content-ID/world-scoped character configuration.
 - Immutable, revisioned world snapshots with unknown-state handling.

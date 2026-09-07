@@ -16,6 +16,7 @@
 12. Manual Gear shopping must remain a complete transaction: honor the approved item preview and gil reserve, purchase the selected upgrades, equip and verify every approved replacement with one idempotent retry, update the current gearset, then transfer every newly displaced weapon, armor piece, and accessory from the Armoury Chest into normal inventory before releasing the Gear lease. Existing EXP-item and sell/desynth protections remain mandatory.
 13. Until Nexus is authoritative for a module, a published fix to any predecessor Vieri product is not complete until Nexus pins that exact source revision and records the applicable behavior or regression requirement. Nexus may not claim runtime ownership before the corresponding embedded module and tests exist.
 14. VieriNavPlotter migration must retain every custom route exactly: stable ID, name, notes, tags, ordered coordinates, territory, playback flags, tolerances, and explicit consumer assignments. A disabled override must remain disabled after migration.
+15. Built-in route migration must preserve provenance and certainty: destination-only AutoDuty entries may not be presented as complete authored paths, while the Domitien hall and Old Sharlayan stair coordinate sets remain visible, copyable reference templates.
 
 ## Upstream update workflow
 
