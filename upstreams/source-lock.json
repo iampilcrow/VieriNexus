@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "capturedAtUtc": "2026-09-07T17:31:10.025Z",
+  "capturedAtUtc": "2026-09-07T18:00:03.815Z",
   "migrationSources": [
     {
       "name": "VieriAutoDuty",
       "repository": "https://github.com/iampilcrow/VieriAutoDuty.git",
-      "commit": "a22de3a0e14212d2e5fa8fa5f3236c23702bc6e5",
+      "commit": "9112930c17624b460cac66ae94dab71f4f1b438a",
       "upstreamRepository": "https://github.com/erdelf/AutoDuty.git",
       "upstreamCommit": "2b0943ed113da76f3ce9df0df2f302151f828292"
     },
@@ -61,7 +61,7 @@
     {
       "name": "VieriNavPlotter",
       "repository": "https://github.com/iampilcrow/VieriNavPlotter.git",
-      "commit": "4b76c03dfa0807000701115483df3e07c88596b9",
+      "commit": "f2ebf4e9799e91db9fae7e5cb239d7c84ceda0f8",
       "upstreamRepository": null,
       "upstreamCommit": null
     }

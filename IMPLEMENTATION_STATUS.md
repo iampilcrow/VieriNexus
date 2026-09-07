@@ -13,7 +13,7 @@
 - Route migration requirements preserve searchable names, stable IDs, notes, tags, ordered points, territory, playback settings, and explicit assignments without enabling disabled overrides.
 - VieriNavPlotter's visible built-in baseline includes all 27 current AutoDuty gear-vendor destinations and distinguishes the two authored multi-point approaches from destination-only navmesh behavior.
 - Route migration now explicitly preserves the review and execution controls: persistent in-world Show Route previews, Travel to Start/Destination, complete point-by-point Play Route, cross-zone AutoDuty travel ownership, and a working Stop Playback path.
-- Navigation parity now includes the complete live vnavmesh waypoint chain, a resizable route-library pane, exact copyable player coordinates, and Domitien's direct approach from `Territory 133 | X 164.4264 | Y 15.5000 | Z -75.7035` to the measured standing point `X 157.5930 | Y 15.7000 | Z -69.3316`. A stable 0.75-yalm arrival radius prevents final-step repath/jump oscillation.
+- Navigation parity now includes the complete live vnavmesh waypoint chain, scoped strictly to NavPlotter-owned playback/travel and explicitly authorized gear-shopping movement so ordinary Goto and dungeon paths remain hidden. It also retains a resizable route-library pane, exact copyable player coordinates, and Domitien's direct approach from `Territory 133 | X 164.4264 | Y 15.5000 | Z -75.7035` to the measured standing point `X 157.5930 | Y 15.7000 | Z -69.3316` with a stable 0.75-yalm arrival radius.
 - Explicit Discord credential preservation notice and migration boundary.
 - Global and content-ID/world-scoped character configuration.
 - Immutable, revisioned world snapshots with unknown-state handling.
@@ -24,7 +24,7 @@
 - Provider-neutral solo-duty combat policy requiring a fresh rotation-automation handoff on duty entry while forbidding Nexus from rewriting hard targets or competing with the encounter provider for movement.
 - Regression coverage for the VieriCodex 1.12.2.74-76 solo-duty incident: selected-target behavior stays primary, nearest-hostile action targeting activates only after a sustained targetless gap, yields immediately when normal targeting recovers, automatically expires after a bounded assist window, and never owns encounter movement.
 - Source provenance now includes VieriCodex 1.12.2.77, preserving flight for every resumable `Sage's Focus` Dravanian Hinterlands duty approach.
-- Source provenance now includes VieriAutoDuty 1.0.0.420, preserving the complete manual Shop for Upgrades transaction, the validated route playback/travel contract consumed by VieriNavPlotter, and separate route-arrival versus object-interaction tolerances across built-in and plotted routes so Domitien is approached without backtracking, final-step recovery fighting, or a wall-side movement request.
+- Source provenance now includes VieriAutoDuty 1.0.0.421, preserving the complete manual Shop for Upgrades transaction, the validated route playback/travel contract consumed by VieriNavPlotter, explicit visualization ownership for suite routes and vendor shopping, and hidden ordinary Goto/dungeon navigation.
 
 ## Intentionally not enabled yet
 
