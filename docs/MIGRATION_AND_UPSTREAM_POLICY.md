@@ -12,6 +12,8 @@
 8. Standalone plugins are not disabled or uninstalled automatically.
 9. A migrated module must pass behavior, configuration, IPC, and rollback tests before becoming authoritative.
 10. Progression-to-combat migration must retain the corrected solo-duty handoff from VieriCodex 1.12.2.76: begin a fresh rotation automation session on duty entry, keep selected-target behavior primary, enable nearest-hostile action targeting only after a sustained targetless gap, yield immediately when normal targeting recovers, expire every fallback assist automatically, never rewrite the player's hard target, and leave movement exclusively to the encounter provider.
+11. Quest-route migration must retain VieriCodex route corrections over downloaded upstream data. In particular, every resumable Dravanian Hinterlands approach for `Sage's Focus` (accepted, duty-ready, and post-duty sequences 5, 6, and 8) must request flight when it is unlocked.
+12. Manual Gear shopping must remain a complete transaction: honor the approved item preview and gil reserve, purchase the selected upgrades, equip and verify every approved replacement with one idempotent retry, update the current gearset, then transfer every newly displaced weapon, armor piece, and accessory from the Armoury Chest into normal inventory before releasing the Gear lease. Existing EXP-item and sell/desynth protections remain mandatory.
 
 ## Upstream update workflow
 

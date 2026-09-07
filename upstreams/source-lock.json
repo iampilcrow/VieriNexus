@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "capturedAtUtc": "2026-09-07T01:04:38.3629721Z",
+  "capturedAtUtc": "2026-09-07T04:48:46.2540907Z",
   "migrationSources": [
     {
       "name": "VieriAutoDuty",
       "repository": "https://github.com/iampilcrow/VieriAutoDuty.git",
-      "commit": "6c778b9893774d9ed50bc7e0d43186c4b39ce447",
+      "commit": "4e838558748e2a94fa66eefb97b8f6e80a4179d6",
       "upstreamRepository": "https://github.com/erdelf/AutoDuty.git",
       "upstreamCommit": "2b0943ed113da76f3ce9df0df2f302151f828292"
     },
@@ -26,7 +26,7 @@
     {
       "name": "VieriCodex",
       "repository": "https://github.com/iampilcrow/VieriCodex.git",
-      "commit": "9c100b7c52379273a93101c035b1bcb6410f097c",
+      "commit": "e58a835b1f734a5a18a60b7d5cee3d2824055a05",
       "upstreamRepository": "https://github.com/PunishXIV/Questionable.git",
       "upstreamCommit": "15c3d707f053d122be5b010857f5c9b3d2beef35"
     },

@@ -19,6 +19,8 @@
 - Initial automated tests for ownership atomicity and world-state sequencing.
 - Provider-neutral solo-duty combat policy requiring a fresh rotation-automation handoff on duty entry while forbidding Nexus from rewriting hard targets or competing with the encounter provider for movement.
 - Regression coverage for the VieriCodex 1.12.2.74-76 solo-duty incident: selected-target behavior stays primary, nearest-hostile action targeting activates only after a sustained targetless gap, yields immediately when normal targeting recovers, automatically expires after a bounded assist window, and never owns encounter movement.
+- Source provenance now includes VieriCodex 1.12.2.77, preserving flight for every resumable `Sage's Focus` Dravanian Hinterlands duty approach.
+- Source provenance now includes VieriAutoDuty 1.0.0.414, preserving the complete manual Shop for Upgrades transaction through verified equip, gearset update, and transfer of displaced weapons, armor, and accessories from the Armoury Chest to normal inventory.
 
 ## Intentionally not enabled yet
 
