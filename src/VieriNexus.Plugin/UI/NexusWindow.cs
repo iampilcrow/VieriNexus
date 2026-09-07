@@ -12,6 +12,7 @@ internal sealed class NexusWindow : Window
 {
     private static readonly (string Group, string Id, string Label)[] Navigation =
     [
+        ("OVERVIEW", "Home", "Home"),
         ("OVERVIEW", "Overview", "Control Center"),
         ("OVERVIEW", "Automation", "Automation"),
         ("OVERVIEW", "Progression", "Progression"),
@@ -59,7 +60,8 @@ internal sealed class NexusWindow : Window
     public override void PreDraw()
     {
         NexusTheme.Push();
-        if (!plugin.Configuration.FirstRunComplete || !dependencies.RequiredReady)
+        var setupLocked = !plugin.Configuration.FirstRunComplete || !dependencies.RequiredReady;
+        if (setupLocked && plugin.Configuration.SelectedPage is not ("Dependencies" or "Migration" or "Settings"))
             plugin.Configuration.SelectedPage = "Dependencies";
     }
 
@@ -68,9 +70,6 @@ internal sealed class NexusWindow : Window
     public override void Draw()
     {
         ImGui.SetWindowFontScale(plugin.Configuration.UiScale);
-        DrawHeader();
-        ImGui.Spacing();
-
         var navWidth = plugin.Configuration.CompactNavigation ? 72f : 205f;
         if (ImGui.BeginChild("###NexusNavigation", new Vector2(navWidth, 0), true,
                 ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
@@ -80,33 +79,6 @@ internal sealed class NexusWindow : Window
         ImGui.SameLine();
         if (ImGui.BeginChild("###NexusContent", Vector2.Zero, true))
             DrawPage();
-        ImGui.EndChild();
-    }
-
-    private void DrawHeader()
-    {
-        var available = ImGui.GetContentRegionAvail().X;
-        if (!ImGui.BeginChild("###NexusHeader", new Vector2(available, 72), true,
-                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
-        {
-            ImGui.EndChild();
-            return;
-        }
-
-        var wrap = logo.GetWrapOrEmpty();
-        ImGui.Image(wrap.Handle, new Vector2(78, 52));
-        ImGui.SameLine();
-        ImGui.BeginGroup();
-        ImGui.TextColored(new Vector4(1f, .88f, .88f, 1f), "VIERI NEXUS");
-        ImGui.TextColored(NexusTheme.Gold, "Unified automation • one intelligent control plane");
-        ImGui.EndGroup();
-
-        var statuses = dependencies.Snapshot();
-        var ready = statuses.Where(x => x.Definition.Required).All(x => x.IsReady);
-        var label = ready ? "All dependencies ready" : "Setup required";
-        var width = ImGui.CalcTextSize(label).X + 28;
-        ImGui.SameLine(Math.Max(ImGui.GetCursorPosX() + 12, available - width - 14));
-        NexusTheme.StatusDot(ready ? NexusTheme.Green : NexusTheme.Amber, label);
         ImGui.EndChild();
     }
 
@@ -156,11 +128,58 @@ internal sealed class NexusWindow : Window
     {
         switch (plugin.Configuration.SelectedPage)
         {
+            case "Home": DrawHome(); break;
             case "Overview": DrawOverview(); break;
             case "Dependencies": DrawDependencies(); break;
             case "Migration": DrawMigration(); break;
             case "Settings": DrawSettings(); break;
             default: DrawModulePage(plugin.Configuration.SelectedPage); break;
+        }
+    }
+
+    private void DrawHome()
+    {
+        var available = ImGui.GetContentRegionAvail();
+        var heroHeight = Math.Min(470f, Math.Max(360f, available.Y * .64f));
+        if (ImGui.BeginChild("###NexusHomeHero", new Vector2(0, heroHeight), true,
+                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            var draw = ImGui.GetWindowDrawList();
+            var position = ImGui.GetWindowPos();
+            var size = ImGui.GetWindowSize();
+            draw.AddRectFilledMultiColor(position, position + size,
+                0xFF08090C, 0xFF100A0D, 0xFF19070A, 0xFF08090C);
+            draw.AddRect(position, position + size, ImGui.GetColorU32(NexusTheme.Red), 8f,
+                ImDrawFlags.None, 1.5f);
+
+            var wrap = logo.GetWrapOrEmpty();
+            var imageWidth = Math.Clamp(size.X * .56f, 390f, 620f);
+            var imageSize = new Vector2(imageWidth, imageWidth / 1.5f);
+            ImGui.SetCursorPosX((size.X - imageSize.X) * .5f);
+            ImGui.SetCursorPosY(Math.Max(18f, (size.Y - imageSize.Y - 54f) * .42f));
+            ImGui.Image(wrap.Handle, imageSize);
+
+            var state = dependencies.RequiredReady
+                ? "All required services are ready"
+                : "Dependency setup requires attention";
+            ImGui.SetCursorPosX((size.X - ImGui.CalcTextSize(state).X) * .5f);
+            NexusTheme.StatusDot(dependencies.RequiredReady ? NexusTheme.Green : NexusTheme.Amber, state);
+            var subtitle = "One home for the complete Vieri experience";
+            ImGui.SetCursorPosX((size.X - ImGui.CalcTextSize(subtitle).X) * .5f);
+            ImGui.TextColored(NexusTheme.Gold, subtitle);
+        }
+        ImGui.EndChild();
+
+        ImGui.Spacing();
+        if (ImGui.BeginTable("###HomeStatus", 3, ImGuiTableFlags.SizingStretchSame))
+        {
+            ImGui.TableNextColumn();
+            StatusCard("FOUNDATION", "Online", "Safe migration shell", NexusTheme.Green);
+            ImGui.TableNextColumn();
+            StatusCard("AUTOMATION", "Staged", "Existing Vieri products remain authoritative", NexusTheme.Amber);
+            ImGui.TableNextColumn();
+            StatusCard("NEXT", "Migration", "Module parity before replacement", NexusTheme.Cyan);
+            ImGui.EndTable();
         }
     }
 
@@ -206,15 +225,49 @@ internal sealed class NexusWindow : Window
 
     private void DrawDependencies()
     {
-        PageHeading("Dependencies", "Required outside services must be healthy before Nexus automation is unlocked.");
+        PageHeading("Dependencies", "Required services unlock Nexus. Recommended integrations add optional automation and convenience features.");
         var statuses = dependencies.Snapshot();
-        var readyCount = statuses.Count(x => x.IsReady);
-        ImGui.ProgressBar((float)readyCount / statuses.Count, new Vector2(-1, 22), $"{readyCount} of {statuses.Count} ready");
+        var required = statuses.Where(x => x.Definition.Required).ToArray();
+        var recommended = statuses.Where(x => !x.Definition.Required).ToArray();
+        var readyCount = required.Count(x => x.IsReady);
+        ImGui.ProgressBar((float)readyCount / required.Length, new Vector2(-1, 22),
+            $"{readyCount} of {required.Length} required services ready");
+        ImGui.TextDisabled("VieriCodex and the other current Vieri products are migration sources, not third-party dependencies. Questionable is incorporated through VieriCodex and is intentionally not listed separately.");
         ImGui.Spacing();
+
+        NexusTheme.SectionTitle("Required", "Core navigation, travel, quest, duty, and market providers");
+        DrawDependencyGrid(required);
+
+        ImGui.Spacing();
+        NexusTheme.SectionTitle("Recommended", "Optional integrations discovered across every current Vieri product");
+        DrawDependencyGrid(recommended);
+
+        var allReady = required.All(x => x.IsReady);
+        ImGui.Spacing();
+        if (!allReady)
+            ImGui.BeginDisabled();
+        if (ImGui.Button("Continue to Vieri Nexus", new Vector2(230, 38)) && allReady)
+        {
+            plugin.Configuration.FirstRunComplete = true;
+            plugin.Configuration.SelectedPage = "Home";
+            plugin.Save();
+        }
+        if (!allReady)
+            ImGui.EndDisabled();
+        if (!allReady && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip("Install and enable every required dependency first.");
+    }
+
+    private void DrawDependencyGrid(IReadOnlyList<DependencyStatus> statuses)
+    {
+        if (!ImGui.BeginTable($"###DependencyGrid-{(statuses.FirstOrDefault()?.Definition.Required == true ? "required" : "recommended")}",
+                2, ImGuiTableFlags.SizingStretchSame))
+            return;
 
         foreach (var status in statuses)
         {
-            BeginPanel(status.Definition.DisplayName.ToUpperInvariant());
+            ImGui.TableNextColumn();
+            BeginPanel(status.Definition.DisplayName.ToUpperInvariant(), 132);
             var color = status.Health switch
             {
                 DependencyHealth.Healthy => NexusTheme.Green,
@@ -233,30 +286,19 @@ internal sealed class NexusWindow : Window
                 DependencyHealth.Disabled => "Enable",
                 _ => "Manage",
             };
-            if (ImGui.Button($"{action}##dependency-{status.Definition.Id}", new Vector2(130, 0)))
+            if (ImGui.Button($"{action}##dependency-{status.Definition.Id}", new Vector2(112, 0)))
                 dependencies.OpenInstaller(status);
             if (status.Health == DependencyHealth.Missing && !string.IsNullOrWhiteSpace(status.Definition.RepositoryUrl))
             {
                 ImGui.SameLine();
-                ImGui.TextDisabled("Its repository may need to be enabled in Dalamud.");
+                ImGui.TextDisabled("External repository");
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip(status.Definition.RepositoryUrl);
             }
             EndPanel();
         }
 
-        var allReady = statuses.Where(x => x.Definition.Required).All(x => x.IsReady);
-        ImGui.Spacing();
-        if (!allReady)
-            ImGui.BeginDisabled();
-        if (ImGui.Button("Continue to Vieri Nexus", new Vector2(230, 38)) && allReady)
-        {
-            plugin.Configuration.FirstRunComplete = true;
-            plugin.Configuration.SelectedPage = "Overview";
-            plugin.Save();
-        }
-        if (!allReady)
-            ImGui.EndDisabled();
-        if (!allReady && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Install and enable every required dependency first.");
+        ImGui.EndTable();
     }
 
     private void DrawMigration()
@@ -295,10 +337,10 @@ internal sealed class NexusWindow : Window
             plugin.Configuration.UiScale = scale;
             plugin.Save();
         }
-        var splash = plugin.Configuration.ShowSplashOnLogin;
-        if (ImGui.Checkbox("Show VieriNexus splash after entering the world", ref splash))
+        var openOnLogin = plugin.Configuration.OpenOnLogin;
+        if (ImGui.Checkbox("Open the Vieri Nexus Home page after entering the world", ref openOnLogin))
         {
-            plugin.Configuration.ShowSplashOnLogin = splash;
+            plugin.Configuration.OpenOnLogin = openOnLogin;
             plugin.Save();
         }
         var compact = plugin.Configuration.CompactNavigation;
@@ -385,10 +427,10 @@ internal sealed class NexusWindow : Window
         EndPanel();
     }
 
-    private static void BeginPanel(string title)
+    private static void BeginPanel(string title, float height = 105)
     {
         ImGui.PushStyleColor(ImGuiCol.ChildBg, NexusTheme.PanelRaised);
-        ImGui.BeginChild($"###panel-{title}-{ImGui.GetCursorPosY()}", new Vector2(0, 105), true,
+        ImGui.BeginChild($"###panel-{title}-{ImGui.GetCursorPosY()}", new Vector2(0, height), true,
             ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         ImGui.TextColored(NexusTheme.Gold, title);
         ImGui.Separator();

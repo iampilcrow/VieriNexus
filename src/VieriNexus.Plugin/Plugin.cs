@@ -30,7 +30,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private readonly WindowSystem windows = new("VieriNexus");
     private readonly NexusWindow mainWindow;
-    private readonly SplashWindow splashWindow;
+    private readonly DependencyService dependencyService;
     private readonly GameplayReadyGate gameplayReadyGate = new();
     private readonly WorldSnapshotObserver worldObserver;
     private readonly NexusIpcProvider ipc;
@@ -41,7 +41,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
 
-        var dependencyService = new DependencyService(PluginInterface);
+        dependencyService = new DependencyService(PluginInterface);
         var legacyInventory = new LegacyConfigurationInventory(PluginInterface);
         var moduleRegistry = BuiltInModuleCatalog.Create();
         var worldStore = new WorldStateStore();
@@ -50,15 +50,13 @@ public sealed class Plugin : IDalamudPlugin
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, moduleRegistry, worldStore, logo);
-        splashWindow = new SplashWindow(logo) { IsOpen = false };
         windows.AddWindow(mainWindow);
-        windows.AddWindow(splashWindow);
 
         ipc = new NexusIpcProvider(PluginInterface, dependencyService, worldStore);
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Subcommands: show, hide, dependencies, migration, splash.",
+            HelpMessage = "Open VieriNexus. Subcommands: home, show, hide, dependencies, migration.",
         });
         CommandManager.AddHandler(ShortCommand, new CommandInfo(OnCommand)
         {
@@ -91,7 +89,6 @@ public sealed class Plugin : IDalamudPlugin
         if (!ClientState.IsLoggedIn)
         {
             sessionInitialized = false;
-            splashWindow.IsOpen = false;
             return;
         }
 
@@ -107,16 +104,23 @@ public sealed class Plugin : IDalamudPlugin
         if (!sessionInitialized)
         {
             sessionInitialized = true;
-            if (Configuration.ShowSplashOnLogin)
-                splashWindow.Show();
             if (!Configuration.FirstRunComplete || Configuration.OpenOnLogin)
+            {
+                Configuration.SelectedPage = Configuration.FirstRunComplete ? "Home" : "Dependencies";
                 mainWindow.IsOpen = true;
+            }
         }
 
         windows.Draw();
     }
 
-    private void OpenMain() => mainWindow.IsOpen = true;
+    private void OpenMain()
+    {
+        Configuration.SelectedPage = Configuration.FirstRunComplete && dependencyService.RequiredReady
+            ? "Home"
+            : "Dependencies";
+        mainWindow.IsOpen = true;
+    }
 
     private void OpenSettings()
     {
@@ -129,7 +133,7 @@ public sealed class Plugin : IDalamudPlugin
         switch (arguments.Trim().ToLowerInvariant())
         {
             case "show":
-                mainWindow.IsOpen = true;
+                OpenMain();
                 break;
             case "hide":
                 mainWindow.IsOpen = false;
@@ -142,10 +146,14 @@ public sealed class Plugin : IDalamudPlugin
                 Configuration.SelectedPage = "Migration";
                 mainWindow.IsOpen = true;
                 break;
+            case "home":
             case "splash":
-                splashWindow.Show();
+                Configuration.SelectedPage = "Home";
+                mainWindow.IsOpen = true;
                 break;
             default:
+                if (!mainWindow.IsOpen)
+                    Configuration.SelectedPage = Configuration.FirstRunComplete ? "Home" : "Dependencies";
                 mainWindow.Toggle();
                 break;
         }

@@ -8,11 +8,10 @@ public sealed class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 1;
     public bool FirstRunComplete { get; set; }
-    public bool ShowSplashOnLogin { get; set; } = true;
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
     public float UiScale { get; set; } = 1f;
-    public string SelectedPage { get; set; } = "Overview";
+    public string SelectedPage { get; set; } = "Home";
     public Dictionary<string, CharacterConfiguration> Characters { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, LegacyImportState> LegacyImports { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 

@@ -4,9 +4,9 @@
 
 - One Dalamud plugin package with separate Domain, Application, Contracts, and Plugin assemblies.
 - Polished dark/red/gold application shell based on the supplied visual direction.
-- Branded VieriNexus splash using the supplied logo.
-- Splash and all Nexus windows remain hidden until a targetable character has settled in the world.
-- Mandatory dependency setup gate.
+- Branded VieriNexus Home experience using the supplied logo; no temporary splash window.
+- All Nexus windows remain hidden until a targetable character has settled in the world.
+- Mandatory dependency setup gate with six core required providers and a separately labeled recommended-integration catalog audited from every current Vieri product.
 - Dependency health detection and focused Install/Enable/Manage actions through Dalamud's plugin installer.
 - Eight neutral built-in module registrations.
 - Read-only discovery of all eight predecessor configuration sources.
@@ -27,6 +27,7 @@
 - No existing Vieri plugin has been disabled, uninstalled, or modified.
 - No live automation, HUD replacement, combat hook, market action, or remote command has been enabled.
 - Dependency actions open Dalamud at the exact plugin entry; Nexus does not yet call Dalamud's private installer internals.
+- Questionable and all eight migration-source products are intentionally excluded from the third-party dependency catalog.
 
 ## Next implementation gate
 

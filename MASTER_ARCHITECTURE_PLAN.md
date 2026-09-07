@@ -48,7 +48,7 @@ An all-at-once merge is rejected. It would combine several mature state machines
 
 ### Nexus does not own
 
-- Reimplementing Questionable, BossMod, vnavmesh, Lifestream, Marketbuddy, or Allagan Market.
+- Reimplementing BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, or Allagan Market. VieriCodex's maintained Questionable-derived quest engine and routes migrate into Nexus rather than remaining a separate runtime dependency.
 - Per-frame combat decisions. Those remain inside the embedded Wrath engine.
 - General ownership of third-party dependencies or their update channels.
 - Arbitrary remote control without an explicit allowlist and local safety checks.
@@ -60,10 +60,10 @@ Installed Vieri software
   VieriNexus only
 
 Installed external dependencies as required by enabled modules
-  Questionable
   BossMod
   vnavmesh
   Lifestream
+  TextAdvance
   Marketbuddy
   Allagan Market
   other explicitly supported third-party providers added later
@@ -108,7 +108,7 @@ VieriNexus.Modules.Market
 VieriNexus.Modules.Communications
 VieriNexus.Modules.QoL
 
-VieriNexus.Providers.Questionable
+VieriNexus.Providers.QuestEngine
 VieriNexus.Providers.AutoDuty
 VieriNexus.Providers.BossMod
 VieriNexus.Providers.Vnavmesh
@@ -350,7 +350,7 @@ Examples:
 
 ```text
 Travel.ToLocation         Lifestream + vnavmesh
-Quest.Execute             Questionable/Codex
+Quest.Execute             Nexus progression/quest engine
 HuntingLog.CompleteEntry  Codex hunting-log engine
 Duty.Run                  Nexus Duties module
 Gear.EnsureReadiness      Vieri gear system
@@ -558,7 +558,7 @@ Faulted
 
 The Dependencies page offers explicit install/open/update actions. Nexus must never silently install, enable, disable, or update another plugin.
 
-Questionable, BossMod, vnavmesh, Lifestream, Marketbuddy, and Allagan Market remain external dependencies initially. Artisan and AutoRetainer should be future providers, not foundation requirements.
+BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, and Allagan Market are the core external providers. Recommended integrations are listed separately and include AutoRetainer, Glamour Log, Anti-AFK, Pandora's Box, Gearsetter, Stylist, Fast Job Switcher, CBT, Artisan, AutoHook, Mogmail, NotificationMaster, SelectString, QuestMap, YesAlready, and Skippy. VieriCodex's Questionable-derived quest engine is incorporated code and is not a runtime dependency.
 
 ## 15. Unified UI
 
