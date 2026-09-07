@@ -1,0 +1,11 @@
+{
+  "Author": "Valentina Vieri",
+  "Name": "VieriNexus",
+  "InternalName": "VieriNexus",
+  "Punchline": "Early testing foundation for the unified Vieri experience.",
+  "Description": "An early testing build of the unified, modular Vieri suite foundation. It currently provides the Nexus shell, dependency validation, migration discovery, shared state, and safety contracts without replacing or disabling the existing Vieri plugins.",
+  "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "Tags": [ "automation", "progression", "combat", "utility", "suite" ]
+}

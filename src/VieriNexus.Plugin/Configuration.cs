@@ -1,0 +1,61 @@
+using Dalamud.Configuration;
+using Dalamud.Plugin;
+
+namespace VieriNexus;
+
+[Serializable]
+public sealed class Configuration : IPluginConfiguration
+{
+    public int Version { get; set; } = 1;
+    public bool FirstRunComplete { get; set; }
+    public bool ShowSplashOnLogin { get; set; } = true;
+    public bool OpenOnLogin { get; set; }
+    public bool CompactNavigation { get; set; }
+    public float UiScale { get; set; } = 1f;
+    public string SelectedPage { get; set; } = "Overview";
+    public Dictionary<string, CharacterConfiguration> Characters { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, LegacyImportState> LegacyImports { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    [NonSerialized]
+    private IDalamudPluginInterface? pluginInterface;
+
+    public void Initialize(IDalamudPluginInterface value)
+    {
+        pluginInterface = value;
+        UiScale = Math.Clamp(UiScale, .8f, 1.5f);
+        Characters = new Dictionary<string, CharacterConfiguration>(Characters ?? [], StringComparer.Ordinal);
+        LegacyImports = new Dictionary<string, LegacyImportState>(LegacyImports ?? [], StringComparer.OrdinalIgnoreCase);
+        Version = 1;
+    }
+
+    public CharacterConfiguration ForCharacter(string key)
+    {
+        if (!Characters.TryGetValue(key, out var value))
+        {
+            value = new CharacterConfiguration();
+            Characters[key] = value;
+        }
+        return value;
+    }
+
+    public void Save() => pluginInterface?.SavePluginConfig(this);
+}
+
+[Serializable]
+public sealed class CharacterConfiguration
+{
+    public string ProfileName { get; set; } = "Default";
+    public bool AllowAutomation { get; set; } = true;
+    public bool PauseOnManualMovement { get; set; } = true;
+    public bool PauseOnManualTarget { get; set; } = true;
+    public int ManualControlQuietPeriodMs { get; set; } = 1500;
+}
+
+[Serializable]
+public sealed class LegacyImportState
+{
+    public bool Reviewed { get; set; }
+    public bool Imported { get; set; }
+    public string SourceVersion { get; set; } = string.Empty;
+    public DateTimeOffset? ImportedAt { get; set; }
+}

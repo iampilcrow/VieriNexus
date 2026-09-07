@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>VieriNexus.Application</AssemblyName>
+    <RootNamespace>VieriNexus.Application</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\VieriNexus.Domain\VieriNexus.Domain.csproj" />
+  </ItemGroup>
+</Project>
