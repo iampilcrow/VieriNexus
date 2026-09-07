@@ -5,7 +5,7 @@
     {
       "name": "VieriAutoDuty",
       "repository": "https://github.com/iampilcrow/VieriAutoDuty.git",
-      "commit": "c5da26a9cb0e311e616d4e45bd214bb06e37e114",
+      "commit": "90f6d93a45008972d9e1e5f65ce2d28cbc5bb1b2",
       "upstreamRepository": "https://github.com/erdelf/AutoDuty.git",
       "upstreamCommit": "2b0943ed113da76f3ce9df0df2f302151f828292"
     },
@@ -61,7 +61,7 @@
     {
       "name": "VieriNavPlotter",
       "repository": "https://github.com/iampilcrow/VieriNavPlotter.git",
-      "commit": "8f55e862523a15e40cfd6fbf165901b573e8055e",
+      "commit": "03a0a3ce16f92e6695f710651edf5e1cd9faa67c",
       "upstreamRepository": null,
       "upstreamCommit": null
     }
