@@ -14,6 +14,7 @@
 10. Progression-to-combat migration must retain the corrected solo-duty handoff from VieriCodex 1.12.2.76: begin a fresh rotation automation session on duty entry, keep selected-target behavior primary, enable nearest-hostile action targeting only after a sustained targetless gap, yield immediately when normal targeting recovers, expire every fallback assist automatically, never rewrite the player's hard target, and leave movement exclusively to the encounter provider.
 11. Quest-route migration must retain VieriCodex route corrections over downloaded upstream data. In particular, every resumable Dravanian Hinterlands approach for `Sage's Focus` (accepted, duty-ready, and post-duty sequences 5, 6, and 8) must request flight when it is unlocked.
 12. Manual Gear shopping must remain a complete transaction: honor the approved item preview and gil reserve, purchase the selected upgrades, equip and verify every approved replacement with one idempotent retry, update the current gearset, then transfer every newly displaced weapon, armor piece, and accessory from the Armoury Chest into normal inventory before releasing the Gear lease. Existing EXP-item and sell/desynth protections remain mandatory.
+13. Until Nexus is authoritative for a module, a published fix to any predecessor Vieri product is not complete until Nexus pins that exact source revision and records the applicable behavior or regression requirement. Nexus may not claim runtime ownership before the corresponding embedded module and tests exist.
 
 ## Upstream update workflow
 
