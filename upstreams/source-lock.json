@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAtUtc": "2026-09-07T19:33:29.717Z",
+  "capturedAtUtc": "2026-09-07T20:07:32.683Z",
   "migrationSources": [
     {
       "name": "VieriAutoDuty",
@@ -12,7 +12,7 @@
     {
       "name": "VieriAutoMarket",
       "repository": "https://github.com/iampilcrow/VieriAutoMarket.git",
-      "commit": "68e04f60c2e7cf62a6fa4be8591813816e353ed4",
+      "commit": "e08a70f7a9fece486962843cbe89ea9e2b969871",
       "upstreamRepository": "https://github.com/amarinne/Auto-Marketbuddy",
       "upstreamCommit": null
     },

@@ -25,6 +25,7 @@
 - Regression coverage for the VieriCodex 1.12.2.74-76 solo-duty incident: selected-target behavior stays primary, nearest-hostile action targeting activates only after a sustained targetless gap, yields immediately when normal targeting recovers, automatically expires after a bounded assist window, and never owns encounter movement.
 - Source provenance now includes VieriCodex 1.12.2.77, preserving flight for every resumable `Sage's Focus` Dravanian Hinterlands duty approach.
 - Source provenance now includes VieriAutoDuty 1.0.0.422, preserving the complete manual Shop for Upgrades transaction, the validated route playback/travel contract consumed by VieriNavPlotter, explicit visualization ownership for suite routes and vendor shopping, hidden ordinary Goto/dungeon navigation, and a hitbox-aware vendor-arrival handoff that stops shopping movement as soon as the current targetable vendor is within the game's normal interaction range.
+- Source provenance now includes VieriAutoMarket 1.0.0.13, preserving crash-safe exact price matching between owned retainers, a settled comparison-window handoff, complete native confirmation event data, saved-price verification, and logical-market selection that rejects the full suspicious low-price cluster behind a 1-gil listing instead of following it downward.
 
 ## Intentionally not enabled yet
 
