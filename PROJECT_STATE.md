@@ -598,9 +598,9 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- `HEAD`: `ecaa8c7 Add transactional route migration`.
-- `origin/main` pointed to the same commit at recovery.
-- Working tree was clean before `PROJECT_STATE.md` was created.
+- Current released implementation commit: `54510ce Fix migration card text clipping`.
+- `origin/main` contains the released implementation commit.
+- Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
 - Plugin project/manifest version: `0.1.0.4`, Dalamud API 15.
@@ -615,6 +615,7 @@ These are migration requirements, not current Nexus features:
 - `a83961a` / `d04b480` — carried current quest/gear fixes forward and made pinning every predecessor fix mandatory.
 - `08b5b84` through `74b1949` — established navigation module metadata and successively pinned route-review, live visualization, vendor arrival/travel, market safety, off-hand safety, native UI occlusion, and measured vendor-route corrections.
 - `ecaa8c7` — added the transactional NavPlotter importer, backup/atomic store/receipt/rollback, UI card, migration state, and tests; 720 insertions across 14 files.
+- `54510ce` — released 0.1.0.4 with scale-aware Migration-card layout, untruncated button/status text, explicit zero-personal-route success wording, and a regression test.
 
 ### Last completed work
 
@@ -629,9 +630,18 @@ The predecessor task's last successful turn implemented and published `0.1.0.3`:
 - 18 reported Nexus tests passing;
 - reported website/package/hash/Discord/release inventory validation.
 
-No later implementation turn succeeded. Four later attempts failed during remote compaction before producing a user-visible message or repository change.
+The current task then implemented and published `0.1.0.4`:
 
-### Active workstream when the old task stopped
+- action widths are measured from rendered labels and actions stack when the row is too narrow;
+- preview, issue, operation, and staged-safety text wraps instead of clipping;
+- the Migration card height scales with configured UI scale;
+- zero-route success explicitly confirms that settings were imported;
+- 19 Nexus tests and a zero-warning Release build passed;
+- source commit `54510ce` and Daily Pilcrow release commit `684703f` were pushed;
+- local/public runtime and source archives passed ZIP, identity/version, HTTP, and SHA-256 validation;
+- Vercel deployment and Discord workflow `34282262570` succeeded.
+
+### Current workstream
 
 The user had said all vendor routes were in a good place and instructed development to continue piecing VieriNexus together while preserving every setting and Discord key. The assistant chose Routes & Navigation as the first safe vertical migration slice and completed staging/rollback.
 
@@ -1208,6 +1218,8 @@ Foundation intake on 2026-09-08 positively verified the following from the real 
 - **Dedicated release scripts/workflow:** `scripts/publish-dalamud-plugins.ps1`, `scripts/verify-dalamud-release.ts`, `scripts/dalamud-release-validation.ts`, `scripts/announce-dalamud-changelog.mjs`, and `.github/workflows/announce-vieri-plugin-changelog.yml`. Package aliases are `dalamud:verify`, `dalamud:verify-live`, and `dalamud:announce`.
 
 Verification evidence for the existing 0.1.0.3 release: Daily Pilcrow commit `ecfa159` added the changelog, feed update, runtime ZIP, and source ZIP; Vercel production deployment `dpl_GvtyEW58yAU6ua6EGtKY8N6y15pu` was recorded Ready; the current focused local and live validators both pass; the public runtime and source downloads return HTTP 200, are valid ZIPs, and match local SHA-256 values `C3F52656C4359163E53C82C640FCD23465FA2E5082C41A1EA32059AE45825FEC` and `1FB675728D5FE839E51CDA7B7A5725F6D8116A18FFDEFFAEC7C939DC8FA4B51B`; GitHub Actions run `34188636818` completed successfully for source commit `ecfa159`. This verifies the established release mechanism, not the still-pending in-game migration/import/rollback test.
+
+Verification evidence for 0.1.0.4: Nexus source commit `54510ce` and Daily Pilcrow release commit `684703f` are on their respective `main` branches. The focused local and live validators pass; the public runtime and source archives return HTTP 200, are valid ZIPs, and match local SHA-256 values `17C72FF131316DA719AABC152F6969CAC06A0BE88941E0217433633ED8E8032C` and `703DBDDFF38FB7B71854EBC6B105D2C41F6DAB2B846124816251731B7862043A`. The Vercel deployment check completed successfully, and GitHub Actions Discord run `34282262570` completed successfully for `684703f`. Dalamud installation and the 0.1.0.3 zero-route import are user-confirmed; the 0.1.0.4 visual correction plus rollback/reload/source-integrity checks remain pending.
 
 ### 18.16 Release report format
 
