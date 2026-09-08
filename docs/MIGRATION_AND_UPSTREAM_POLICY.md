@@ -21,6 +21,7 @@
 17. Route authoring parity includes a horizontally resizable route-library pane and an always-available current-position inspector that displays and copies territory plus full-precision X/Y/Z coordinates.
 18. Market migration must retain VieriAutoMarket's ownership-aware pricing and verified one-pass execution. Exact matching to another owned retainer must wait until the comparison window is closed and settled, write through the game's numeric price control, send the complete confirmation event expected by `AddonRetainerSell`, and verify the saved price before continuing. Automatic reference selection must detect a suspicious low-price cluster activated by a 1-gil listing (for example, `1, 5, 10,000` selects `10,000`), use the next logical external or owned-retainer reference, and leave the listing unchanged when no safe reference exists.
 19. Rotation suggestion overlays must respect native FFXIV UI occlusion per icon. Single-target, AoE, and dynamic suggestions may not draw over maps, inventory, action bars, or other native windows; occlusion must not mutate rotation decisions, prediction timelines, hotkeys, positioning, or saved layout.
+20. Migration discovery for a source containing protected credentials is existence-only until that source's dedicated encrypted-value adapter and same-account round-trip tests are present. Generic discovery, preview, diagnostics, and support export code may never deserialize VieriLink's encrypted token, channel IDs, status message ID, or command cursor.
 
 ## Upstream update workflow
 

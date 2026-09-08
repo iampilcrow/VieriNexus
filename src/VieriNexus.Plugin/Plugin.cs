@@ -43,13 +43,14 @@ public sealed class Plugin : IDalamudPlugin
 
         dependencyService = new DependencyService(PluginInterface);
         var legacyInventory = new LegacyConfigurationInventory(PluginInterface);
+        var navigationMigration = new NavigationMigrationService(legacyInventory, PluginInterface.GetPluginConfigDirectory());
         var moduleRegistry = BuiltInModuleCatalog.Create();
         var worldStore = new WorldStateStore();
         worldObserver = new WorldSnapshotObserver(ClientState, PlayerState, ObjectTable, Condition, worldStore);
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
-        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, moduleRegistry, worldStore, logo);
+        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 
         ipc = new NexusIpcProvider(PluginInterface, dependencyService, worldStore);

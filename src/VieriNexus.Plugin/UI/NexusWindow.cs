@@ -30,6 +30,7 @@ internal sealed class NexusWindow : Window
     private readonly Plugin plugin;
     private readonly DependencyService dependencies;
     private readonly LegacyConfigurationInventory legacyInventory;
+    private readonly NavigationMigrationService navigationMigration;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
@@ -38,6 +39,7 @@ internal sealed class NexusWindow : Window
         Plugin plugin,
         DependencyService dependencies,
         LegacyConfigurationInventory legacyInventory,
+        NavigationMigrationService navigationMigration,
         ModuleRegistry modules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
@@ -46,6 +48,7 @@ internal sealed class NexusWindow : Window
         this.plugin = plugin;
         this.dependencies = dependencies;
         this.legacyInventory = legacyInventory;
+        this.navigationMigration = navigationMigration;
         this.modules = modules;
         this.world = world;
         this.logo = logo;
@@ -305,17 +308,24 @@ internal sealed class NexusWindow : Window
     private void DrawMigration()
     {
         PageHeading("Migration", "Protect every setting while each product moves into Nexus.");
-        ImGui.TextWrapped("This foundation performs a read-only discovery scan. It does not alter, move, decrypt, or rewrite any existing configuration.");
+        ImGui.TextWrapped("Discovery is read-only. A supported import first creates a timestamped source backup, validates into staging, then commits Nexus-owned data atomically. Existing plugins remain installed and authoritative.");
         ImGui.Spacing();
 
         foreach (var source in legacyInventory.Scan())
         {
+            if (source.Id == "navplotter")
+            {
+                DrawNavigationMigration();
+                continue;
+            }
             BeginPanel(source.DisplayName.ToUpperInvariant());
             NexusTheme.StatusDot(source.Found ? NexusTheme.Green : NexusTheme.Muted,
                 source.Found ? "Configuration located" : "Not found on this computer");
             ImGui.TextColored(NexusTheme.Gold, $"Destination: {source.Destination}");
             ImGui.TextDisabled(source.Found
-                ? "Preserved in place • import adapter pending validation"
+                ? source.ContainsProtectedValues
+                    ? "Protected values detected by file presence only • contents have not been opened"
+                    : "Preserved in place • import adapter pending validation"
                 : "A different user will be detected from their own local settings.");
             EndPanel();
         }
@@ -324,6 +334,82 @@ internal sealed class NexusWindow : Window
         BeginPanel("CREDENTIAL SAFETY");
         ImGui.TextColored(NexusTheme.Green, "Discord credentials and channel identifiers have not been touched.");
         ImGui.TextWrapped("The Communications migration will copy encrypted values transactionally on the same computer, verify them, and retain the original VieriLink configuration as rollback data. Each user imports only their own local configuration.");
+        EndPanel();
+    }
+
+    private void DrawNavigationMigration()
+    {
+        NavigationMigrationStatus status = navigationMigration.Status();
+        LegacyImportState state = plugin.Configuration.ForLegacyImport("navplotter");
+        string operationMessage = status.Message;
+        BeginPanel("ROUTES & NAVIGATION", 258);
+        NexusTheme.StatusDot(status.SourceFound ? NexusTheme.Green : NexusTheme.Muted,
+            status.SourceFound ? "Configuration located" : "Not found on this computer");
+        ImGui.TextColored(NexusTheme.Gold, "Destination: Routes and Navigation");
+
+        if (status.Preview?.Snapshot is { } snapshot)
+        {
+            string enabled = $"{snapshot.Routes.Count(route => route.OverrideEnabled)} enabled override(s)";
+            ImGui.TextUnformatted($"{snapshot.Routes.Count} personal route(s) • {enabled}");
+            ImGui.TextDisabled("Recording, display, pane, selection, route, point, binding, tolerance, and override settings mapped.");
+            foreach (MigrationIssue issue in status.Preview.Issues.Take(2))
+            {
+                Vector4 color = issue.Severity == MigrationIssueSeverity.Error ? NexusTheme.Red :
+                    issue.Severity == MigrationIssueSeverity.Warning ? NexusTheme.Amber : NexusTheme.Muted;
+                ImGui.TextColored(color, $"• {issue.Message}");
+            }
+        }
+        else
+        {
+            ImGui.TextDisabled(status.Message);
+        }
+
+        bool canImport = status.Preview?.CanImport == true;
+        if (!canImport)
+            ImGui.BeginDisabled();
+        if (ImGui.Button("Create backup and import to staging", new Vector2(270, 0)) && canImport)
+        {
+            MigrationWriteResult result = navigationMigration.Import();
+            operationMessage = result.Message;
+            if (result.Success && result.Receipt is { } receipt)
+            {
+                state.Reviewed = true;
+                state.Imported = true;
+                state.SourceVersion = status.Preview!.Snapshot!.SourceConfigurationVersion.ToString();
+                state.ImportedAt = receipt.CreatedAtUtc;
+                state.ReceiptId = receipt.Id;
+                state.ImportedItemCount = status.Preview.Snapshot.Routes.Count;
+                state.ReadyForActivation = true;
+                state.Activated = false;
+                plugin.Save();
+            }
+        }
+        if (!canImport)
+            ImGui.EndDisabled();
+
+        if (state.Imported && state.ReceiptId is { } receiptId)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button("Rollback staged import", new Vector2(190, 0)))
+            {
+                MigrationWriteResult result = navigationMigration.Rollback(receiptId);
+                operationMessage = result.Message;
+                if (result.Success)
+                {
+                    state.Imported = false;
+                    state.ImportedAt = null;
+                    state.ReceiptId = null;
+                    state.ImportedItemCount = 0;
+                    state.ReadyForActivation = false;
+                    state.Activated = false;
+                    plugin.Save();
+                }
+            }
+        }
+
+        ImGui.TextColored(state.Imported ? NexusTheme.Green : NexusTheme.Muted, operationMessage);
+        if (state.Imported)
+            ImGui.TextDisabled("Staged only • standalone VieriNavPlotter remains authoritative • no duplicate route execution");
         EndPanel();
     }
 

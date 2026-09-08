@@ -6,7 +6,7 @@ namespace VieriNexus;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
@@ -24,7 +24,7 @@ public sealed class Configuration : IPluginConfiguration
         UiScale = Math.Clamp(UiScale, .8f, 1.5f);
         Characters = new Dictionary<string, CharacterConfiguration>(Characters ?? [], StringComparer.Ordinal);
         LegacyImports = new Dictionary<string, LegacyImportState>(LegacyImports ?? [], StringComparer.OrdinalIgnoreCase);
-        Version = 1;
+        Version = 2;
     }
 
     public CharacterConfiguration ForCharacter(string key)
@@ -33,6 +33,16 @@ public sealed class Configuration : IPluginConfiguration
         {
             value = new CharacterConfiguration();
             Characters[key] = value;
+        }
+        return value;
+    }
+
+    public LegacyImportState ForLegacyImport(string sourceId)
+    {
+        if (!LegacyImports.TryGetValue(sourceId, out LegacyImportState? value))
+        {
+            value = new LegacyImportState();
+            LegacyImports[sourceId] = value;
         }
         return value;
     }
@@ -57,4 +67,8 @@ public sealed class LegacyImportState
     public bool Imported { get; set; }
     public string SourceVersion { get; set; } = string.Empty;
     public DateTimeOffset? ImportedAt { get; set; }
+    public Guid? ReceiptId { get; set; }
+    public int ImportedItemCount { get; set; }
+    public bool ReadyForActivation { get; set; }
+    public bool Activated { get; set; }
 }

@@ -7,7 +7,8 @@ internal sealed record LegacySource(
     string DisplayName,
     string Destination,
     bool Found,
-    IReadOnlyList<string> ExistingPaths);
+    IReadOnlyList<string> ExistingPaths,
+    bool ContainsProtectedValues = false);
 
 internal sealed class LegacyConfigurationInventory
 {
@@ -38,6 +39,7 @@ internal sealed class LegacyConfigurationInventory
             .Select(candidate => Path.Combine(configRoot, candidate))
             .Where(path => File.Exists(path) || Directory.Exists(path))
             .ToArray();
-        return new LegacySource(source.Id, source.Name, source.Destination, paths.Length > 0, paths);
+        return new LegacySource(source.Id, source.Name, source.Destination, paths.Length > 0, paths,
+            source.Id.Equals("link", StringComparison.OrdinalIgnoreCase));
     }).ToArray();
 }

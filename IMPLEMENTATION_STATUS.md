@@ -10,6 +10,8 @@
 - Dependency health detection and focused Install/Enable/Manage actions through Dalamud's plugin installer.
 - Nine neutral built-in module registrations, including Routes & Navigation.
 - Read-only discovery of all nine predecessor configuration sources, including VieriNavPlotter.
+- Transactional Routes & Navigation importer with full setting/route mapping, validation preview, timestamped source backup, atomic Nexus-owned staging, SHA-256 receipt, newer-data rollback guard, and restoration of the prior Nexus state. Import never changes the standalone source or activates duplicate navigation.
+- Communications discovery is existence-only: VieriLink's encrypted token, channel IDs, status message ID, and command cursor are not opened, decrypted, logged, copied, or rewritten by the current build.
 - Route migration requirements preserve searchable names, stable IDs, notes, tags, ordered points, territory, playback settings, and explicit assignments without enabling disabled overrides.
 - VieriNavPlotter's visible built-in baseline includes all 27 current AutoDuty gear-vendor destinations and distinguishes Domitien's authored multi-point approach from destination-only navmesh behavior.
 - Route migration now explicitly preserves the review and execution controls: persistent in-world Show Route previews, Travel to Start/Destination, complete point-by-point Play Route, cross-zone AutoDuty travel ownership, and a working Stop Playback path.
@@ -39,4 +41,4 @@
 
 ## Next implementation gate
 
-Build transactional configuration importers and compatibility tests for each source before migrating the first live module. The first authoritative gameplay behavior should not ship until resource ownership, pause/stop/manual override, reload reconciliation, and rollback are exercised against an existing workflow.
+Exercise the Routes & Navigation staging/rollback card in game, then embed its read-only route library and compatibility IPC behind an explicit activation gate. Build the remaining transactional importers one source at a time; Communications requires same-Windows-account encrypted-value round-trip tests before its configuration may be opened. The first authoritative gameplay behavior must not ship until resource ownership, pause/stop/manual override, reload reconciliation, and rollback are exercised against an existing workflow.
