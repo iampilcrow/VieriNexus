@@ -2,7 +2,7 @@
 
 Recovery snapshot: 2026-09-08 (America/New_York)  
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.3`  
+Current product version: `0.1.0.4`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -174,7 +174,7 @@ Several target concepts already have types or tests but are not live subsystems.
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — global presentation/setup settings, character-scoped safety settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.3`, assembly/internal root `VieriNexus`.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.4`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -326,6 +326,8 @@ NexusData/receipts/<receipt-id>.json
 `TransactionalMigrationStore.Apply(...)` copies the legacy source first, optionally backs up prior Nexus state, atomically writes staged JSON through a same-directory temporary file, records source/target SHA-256 hashes, and writes a receipt. Failure restores the prior Nexus target where possible. `Rollback(...)` refuses to overwrite a staged route library whose hash changed after import, then restores the prior Nexus state or removes the first imported target. It never rewrites or deletes the predecessor configuration.
 
 The Migration page has **Create backup and import to staging** and, after a successful import, **Rollback staged import**. `LegacyImportState` records review/import/version/time/receipt/count/readiness while leaving `Activated = false`.
+
+The Migration card sizes both actions from their rendered labels, keeps them on one row only when they fit, wraps long preview/operation/safety text, and scales its panel height with the configured UI scale. Successful zero-route imports explicitly say that settings and zero personal routes were imported, avoiding the false impression that no migration work occurred.
 
 Critical limitation: importing does not provide a Nexus route library page, compatibility IPC, route drawing, route authoring, travel, or playback. It does not import NavPlotter's built-in vendor catalog because those are compiled/plugin-supplied routes, not personal settings. It does not disable VieriNavPlotter or activate duplicate navigation.
 
@@ -601,7 +603,7 @@ These are migration requirements, not current Nexus features:
 - Working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project/manifest version: `0.1.0.3`, Dalamud API 15.
+- Plugin project/manifest version: `0.1.0.4`, Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -633,15 +635,17 @@ No later implementation turn succeeded. Four later attempts failed during remote
 
 The user had said all vendor routes were in a good place and instructed development to continue piecing VieriNexus together while preserving every setting and Discord key. The assistant chose Routes & Navigation as the first safe vertical migration slice and completed staging/rollback.
 
-The explicit next gate in `IMPLEMENTATION_STATUS.md` and the last assistant response is:
+The user subsequently confirmed that VieriNexus installs through Dalamud and that the Migration card successfully staged a valid VieriNavPlotter configuration containing zero personal routes. The zero-route result is expected because recording/display/pane/selection settings are still migrated. The screenshot also exposed fixed-size button and status clipping, corrected for 0.1.0.4 with measured button widths, responsive row wrapping, wrapped text, and scale-aware panel height.
 
-1. Update/install Nexus 0.1.0.3 in Dalamud.
-2. Open **Migration**.
-3. Exercise **Create backup and import to staging** for Routes & Navigation.
-4. Exercise rollback and verify source settings remain untouched.
+The explicit next gate is:
+
+1. Update/install Nexus 0.1.0.4 in Dalamud.
+2. Open **Migration** and confirm both complete button labels plus the complete staged status/safety text are visible at the configured UI scale.
+3. Exercise **Rollback staged import** and confirm its success text is visible.
+4. Reload Nexus and verify the source VieriNavPlotter configuration remains untouched and the staged state/receipt behavior is correct.
 5. Only after that, embed a read-only Nexus route library and compatibility IPC behind an explicit activation gate.
 
-The transcript contains no response confirming that the user performed this in-game import/rollback test. Treat it as pending, not completed.
+The import half is confirmed; rollback, reload persistence, and direct source-integrity confirmation remain pending.
 
 ### Completed versus unfinished
 
@@ -657,7 +661,7 @@ There is no known external blocker. The old conversation's context window, not t
 
 ### Current Nexus implementation concerns
 
-- **Unverified live migration:** the 0.1.0.3 NavPlotter preview/import/rollback flow passed reported automated tests but has no recovered user confirmation from in-game use.
+- **Partially verified live migration:** Dalamud installation and an in-game import with zero personal routes are confirmed. Rollback, reload persistence, direct source-integrity confirmation, and a non-empty personal-route fixture remain unverified.
 - **WorldStateStore ordering defect (verified code concern):** `WorldStateStore.Publish(...)` uses `Interlocked.Exchange` before rejecting a non-increasing revision. A bad snapshot therefore becomes `Current` and then throws. Future work should diagnose/fix this deliberately with a regression test; do not casually alter it during unrelated work.
 - **Partial command contract:** `VieriNexus.Commands.V1.Execute` is public but unregistered. Consumers must not assume it works.
 - **Partial knowledge model:** `KnowledgeState.Stale/Unavailable` exist but are never emitted by the current observer; provider state is always empty.
@@ -823,7 +827,7 @@ NPC object coordinates remain separate lookup metadata and must not replace auth
 
 Firm next gates, in priority order:
 
-1. **REQUIRED:** user-side in-game validation of 0.1.0.3 Routes & Navigation preview/import/rollback. Verify exact settings/route counts, disabled overrides, timestamped backup/receipt, unchanged VieriNavPlotter config, persistence across reload, and guarded rollback.
+1. **REQUIRED:** complete user-side in-game validation of Routes & Navigation migration. Installation plus a zero-personal-route staging import are confirmed; still verify the complete 0.1.0.4 responsive text, timestamped backup/receipt, unchanged VieriNavPlotter config, persistence across reload, guarded rollback, and eventually a non-empty route/disabled-override fixture.
 2. **PLANNED:** add a read-only Nexus route-library view and compatibility IPC over staged data. Keep execution inactive.
 3. **PLANNED:** add an explicit activation/conflict gate, resource ownership, pause/stop/manual override, reload reconciliation, and rollback around the route module before any live route execution.
 4. **PLANNED:** generalize the transactional importer/store carefully and implement the remaining source importers one at a time, each with complete field inventory, golden fixtures, behavior/IPC parity, and rollback.
@@ -857,7 +861,7 @@ All of these remain planned; no standalone product may be retired until configur
 
 Do not execute these as part of recovery. The next normal development thread should:
 
-1. Ask whether the user completed the 0.1.0.3 Migration-card import and rollback. If not, guide that exact test before changing runtime authority.
+1. Have the user update to 0.1.0.4, confirm the Migration card no longer clips buttons/status text, then complete rollback, reload-persistence, receipt/backup, and source-integrity validation. The zero-personal-route import itself is already confirmed valid.
 2. Inspect any resulting Nexus `NexusData/routes.v1.json`, receipt, and backup **without opening unrelated or protected VieriLink data**; compare field-for-field against NavPlotter while redacting personal identifiers from logs.
 3. Add tests for reload-persistent receipt discovery and the `WorldStateStore.Publish` monotonicity defect before further foundation work.
 4. Design the read-only Routes & Navigation registration/IPC boundary and resource/activation conflict contract; do not add playback in the same unproven step.
@@ -908,8 +912,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current recovered release:** `0.1.0.3`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.3</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current release:** `0.1.0.4`.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.4</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1012,7 +1016,7 @@ The exact archive naming convention, hosted path, and generation command must be
 
 ### 18.6 Version synchronization
 
-Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.3` in:
+Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.4` in:
 
 `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj`
 
@@ -1198,7 +1202,7 @@ Foundation intake on 2026-09-08 positively verified the following from the real 
 - **Hosting provider/deployment trigger relevant to `/dalamud`:** Vercel hosts the Next.js project/static `public` assets and deploys from the GitHub repository's `main` branch; Cloudflare provides DNS/proxying for the Daily Pilcrow domain. A pushed release commit is the deployment trigger.
 - **Release artifact hash algorithm/process:** SHA-256. `scripts/dalamud-release-validation.ts` hashes the final local artifact and the bytes downloaded from the advertised public URL and requires equality, then validates ZIP structure/CRC and the runtime manifest identity/version. Record the final runtime/source hashes in the release report and established Daily Pilcrow release log; do not hash an intermediate archive.
 - **Live-feed/public-artifact verification commands:** from the Daily Pilcrow root, use `corepack pnpm dalamud:verify --plugin=VieriNexus` before publication and `corepack pnpm dalamud:verify-live --plugin=VieriNexus` after production is Ready. The local check parses the feed and validates both ZIPs, package structure, DLL/manifest identity, and version. The live check additionally requires the production feed to retain the expected entry count/metadata, downloads the advertised runtime/source URLs without authentication, requires HTTP success, matches SHA-256 against the local committed artifacts, and revalidates both ZIPs. `pnpm run build` also runs the fast whole-feed inventory/Git-presence guard without decompressing unchanged plugins.
-- **Dalamud install/update verification procedure used by this project:** configure `https://www.thedailypilcrow.com/dalamud/pluginmaster.json` as the custom repository, confirm VieriNexus appears exactly once in the Dalamud Plugin Installer at the advertised version, perform a clean install where practical, use **Update Plugins** from the previous published version for update coverage, and confirm the loaded plugin reports the intended version. The HTTP/hash/archive verifier does not replace this manual in-game check. No recovered or local evidence confirms that clean-install/update or the Migration-page import/rollback was exercised for 0.1.0.3, so those remain explicitly unverified.
+- **Dalamud install/update verification procedure used by this project:** configure `https://www.thedailypilcrow.com/dalamud/pluginmaster.json` as the custom repository, confirm VieriNexus appears exactly once in the Dalamud Plugin Installer at the advertised version, perform a clean install where practical, use **Update Plugins** from the previous published version for update coverage, and confirm the loaded plugin reports the intended version. The HTTP/hash/archive verifier does not replace this manual in-game check. Dalamud installation and the zero-personal-route import are confirmed; update-path coverage, rollback, reload persistence, and direct source-integrity confirmation remain explicitly unverified.
 - **Release Discord-bot safe invocation mechanism:** the publisher creates and stages an immutable `public/dalamud/changelogs/VieriNexus/<version>.json`. When that new file is pushed to `main`, `.github/workflows/announce-vieri-plugin-changelog.yml` runs automatically, receives `DISCORD_CHANGELOG_BOT_TOKEN` and `DISCORD_CHANGELOG_CHANNEL_ID` only from GitHub Actions secrets, and invokes `scripts/announce-dalamud-changelog.mjs`. The script waits until the exact feed version and runtime ZIP are live, checks recent channel history for its plugin/version footer marker, and posts only if not already announced. Safe retries use the workflow's manual `workflow_dispatch` with the existing versioned changelog path; never copy credentials into a local command, documentation, or chat. A payload-only preview may use `corepack pnpm dalamud:announce -- --file=<changelog-path> --dry-run` and requires no Discord secret.
 - **Release Discord message/changelog format source/template:** source record `public/dalamud/changelogs/VieriNexus/<version>.json`; validation and embed template `scripts/announce-dalamud-changelog.mjs`; operating documentation `docs/DISCORD_PLUGIN_CHANGELOGS.md`. The embed title is `<Name> <Version> is now available`, links to the changelog's repository URL, renders the one-to-twenty release notes as bullets, includes the fixed Dalamud **Update Plugins** instruction, optional icon, timestamp, and idempotency footer `Vieri release • <Plugin> • <Version>`. Allowed mentions are disabled.
 - **Dedicated release scripts/workflow:** `scripts/publish-dalamud-plugins.ps1`, `scripts/verify-dalamud-release.ts`, `scripts/dalamud-release-validation.ts`, `scripts/announce-dalamud-changelog.mjs`, and `.github/workflows/announce-vieri-plugin-changelog.yml`. Package aliases are `dalamud:verify`, `dalamud:verify-live`, and `dalamud:announce`.
@@ -1324,7 +1328,7 @@ This reduces dependence on model context and prevents project knowledge from bei
 - Compaction payload summaries were encrypted and not directly readable. However, the rollout retained user-visible messages, assistant conclusions, tool-visible results, repository references, and the durable architecture/status/policy documents. Private chain-of-thought was neither needed nor reconstructed.
 - The thread covered many FFXIV projects before VieriNexus. This recovery preserved Nexus-relevant requirements and the behaviors Nexus must absorb, but it did not attempt to turn every unrelated historical plugin conversation into Nexus implementation truth.
 - The three UI inspiration images and original architecture brief were still locally available and were inspected during recovery. Their exact intended pixel-level behavior was not specified; they are visual direction, not a binding layout.
-- No user reply confirms whether the 0.1.0.3 route import/rollback was exercised in game. Local per-user Nexus/Vieri configurations were intentionally not opened during recovery, both because live migration status was not required to understand the repository and because protected configuration boundaries must be respected.
+- At recovery there was no user reply confirming the 0.1.0.3 route import/rollback. The user later confirmed Dalamud installation and a successful staging import of settings with zero personal routes; rollback, reload persistence, direct source-integrity confirmation, and a non-empty route fixture remain pending. Local per-user Nexus/Vieri configurations were intentionally not opened during recovery, both because live migration status was not required to understand the repository and because protected configuration boundaries must be respected.
 - The transcript says 0.1.0.3 and its website/Dalamud/source/runtime/Discord release were successfully published and verified. The user subsequently supplied the authoritative custom Dalamud repository URL `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`. Although the low-level release details were not fully preserved in the recovery transcript, the 2026-09-08 foundation intake independently verified the website source paths, archive naming/generation, feed update/deployment mechanism, SHA-256 workflow, public validation, and safe Discord release-bot invocation from the real infrastructure; section 18.15 now records those durable facts.
 - The exact coexistence/deprecation duration for old plugins remains undecided.
 - SQLite is the architectural recommendation for durable orchestration state but was not explicitly approved or implemented.

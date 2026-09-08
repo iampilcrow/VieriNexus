@@ -62,6 +62,27 @@ public sealed class TransactionalMigrationStoreTests : IDisposable
         Assert.Equal("prior-state", File.ReadAllText(target));
     }
 
+    [Fact]
+    public void ApplyExplainsThatSettingsAreImportedWhenThereAreNoPersonalRoutes()
+    {
+        Directory.CreateDirectory(root);
+        string source = Path.Combine(root, "VieriNavPlotter.json");
+        File.WriteAllText(source, "{\"Version\":1,\"Routes\":[]}");
+        NavigationLibrarySnapshot snapshot = Snapshot("Unused") with { Routes = [] };
+        TransactionalMigrationStore store = new();
+
+        MigrationWriteResult result = store.Apply(
+            "navplotter",
+            source,
+            Path.Combine(root, "nexus", "routes.v1.json"),
+            Path.Combine(root, "backups"),
+            Path.Combine(root, "receipts"),
+            snapshot);
+
+        Assert.True(result.Success);
+        Assert.Equal("Imported settings and 0 personal routes into staged Nexus storage.", result.Message);
+    }
+
     public void Dispose()
     {
         if (!Directory.Exists(root))

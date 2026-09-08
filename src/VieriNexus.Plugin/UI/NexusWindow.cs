@@ -339,10 +339,12 @@ internal sealed class NexusWindow : Window
 
     private void DrawNavigationMigration()
     {
+        const string importLabel = "Create backup and import to staging";
+        const string rollbackLabel = "Rollback staged import";
         NavigationMigrationStatus status = navigationMigration.Status();
         LegacyImportState state = plugin.Configuration.ForLegacyImport("navplotter");
         string operationMessage = status.Message;
-        BeginPanel("ROUTES & NAVIGATION", 258);
+        BeginPanel("ROUTES & NAVIGATION", 320f * Math.Max(1f, plugin.Configuration.UiScale));
         NexusTheme.StatusDot(status.SourceFound ? NexusTheme.Green : NexusTheme.Muted,
             status.SourceFound ? "Configuration located" : "Not found on this computer");
         ImGui.TextColored(NexusTheme.Gold, "Destination: Routes and Navigation");
@@ -351,23 +353,27 @@ internal sealed class NexusWindow : Window
         {
             string enabled = $"{snapshot.Routes.Count(route => route.OverrideEnabled)} enabled override(s)";
             ImGui.TextUnformatted($"{snapshot.Routes.Count} personal route(s) • {enabled}");
-            ImGui.TextDisabled("Recording, display, pane, selection, route, point, binding, tolerance, and override settings mapped.");
+            TextWrapped(NexusTheme.Muted,
+                "Recording, display, pane, selection, route, point, binding, tolerance, and override settings mapped.");
             foreach (MigrationIssue issue in status.Preview.Issues.Take(2))
             {
                 Vector4 color = issue.Severity == MigrationIssueSeverity.Error ? NexusTheme.Red :
                     issue.Severity == MigrationIssueSeverity.Warning ? NexusTheme.Amber : NexusTheme.Muted;
-                ImGui.TextColored(color, $"• {issue.Message}");
+                TextWrapped(color, $"• {issue.Message}");
             }
         }
         else
         {
-            ImGui.TextDisabled(status.Message);
+            TextWrapped(NexusTheme.Muted, status.Message);
         }
 
+        float availableButtonWidth = ImGui.GetContentRegionAvail().X;
+        float importButtonWidth = ButtonWidth(importLabel);
+        float rollbackButtonWidth = ButtonWidth(rollbackLabel);
         bool canImport = status.Preview?.CanImport == true;
         if (!canImport)
             ImGui.BeginDisabled();
-        if (ImGui.Button("Create backup and import to staging", new Vector2(270, 0)) && canImport)
+        if (ImGui.Button(importLabel, new Vector2(importButtonWidth, 0)) && canImport)
         {
             MigrationWriteResult result = navigationMigration.Import();
             operationMessage = result.Message;
@@ -389,8 +395,9 @@ internal sealed class NexusWindow : Window
 
         if (state.Imported && state.ReceiptId is { } receiptId)
         {
-            ImGui.SameLine();
-            if (ImGui.Button("Rollback staged import", new Vector2(190, 0)))
+            if (availableButtonWidth >= importButtonWidth + ImGui.GetStyle().ItemSpacing.X + rollbackButtonWidth)
+                ImGui.SameLine();
+            if (ImGui.Button(rollbackLabel, new Vector2(rollbackButtonWidth, 0)))
             {
                 MigrationWriteResult result = navigationMigration.Rollback(receiptId);
                 operationMessage = result.Message;
@@ -407,9 +414,10 @@ internal sealed class NexusWindow : Window
             }
         }
 
-        ImGui.TextColored(state.Imported ? NexusTheme.Green : NexusTheme.Muted, operationMessage);
+        TextWrapped(state.Imported ? NexusTheme.Green : NexusTheme.Muted, operationMessage);
         if (state.Imported)
-            ImGui.TextDisabled("Staged only • standalone VieriNavPlotter remains authoritative • no duplicate route execution");
+            TextWrapped(NexusTheme.Muted,
+                "Staged only • standalone VieriNavPlotter remains authoritative • no duplicate route execution");
         EndPanel();
     }
 
@@ -528,5 +536,15 @@ internal sealed class NexusWindow : Window
         ImGui.EndChild();
         ImGui.PopStyleColor();
         ImGui.Spacing();
+    }
+
+    private static float ButtonWidth(string label) =>
+        MathF.Ceiling(ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f) + 2f);
+
+    private static void TextWrapped(Vector4 color, string text)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Text, color);
+        ImGui.TextWrapped(text);
+        ImGui.PopStyleColor();
     }
 }

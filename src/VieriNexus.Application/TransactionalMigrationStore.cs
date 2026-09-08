@@ -61,7 +61,10 @@ public sealed class TransactionalMigrationStore
                 HashFile(sourcePath),
                 HashFile(nexusTargetPath));
             AtomicWrite(receiptPath, JsonSerializer.SerializeToUtf8Bytes(receipt, Options));
-            return new(true, $"Imported {snapshot.Routes.Count} route(s) into staged Nexus storage.", receipt);
+            string routeSummary = snapshot.Routes.Count == 1
+                ? "1 personal route"
+                : $"{snapshot.Routes.Count} personal routes";
+            return new(true, $"Imported settings and {routeSummary} into staged Nexus storage.", receipt);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
