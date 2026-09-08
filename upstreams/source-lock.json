@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAtUtc": "2026-09-08T01:48:46.5924629Z",
+  "capturedAtUtc": "2026-09-08T02:06:32.7644342Z",
   "migrationSources": [
     {
       "name": "VieriAutoDuty",
@@ -61,7 +61,7 @@
     {
       "name": "VieriNavPlotter",
       "repository": "https://github.com/iampilcrow/VieriNavPlotter.git",
-      "commit": "a2a9e6c00611685117ca362177b17344bf7ddf3c",
+      "commit": "ddb5b93f471afbb8090eacb1143a0cdbd28d87cf",
       "upstreamRepository": null,
       "upstreamCommit": null
     }
