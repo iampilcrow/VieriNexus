@@ -606,12 +606,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `460e730 Add read-only staged route library`.
+- Current released implementation commit: `f073d94 Fix staged settings panel clipping`.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.7`, Dalamud API 15. The live feed remains 0.1.0.6 until the layout correction is published and verified.
+- Plugin project/live-feed version: `0.1.0.7`, Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -626,6 +626,7 @@ These are migration requirements, not current Nexus features:
 - `54510ce` — released 0.1.0.4 with scale-aware Migration-card layout, untruncated button/status text, explicit zero-personal-route success wording, and a regression test.
 - `101058d` — released 0.1.0.5 with hash-verified staged-receipt recovery across plugin reloads and compare-before-swap world revision publication.
 - `460e730` — released 0.1.0.6 with the verified read-only Routes page, pure route query behavior, and four Nexus-namespaced read-only navigation IPC calls without activation or legacy-name collisions.
+- `f073d94` — released 0.1.0.7 with content-aware Staged Settings panel sizing after the first live Routes screenshot exposed its clipped final row; also records successful guarded rollback/re-import and page-state synchronization.
 
 ### Last completed work
 
@@ -655,7 +656,7 @@ The user's 0.1.0.4 reload test then proved that the configuration, staged route 
 
 The user then confirmed 0.1.0.5 restores the exact staged message after disabling/re-enabling Nexus. Version 0.1.0.6 builds the first consumer of that recovered data: a dedicated read-only Routes page and versioned Nexus navigation IPC. Both consume only the verified staged snapshot. The empty-library view still exposes imported preferences; non-empty libraries add search, details, ordered points, and visible inactive execution controls. The IPC surface provides API version, staging status, list, and detail calls under `VieriNexus.Navigation.V1.*`; it deliberately does not claim `VieriNavPlotter.*`, resolve overrides, or run routes. All 23 Nexus tests and the zero-warning Release build pass. Source commit `460e730`; Daily Pilcrow release commit `3be445d`; production deployment `dpl_2KVVzGiGwUAZQh7WGJp4WUL8LrDy`; live runtime/source archives and Discord workflow `34299175777` are verified.
 
-The user's first 0.1.0.6 Routes-page screenshot confirmed the verified zero-route state, summary cards, explanatory copy, and first three staged settings render correctly. The user also confirmed guarded rollback and re-import both work and immediately reflect the correct no-staging/staged state on the Routes page. The screenshot exposed that the fourth `Live navigation path` row was clipped inside the Staged Settings child because that panel still used a fixed 150-pixel height. Version 0.1.0.7 derives the panel height from the active text-line metrics, window padding, and item spacing so all four preferences remain visible across supported interface scales. No migration, staged data, IPC, source-plugin, or navigation behavior changes in this correction. All 23 Nexus tests and the zero-warning Release build pass before publication.
+The user's first 0.1.0.6 Routes-page screenshot confirmed the verified zero-route state, summary cards, explanatory copy, and first three staged settings render correctly. The user also confirmed guarded rollback and re-import both work and immediately reflect the correct no-staging/staged state on the Routes page. The screenshot exposed that the fourth `Live navigation path` row was clipped inside the Staged Settings child because that panel still used a fixed 150-pixel height. Version 0.1.0.7 derives the panel height from the active text-line metrics, window padding, and item spacing so all four preferences remain visible across supported interface scales. No migration, staged data, IPC, source-plugin, or navigation behavior changes in this correction. All 23 Nexus tests and the zero-warning Release build pass. Source commit `f073d94`; Daily Pilcrow release commit `ac73044`; production deployment `dpl_5vFZEh1q21VqVQZKkjCBW3UyziPn`; live runtime/source archives and Discord workflow `34300556246` are verified.
 
 ### Current workstream
 
@@ -934,7 +935,7 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release being prepared:** `0.1.0.7`; the currently verified public release remains 0.1.0.6 until publication completes.
+- **Current release:** `0.1.0.7`.
 - **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.7</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
@@ -1236,6 +1237,8 @@ Verification evidence for 0.1.0.4: Nexus source commit `54510ce` and Daily Pilcr
 Verification evidence for 0.1.0.5: Nexus source commit `101058d` and Daily Pilcrow release commit `a2bc367` are on their respective `main` branches. All 21 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, inventory guard, and production build pass. Vercel production deployment `dpl_BnbzJgDxC1xQYp35B3tCqGKeffka` is Ready. The focused live validator confirms HTTP 200, valid ZIPs, and exact runtime/source SHA-256 matches `A172881796EF06D272268E3E1E0DAC2E61F585F309FC002DE851D1C86F9D2A23` / `10351C1E2EC08995D72B3A83FCE23C3E7A075ED3EAB469EAD1FE72EE8B055787`. GitHub Actions Discord run `34295565914` completed successfully. The user confirmed corrected disable/re-enable recovery; guarded rollback remains unverified.
 
 Verification evidence for 0.1.0.6: Nexus source commit `460e730` and Daily Pilcrow release commit `3be445d` are on their respective `main` branches. All 23 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_2KVVzGiGwUAZQh7WGJp4WUL8LrDy` is Ready. Daily Pilcrow documentation commit `21b8895` is also pushed and its final production deployment `dpl_BhARY2wPQLM5an23dPevECVy6GhE` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.6 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `0E35214FB5E42EABF3CA509CF1FC3B4C1A3067B0AB97D92AC1F49452697FA377` / `C4E0374DA7738BFC3434BE4E63808A5422D8FFFCF6D339008AC93CA3CD5F67AA`. GitHub Actions Discord run `34299175777` completed successfully. Dalamud update and the zero/non-empty Routes-page/IPC behaviors remain user-side verification.
+
+Verification evidence for 0.1.0.7: Nexus source commit `f073d94` and Daily Pilcrow release commit `ac73044` are on their respective `main` branches. All 23 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_5vFZEh1q21VqVQZKkjCBW3UyziPn` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.7 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `270F7F0B0002E03B1A9AAFFEAA2690FB2AD7F6C7E0CDCB2514E6909DCE057A04` / `CC8438F64DB4168611E254130CBE618B83521D9061FF0D27DF65F9E8C3163ED7`. GitHub Actions Discord run `34300556246` completed successfully. The corrected settings-panel layout, a non-empty route fixture, and read-only IPC remain user-side verification.
 
 ### 18.16 Release report format
 
