@@ -469,41 +469,37 @@ internal sealed class NexusWindow : Window
             Math.Clamp(snapshot.LibraryPaneWidth, 240f, maximumRouteListWidth));
         ImGui.TableSetupColumn("Details", ImGuiTableColumnFlags.WidthStretch);
         ImGui.TableNextColumn();
-        if (ImGui.BeginChild("###RouteList", new Vector2(0, 650), true))
+        if (filtered.Count == 0)
         {
-            if (filtered.Count == 0)
+            ImGui.TextDisabled("No routes match this search.");
+        }
+        else
+        {
+            bool selectionVisible = selectedRouteId is { } currentId && filtered.Any(route => route.Id == currentId);
+            if (!selectionVisible)
             {
-                ImGui.TextDisabled("No routes match this search.");
+                Guid? importedSelection = snapshot.SelectedRouteId;
+                selectedRouteId = filtered.FirstOrDefault(route => route.Id == importedSelection)?.Id ?? filtered[0].Id;
             }
-            else
-            {
-                bool selectionVisible = selectedRouteId is { } currentId && filtered.Any(route => route.Id == currentId);
-                if (!selectionVisible)
-                {
-                    Guid? importedSelection = snapshot.SelectedRouteId;
-                    selectedRouteId = filtered.FirstOrDefault(route => route.Id == importedSelection)?.Id ?? filtered[0].Id;
-                }
 
-                foreach (NavigationRouteSnapshot route in filtered)
+            foreach (NavigationRouteSnapshot route in filtered)
+            {
+                bool selected = selectedRouteId == route.Id;
+                if (ImGui.Selectable($"{route.Name}##route-{route.Id:N}", selected))
                 {
-                    bool selected = selectedRouteId == route.Id;
-                    if (ImGui.Selectable($"{route.Name}##route-{route.Id:N}", selected))
-                    {
-                        selectedRouteId = route.Id;
-                        selectedRoutePoint = -1;
-                        editingRouteId = null;
-                        navigationLibrary.SelectRoute(route.Id);
-                    }
-                    ImGui.TextDisabled($"Territory {route.TerritoryId} • {route.Points.Count} point(s)");
-                    if (navigationRuntime.IsRecording(route.Id))
-                        ImGui.TextColored(NexusTheme.Green, "● Timed recording active");
-                    if (route.OverrideEnabled)
-                        ImGui.TextColored(NexusTheme.Amber, "Override enabled in source settings");
-                    ImGui.Spacing();
+                    selectedRouteId = route.Id;
+                    selectedRoutePoint = -1;
+                    editingRouteId = null;
+                    navigationLibrary.SelectRoute(route.Id);
                 }
+                ImGui.TextDisabled($"Territory {route.TerritoryId} • {route.Points.Count} point(s)");
+                if (navigationRuntime.IsRecording(route.Id))
+                    ImGui.TextColored(NexusTheme.Green, "● Timed recording active");
+                if (route.OverrideEnabled)
+                    ImGui.TextColored(NexusTheme.Amber, "Override enabled in source settings");
+                ImGui.Spacing();
             }
         }
-        ImGui.EndChild();
 
         ImGui.TableNextColumn();
         NavigationRouteSnapshot? selectedRoute = selectedRouteId is { } id
@@ -515,335 +511,333 @@ internal sealed class NexusWindow : Window
         DrawNavigationActivationSafety();
         DrawNavigationRecovery();
         DrawNavigationDiagnostics();
-        DrawDeleteRouteConfirmation();
-        DrawClearPointsConfirmation();
     }
 
     private void DrawRouteDetails(NavigationRouteSnapshot? route, bool showPointNumbers)
     {
-        if (ImGui.BeginChild("###RouteDetails", new Vector2(0, 650), true))
+        if (route is null)
         {
-            if (route is null)
+            ImGui.TextDisabled("Select a route to review its staged details.");
+        }
+        else
+        {
+            PrepareRouteEditor(route);
+            if (navigationLibrary.HasWorkingLibrary)
             {
-                ImGui.TextDisabled("Select a route to review its staged details.");
+                ImGui.SetNextItemWidth(-1);
+                ImGui.InputText("###NexusRouteName", ref routeNameEdit, 120);
             }
             else
             {
-                PrepareRouteEditor(route);
-                if (navigationLibrary.HasWorkingLibrary)
+                ImGui.TextColored(NexusTheme.Gold, route.Name);
+            }
+            ImGui.Separator();
+            ImGui.TextUnformatted($"Territory: {route.TerritoryId}");
+            ImGui.TextUnformatted($"Points: {route.Points.Count}");
+            ImGui.TextUnformatted($"Movement: {(route.UseMesh ? "Mesh" : "Direct")} • {(route.UseFlight ? "Flight allowed" : "Ground only")}");
+            ImGui.TextUnformatted($"Tolerance: {route.Tolerance:0.##} • Final point: {route.LastPointTolerance:0.##}");
+            if (navigationLibrary.HasWorkingLibrary)
+            {
+                bool mesh = route.UseMesh;
+                bool flight = route.UseFlight;
+                float tolerance = route.Tolerance;
+                float finalTolerance = route.LastPointTolerance;
+                bool changed = ImGui.Checkbox("Mesh-assisted", ref mesh);
+                ImGui.SameLine();
+                changed |= ImGui.Checkbox("Allow flight", ref flight);
+                ImGui.SetNextItemWidth(180);
+                changed |= ImGui.SliderFloat("Route tolerance", ref tolerance, 0.1f, 20f, "%.2f");
+                ImGui.SetNextItemWidth(180);
+                changed |= ImGui.SliderFloat("Final tolerance", ref finalTolerance, 0.1f, 30f, "%.2f");
+                if (changed)
                 {
-                    ImGui.SetNextItemWidth(-1);
-                    ImGui.InputText("###NexusRouteName", ref routeNameEdit, 120);
-                }
-                else
-                {
-                    ImGui.TextColored(NexusTheme.Gold, route.Name);
-                }
-                ImGui.Separator();
-                ImGui.TextUnformatted($"Territory: {route.TerritoryId}");
-                ImGui.TextUnformatted($"Points: {route.Points.Count}");
-                ImGui.TextUnformatted($"Movement: {(route.UseMesh ? "Mesh" : "Direct")} • {(route.UseFlight ? "Flight allowed" : "Ground only")}");
-                ImGui.TextUnformatted($"Tolerance: {route.Tolerance:0.##} • Final point: {route.LastPointTolerance:0.##}");
-                if (navigationLibrary.HasWorkingLibrary)
-                {
-                    bool mesh = route.UseMesh;
-                    bool flight = route.UseFlight;
-                    float tolerance = route.Tolerance;
-                    float finalTolerance = route.LastPointTolerance;
-                    bool changed = ImGui.Checkbox("Mesh-assisted", ref mesh);
-                    ImGui.SameLine();
-                    changed |= ImGui.Checkbox("Allow flight", ref flight);
-                    ImGui.SetNextItemWidth(180);
-                    changed |= ImGui.SliderFloat("Route tolerance", ref tolerance, 0.1f, 20f, "%.2f");
-                    ImGui.SetNextItemWidth(180);
-                    changed |= ImGui.SliderFloat("Final tolerance", ref finalTolerance, 0.1f, 30f, "%.2f");
-                    if (changed)
+                    routeOperationMessage = navigationLibrary.UpdateRoute(route with
                     {
-                        routeOperationMessage = navigationLibrary.UpdateRoute(route with
-                        {
-                            UseMesh = mesh,
-                            UseFlight = flight,
-                            Tolerance = tolerance,
-                            LastPointTolerance = finalTolerance,
-                        }).Message;
-                    }
+                        UseMesh = mesh,
+                        UseFlight = flight,
+                        Tolerance = tolerance,
+                        LastPointTolerance = finalTolerance,
+                    }).Message;
                 }
-                string binding = route.BindingKind == 1 ? "Gear vendor" : "None";
-                ImGui.TextUnformatted($"Binding: {binding}");
-                if (route.TargetDataId != 0 || !string.IsNullOrWhiteSpace(route.TargetLabel))
-                    ImGui.TextUnformatted($"Target: {route.TargetLabel} ({route.TargetDataId})");
-                if (navigationLibrary.HasWorkingLibrary)
+            }
+            string binding = route.BindingKind == 1 ? "Gear vendor" : "None";
+            ImGui.TextUnformatted($"Binding: {binding}");
+            if (route.TargetDataId != 0 || !string.IsNullOrWhiteSpace(route.TargetLabel))
+                ImGui.TextUnformatted($"Target: {route.TargetLabel} ({route.TargetDataId})");
+            if (navigationLibrary.HasWorkingLibrary)
+            {
+                ImGui.SetNextItemWidth(-1);
+                ImGui.InputTextWithHint("###NexusRouteTags", "Tags", ref routeTagsEdit, 240);
+                ImGui.SetNextItemWidth(-1);
+                ImGui.InputTextMultiline("###NexusRouteNotes", ref routeNotesEdit, 600, new Vector2(-1, 46));
+                if (ImGui.Button("Save route details"))
                 {
-                    ImGui.SetNextItemWidth(-1);
-                    ImGui.InputTextWithHint("###NexusRouteTags", "Tags", ref routeTagsEdit, 240);
-                    ImGui.SetNextItemWidth(-1);
-                    ImGui.InputTextMultiline("###NexusRouteNotes", ref routeNotesEdit, 600, new Vector2(-1, 46));
-                    if (ImGui.Button("Save route details"))
+                    NavigationLibraryWriteResult result = navigationLibrary.UpdateRoute(route with
                     {
-                        NavigationLibraryWriteResult result = navigationLibrary.UpdateRoute(route with
-                        {
-                            Name = routeNameEdit,
-                            Tags = routeTagsEdit,
-                            Notes = routeNotesEdit,
-                        });
-                        routeOperationMessage = result.Message;
-                    }
+                        Name = routeNameEdit,
+                        Tags = routeTagsEdit,
+                        Notes = routeNotesEdit,
+                    });
+                    routeOperationMessage = result.Message;
                 }
-                else
+            }
+            else
+            {
+                if (!string.IsNullOrWhiteSpace(route.Tags))
+                    ImGui.TextWrapped($"Tags: {route.Tags}");
+                if (!string.IsNullOrWhiteSpace(route.Notes))
+                    ImGui.TextWrapped($"Notes: {route.Notes}");
+            }
+            ImGui.TextDisabled($"Updated {route.UpdatedAtUtc.ToLocalTime():g}");
+
+            ImGui.Spacing();
+            if (ImGui.Button(navigationRuntime.IsPreviewing(route.Id) ? "Hide route" : "Show route"))
+            {
+                if (!navigationRuntime.IsPreviewing(route.Id) && !navigationLibrary.Current!.ShowWorldPreview)
                 {
-                    if (!string.IsNullOrWhiteSpace(route.Tags))
-                        ImGui.TextWrapped($"Tags: {route.Tags}");
-                    if (!string.IsNullOrWhiteSpace(route.Notes))
-                        ImGui.TextWrapped($"Notes: {route.Notes}");
+                    NavigationLibrarySnapshot preferences = navigationLibrary.Current!;
+                    navigationLibrary.UpdatePreferences(
+                        preferences.RecordingIntervalSeconds,
+                        preferences.MinimumPointDistance,
+                        showWorldPreview: true,
+                        preferences.ShowPointNumbers,
+                        preferences.ShowLiveNavigationPath);
                 }
-                ImGui.TextDisabled($"Updated {route.UpdatedAtUtc.ToLocalTime():g}");
+                NavigationRoutePlan preview = navigationRuntime.TogglePreview(route, showPointNumbers);
+                routeOperationMessage = preview.Message;
+            }
+            NavigationRoutePlan travelPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.TravelToStart);
+            bool canExecute = navigationLibrary.HasWorkingLibrary &&
+                              navigationActivation.AuthorityStatus.IsActive &&
+                              !navigationRuntime.Status.IsActive &&
+                              !navigationRuntime.RecordingStatus.IsRecording;
+            if (!canExecute || !travelPlan.IsExecutable)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Travel to start") && canExecute && travelPlan.IsExecutable)
+                routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.TravelToStart).Message;
+            if (!canExecute || !travelPlan.IsExecutable)
+                ImGui.EndDisabled();
+            NavigationRoutePlan playbackPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.Playback);
+            if (!canExecute || !playbackPlan.IsExecutable)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Play route") && canExecute && playbackPlan.IsExecutable)
+                routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.Playback).Message;
+            if (!canExecute || !playbackPlan.IsExecutable)
+                ImGui.EndDisabled();
+            if (navigationRuntime.Status.CanStop)
+            {
+                if (ImGui.Button("Stop playback"))
+                    routeOperationMessage = navigationRuntime.Stop().Message;
+            }
+            TextWrapped(NexusTheme.Muted,
+                $"Plan: {playbackPlan.Points.Count} point(s) • {playbackPlan.TotalDistance:0.0} yalms • {playbackPlan.Message}");
+            NavigationRouteExecutionStatus executionStatus = navigationRuntime.Status;
+            if (executionStatus.RouteId == route.Id && executionStatus.State != NavigationRouteExecutionState.Idle)
+            {
+                Vector4 executionColor = executionStatus.State switch
+                {
+                    NavigationRouteExecutionState.Running => NexusTheme.Green,
+                    NavigationRouteExecutionState.Completed => NexusTheme.Green,
+                    NavigationRouteExecutionState.Blocked => NexusTheme.Amber,
+                    NavigationRouteExecutionState.AwaitingAcknowledgement => NexusTheme.Amber,
+                    _ => NexusTheme.Red,
+                };
+                TextWrapped(executionColor, executionStatus.Message);
+            }
+
+            if (navigationLibrary.HasWorkingLibrary)
+            {
+                ImGui.Spacing();
+                bool routeExecutionActive = navigationRuntime.Status.IsActive;
+                bool anotherRouteRecording = navigationRuntime.RecordingStatus is
+                { IsRecording: true, RouteId: { } recordingRouteId } && recordingRouteId != route.Id;
+                bool thisRouteRecording = navigationRuntime.IsRecording(route.Id);
+                if (routeExecutionActive || anotherRouteRecording)
+                    ImGui.BeginDisabled();
+                if (thisRouteRecording)
+                {
+                    if (ImGui.Button("Stop timed recording"))
+                        routeOperationMessage = navigationRuntime.StopRecording().Message;
+                }
+                else if (ImGui.Button("Start timed recording"))
+                {
+                    routeOperationMessage = navigationRuntime.StartRecording(route, Environment.TickCount64).Message;
+                    navigationRuntime.RefreshPreview(route.Id);
+                }
+                if (routeExecutionActive || anotherRouteRecording)
+                    ImGui.EndDisabled();
 
                 ImGui.Spacing();
-                if (ImGui.Button(navigationRuntime.IsPreviewing(route.Id) ? "Hide route" : "Show route"))
-                {
-                    if (!navigationRuntime.IsPreviewing(route.Id) && !navigationLibrary.Current!.ShowWorldPreview)
-                    {
-                        NavigationLibrarySnapshot preferences = navigationLibrary.Current!;
-                        navigationLibrary.UpdatePreferences(
-                            preferences.RecordingIntervalSeconds,
-                            preferences.MinimumPointDistance,
-                            showWorldPreview: true,
-                            preferences.ShowPointNumbers,
-                            preferences.ShowLiveNavigationPath);
-                    }
-                    NavigationRoutePlan preview = navigationRuntime.TogglePreview(route, showPointNumbers);
-                    routeOperationMessage = preview.Message;
-                }
-                NavigationRoutePlan travelPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.TravelToStart);
-                bool canExecute = navigationLibrary.HasWorkingLibrary &&
-                                  navigationActivation.AuthorityStatus.IsActive &&
-                                  !navigationRuntime.Status.IsActive &&
-                                  !navigationRuntime.RecordingStatus.IsRecording;
-                if (!canExecute || !travelPlan.IsExecutable)
+                if (routeExecutionActive || thisRouteRecording)
                     ImGui.BeginDisabled();
-                if (ImGui.Button("Travel to start") && canExecute && travelPlan.IsExecutable)
-                    routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.TravelToStart).Message;
-                if (!canExecute || !travelPlan.IsExecutable)
+                if (ImGui.Button("Add current position"))
+                {
+                    AddCurrentPosition(route.Id);
+                    navigationRuntime.RefreshPreview(route.Id);
+                }
+                if (ImGui.Button("Undo last point"))
+                {
+                    routeOperationMessage = navigationLibrary.RemoveLastPoint(route.Id).Message;
+                    selectedRoutePoint = Math.Min(selectedRoutePoint, Math.Max(-1, route.Points.Count - 2));
+                    navigationRuntime.RefreshPreview(route.Id);
+                }
+                if (ImGui.Button("Reverse points"))
+                {
+                    routeOperationMessage = navigationLibrary.Reverse(route.Id).Message;
+                    selectedRoutePoint = selectedRoutePoint < 0
+                        ? -1
+                        : route.Points.Count - 1 - selectedRoutePoint;
+                    navigationRuntime.RefreshPreview(route.Id);
+                }
+                if (routeExecutionActive || thisRouteRecording)
                     ImGui.EndDisabled();
-                NavigationRoutePlan playbackPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.Playback);
-                if (!canExecute || !playbackPlan.IsExecutable)
+
+                NavigationRouteRecordingStatus recording = navigationRuntime.RecordingStatus;
+                if (thisRouteRecording || recording.RouteId == route.Id)
+                    TextWrapped(thisRouteRecording ? NexusTheme.Green : NexusTheme.Muted, recording.Message);
+            }
+            DrawRouteOperationMessage();
+
+            ImGui.Spacing();
+            NexusTheme.SectionTitle(navigationLibrary.HasWorkingLibrary ? "Route points" : "Staged points");
+            if (ImGui.BeginTable("###RoutePoints", 4,
+                    ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchSame))
+            {
+                ImGui.TableSetupColumn("#");
+                ImGui.TableSetupColumn("X");
+                ImGui.TableSetupColumn("Y");
+                ImGui.TableSetupColumn("Z");
+                ImGui.TableHeadersRow();
+                for (int index = 0; index < route.Points.Count; index++)
+                {
+                    NavigationRoutePoint point = route.Points[index];
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    if (navigationLibrary.HasWorkingLibrary)
+                    {
+                        if (ImGui.Selectable($"{index + 1}##route-point-{route.Id:N}-{index}", selectedRoutePoint == index,
+                                ImGuiSelectableFlags.SpanAllColumns))
+                            selectedRoutePoint = index;
+                    }
+                    else
+                    {
+                        ImGui.TextUnformatted((index + 1).ToString());
+                    }
+                    ImGui.TableNextColumn(); ImGui.TextUnformatted($"{point.X:0.###}");
+                    ImGui.TableNextColumn(); ImGui.TextUnformatted($"{point.Y:0.###}");
+                    ImGui.TableNextColumn(); ImGui.TextUnformatted($"{point.Z:0.###}");
+                }
+                ImGui.EndTable();
+            }
+
+            if (navigationLibrary.HasWorkingLibrary &&
+                selectedRoutePoint >= 0 && selectedRoutePoint < route.Points.Count)
+            {
+                bool editingBlocked = navigationRuntime.Status.IsActive || navigationRuntime.IsRecording(route.Id);
+                if (editingBlocked)
                     ImGui.BeginDisabled();
-                if (ImGui.Button("Play route") && canExecute && playbackPlan.IsExecutable)
-                    routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.Playback).Message;
-                if (!canExecute || !playbackPlan.IsExecutable)
+                if (ImGui.Button("Replace selected with current"))
+                {
+                    ReplaceSelectedPoint(route.Id);
+                    navigationRuntime.RefreshPreview(route.Id);
+                }
+                bool canMoveUp = selectedRoutePoint > 0;
+                if (!canMoveUp)
+                    ImGui.BeginDisabled();
+                if (ImGui.Button("Move up") && canMoveUp)
+                {
+                    NavigationLibraryWriteResult result = navigationLibrary.MovePoint(route.Id, selectedRoutePoint, -1);
+                    routeOperationMessage = result.Message;
+                    if (result.Success)
+                        selectedRoutePoint--;
+                    navigationRuntime.RefreshPreview(route.Id);
+                }
+                if (!canMoveUp)
                     ImGui.EndDisabled();
-                if (navigationRuntime.Status.CanStop)
+                ImGui.SameLine();
+                bool canMoveDown = selectedRoutePoint < route.Points.Count - 1;
+                if (!canMoveDown)
+                    ImGui.BeginDisabled();
+                if (ImGui.Button("Move down") && canMoveDown)
                 {
-                    if (ImGui.Button("Stop playback"))
-                        routeOperationMessage = navigationRuntime.Stop().Message;
+                    NavigationLibraryWriteResult result = navigationLibrary.MovePoint(route.Id, selectedRoutePoint, 1);
+                    routeOperationMessage = result.Message;
+                    if (result.Success)
+                        selectedRoutePoint++;
+                    navigationRuntime.RefreshPreview(route.Id);
                 }
-                TextWrapped(NexusTheme.Muted,
-                    $"Plan: {playbackPlan.Points.Count} point(s) • {playbackPlan.TotalDistance:0.0} yalms • {playbackPlan.Message}");
-                NavigationRouteExecutionStatus executionStatus = navigationRuntime.Status;
-                if (executionStatus.RouteId == route.Id && executionStatus.State != NavigationRouteExecutionState.Idle)
+                if (!canMoveDown)
+                    ImGui.EndDisabled();
+                ImGui.SameLine();
+                if (ImGui.Button("Remove selected point"))
                 {
-                    Vector4 executionColor = executionStatus.State switch
-                    {
-                        NavigationRouteExecutionState.Running => NexusTheme.Green,
-                        NavigationRouteExecutionState.Completed => NexusTheme.Green,
-                        NavigationRouteExecutionState.Blocked => NexusTheme.Amber,
-                        NavigationRouteExecutionState.AwaitingAcknowledgement => NexusTheme.Amber,
-                        _ => NexusTheme.Red,
-                    };
-                    TextWrapped(executionColor, executionStatus.Message);
+                    NavigationLibraryWriteResult result = navigationLibrary.RemovePoint(route.Id, selectedRoutePoint);
+                    routeOperationMessage = result.Message;
+                    if (result.Success)
+                        selectedRoutePoint = Math.Min(selectedRoutePoint, route.Points.Count - 2);
+                    navigationRuntime.RefreshPreview(route.Id);
                 }
+                if (editingBlocked)
+                    ImGui.EndDisabled();
+            }
 
-                if (navigationLibrary.HasWorkingLibrary)
-                {
-                    ImGui.Spacing();
-                    bool routeExecutionActive = navigationRuntime.Status.IsActive;
-                    bool anotherRouteRecording = navigationRuntime.RecordingStatus is
-                    { IsRecording: true, RouteId: { } recordingRouteId } && recordingRouteId != route.Id;
-                    bool thisRouteRecording = navigationRuntime.IsRecording(route.Id);
-                    if (routeExecutionActive || anotherRouteRecording)
-                        ImGui.BeginDisabled();
-                    if (thisRouteRecording)
-                    {
-                        if (ImGui.Button("Stop timed recording"))
-                            routeOperationMessage = navigationRuntime.StopRecording().Message;
-                    }
-                    else if (ImGui.Button("Start timed recording"))
-                    {
-                        routeOperationMessage = navigationRuntime.StartRecording(route, Environment.TickCount64).Message;
-                        navigationRuntime.RefreshPreview(route.Id);
-                    }
-                    if (routeExecutionActive || anotherRouteRecording)
-                        ImGui.EndDisabled();
-
-                    ImGui.Spacing();
-                    if (routeExecutionActive || thisRouteRecording)
-                        ImGui.BeginDisabled();
-                    if (ImGui.Button("Add current position"))
-                    {
-                        AddCurrentPosition(route.Id);
-                        navigationRuntime.RefreshPreview(route.Id);
-                    }
-                    if (ImGui.Button("Undo last point"))
-                    {
-                        routeOperationMessage = navigationLibrary.RemoveLastPoint(route.Id).Message;
-                        selectedRoutePoint = Math.Min(selectedRoutePoint, Math.Max(-1, route.Points.Count - 2));
-                        navigationRuntime.RefreshPreview(route.Id);
-                    }
-                    if (ImGui.Button("Reverse points"))
-                    {
-                        routeOperationMessage = navigationLibrary.Reverse(route.Id).Message;
-                        selectedRoutePoint = selectedRoutePoint < 0
-                            ? -1
-                            : route.Points.Count - 1 - selectedRoutePoint;
-                        navigationRuntime.RefreshPreview(route.Id);
-                    }
-                    if (routeExecutionActive || thisRouteRecording)
-                        ImGui.EndDisabled();
-
-                    NavigationRouteRecordingStatus recording = navigationRuntime.RecordingStatus;
-                    if (thisRouteRecording || recording.RouteId == route.Id)
-                        TextWrapped(thisRouteRecording ? NexusTheme.Green : NexusTheme.Muted, recording.Message);
-                }
-                DrawRouteOperationMessage();
-
+            if (navigationLibrary.HasWorkingLibrary)
+            {
                 ImGui.Spacing();
-                NexusTheme.SectionTitle(navigationLibrary.HasWorkingLibrary ? "Route points" : "Staged points");
-                if (ImGui.BeginTable("###RoutePoints", 4,
-                        ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchSame))
+                bool routeExecutionActive = navigationRuntime.Status.IsActive;
+                bool routeRecordingActive = navigationRuntime.IsRecording(route.Id);
+                if (routeExecutionActive || routeRecordingActive)
+                    ImGui.BeginDisabled();
+                if (ImGui.Button("Duplicate route"))
                 {
-                    ImGui.TableSetupColumn("#");
-                    ImGui.TableSetupColumn("X");
-                    ImGui.TableSetupColumn("Y");
-                    ImGui.TableSetupColumn("Z");
-                    ImGui.TableHeadersRow();
-                    for (int index = 0; index < route.Points.Count; index++)
-                    {
-                        NavigationRoutePoint point = route.Points[index];
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn();
-                        if (navigationLibrary.HasWorkingLibrary)
-                        {
-                            if (ImGui.Selectable($"{index + 1}##route-point-{route.Id:N}-{index}", selectedRoutePoint == index,
-                                    ImGuiSelectableFlags.SpanAllColumns))
-                                selectedRoutePoint = index;
-                        }
-                        else
-                        {
-                            ImGui.TextUnformatted((index + 1).ToString());
-                        }
-                        ImGui.TableNextColumn(); ImGui.TextUnformatted($"{point.X:0.###}");
-                        ImGui.TableNextColumn(); ImGui.TextUnformatted($"{point.Y:0.###}");
-                        ImGui.TableNextColumn(); ImGui.TextUnformatted($"{point.Z:0.###}");
-                    }
-                    ImGui.EndTable();
+                    NavigationLibraryWriteResult result = navigationLibrary.DuplicateRoute(route.Id);
+                    routeOperationMessage = result.Message;
+                    selectedRouteId = result.Snapshot?.SelectedRouteId;
+                    selectedRoutePoint = -1;
+                    editingRouteId = null;
                 }
-
-                if (navigationLibrary.HasWorkingLibrary &&
-                    selectedRoutePoint >= 0 && selectedRoutePoint < route.Points.Count)
+                ImGui.SameLine();
+                if (ImGui.Button("Copy route JSON"))
                 {
-                    bool editingBlocked = navigationRuntime.Status.IsActive || navigationRuntime.IsRecording(route.Id);
-                    if (editingBlocked)
-                        ImGui.BeginDisabled();
-                    if (ImGui.Button("Replace selected with current"))
+                    string json = navigationLibrary.ExportRoute(route.Id);
+                    if (string.IsNullOrWhiteSpace(json))
+                        routeOperationMessage = "The selected route could not be exported.";
+                    else
                     {
-                        ReplaceSelectedPoint(route.Id);
-                        navigationRuntime.RefreshPreview(route.Id);
+                        ImGui.SetClipboardText(json);
+                        routeOperationMessage = $"Copied {route.Name} to the clipboard.";
                     }
-                    bool canMoveUp = selectedRoutePoint > 0;
-                    if (!canMoveUp)
-                        ImGui.BeginDisabled();
-                    if (ImGui.Button("Move up") && canMoveUp)
-                    {
-                        NavigationLibraryWriteResult result = navigationLibrary.MovePoint(route.Id, selectedRoutePoint, -1);
-                        routeOperationMessage = result.Message;
-                        if (result.Success)
-                            selectedRoutePoint--;
-                        navigationRuntime.RefreshPreview(route.Id);
-                    }
-                    if (!canMoveUp)
-                        ImGui.EndDisabled();
-                    ImGui.SameLine();
-                    bool canMoveDown = selectedRoutePoint < route.Points.Count - 1;
-                    if (!canMoveDown)
-                        ImGui.BeginDisabled();
-                    if (ImGui.Button("Move down") && canMoveDown)
-                    {
-                        NavigationLibraryWriteResult result = navigationLibrary.MovePoint(route.Id, selectedRoutePoint, 1);
-                        routeOperationMessage = result.Message;
-                        if (result.Success)
-                            selectedRoutePoint++;
-                        navigationRuntime.RefreshPreview(route.Id);
-                    }
-                    if (!canMoveDown)
-                        ImGui.EndDisabled();
-                    ImGui.SameLine();
-                    if (ImGui.Button("Remove selected point"))
-                    {
-                        NavigationLibraryWriteResult result = navigationLibrary.RemovePoint(route.Id, selectedRoutePoint);
-                        routeOperationMessage = result.Message;
-                        if (result.Success)
-                            selectedRoutePoint = Math.Min(selectedRoutePoint, route.Points.Count - 2);
-                        navigationRuntime.RefreshPreview(route.Id);
-                    }
-                    if (editingBlocked)
-                        ImGui.EndDisabled();
                 }
-
-                if (navigationLibrary.HasWorkingLibrary)
+                if (ImGui.Button("Import route JSON"))
                 {
-                    ImGui.Spacing();
-                    bool routeExecutionActive = navigationRuntime.Status.IsActive;
-                    bool routeRecordingActive = navigationRuntime.IsRecording(route.Id);
-                    if (routeExecutionActive || routeRecordingActive)
-                        ImGui.BeginDisabled();
-                    if (ImGui.Button("Duplicate route"))
+                    NavigationLibraryWriteResult result = navigationLibrary.ImportRoute(ImGui.GetClipboardText());
+                    routeOperationMessage = result.Message;
+                    if (result.Success)
                     {
-                        NavigationLibraryWriteResult result = navigationLibrary.DuplicateRoute(route.Id);
-                        routeOperationMessage = result.Message;
                         selectedRouteId = result.Snapshot?.SelectedRouteId;
                         selectedRoutePoint = -1;
                         editingRouteId = null;
                     }
-                    ImGui.SameLine();
-                    if (ImGui.Button("Copy route JSON"))
-                    {
-                        string json = navigationLibrary.ExportRoute(route.Id);
-                        if (string.IsNullOrWhiteSpace(json))
-                            routeOperationMessage = "The selected route could not be exported.";
-                        else
-                        {
-                            ImGui.SetClipboardText(json);
-                            routeOperationMessage = $"Copied {route.Name} to the clipboard.";
-                        }
-                    }
-                    if (ImGui.Button("Import route JSON"))
-                    {
-                        NavigationLibraryWriteResult result = navigationLibrary.ImportRoute(ImGui.GetClipboardText());
-                        routeOperationMessage = result.Message;
-                        if (result.Success)
-                        {
-                            selectedRouteId = result.Snapshot?.SelectedRouteId;
-                            selectedRoutePoint = -1;
-                            editingRouteId = null;
-                        }
-                    }
-                    if (ImGui.Button("Clear all points…"))
-                    {
-                        pendingClearRouteId = route.Id;
-                        ImGui.OpenPopup("Clear Nexus route points?###ClearNexusRoutePoints");
-                    }
-                    ImGui.SameLine();
-                    if (ImGui.Button("Delete route"))
-                    {
-                        pendingDeleteRouteId = route.Id;
-                        ImGui.OpenPopup("Delete Nexus route?###DeleteNexusRoute");
-                    }
-                    if (routeExecutionActive || routeRecordingActive)
-                        ImGui.EndDisabled();
                 }
+                if (ImGui.Button("Clear all points…"))
+                {
+                    pendingClearRouteId = route.Id;
+                    ImGui.OpenPopup("Clear Nexus route points?###ClearNexusRoutePoints");
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Delete route"))
+                {
+                    pendingDeleteRouteId = route.Id;
+                    ImGui.OpenPopup("Delete Nexus route?###DeleteNexusRoute");
+                }
+                if (routeExecutionActive || routeRecordingActive)
+                    ImGui.EndDisabled();
             }
         }
-        ImGui.EndChild();
+
+        // Popups must be drawn in the same ImGui ID scope as the buttons that open them.
+        DrawDeleteRouteConfirmation();
+        DrawClearPointsConfirmation();
     }
 
     private void DrawNavigationWorkingLibrary()
