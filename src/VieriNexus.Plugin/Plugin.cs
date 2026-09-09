@@ -34,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly GameplayReadyGate gameplayReadyGate = new();
     private readonly WorldSnapshotObserver worldObserver;
     private readonly ManualMovementSafetyService manualMovementSafety;
+    private readonly NavigationExecutionSafetyCoordinator navigationExecutionSafety;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -54,6 +55,15 @@ public sealed class Plugin : IDalamudPlugin
         var resourceLeases = new ResourceLeaseManager();
         var navigationStopProvider = new VnavmeshNavigationStopProvider(PluginInterface, dependencyService);
         var navigationStop = new NavigationStopCoordinator(navigationStopProvider, TimeSpan.FromSeconds(15));
+        var navigationIntentStore = new FileNavigationExecutionIntentStore(Path.Combine(
+            PluginInterface.GetPluginConfigDirectory(),
+            "NexusData",
+            "navigation-execution-intent.v1.json"));
+        navigationExecutionSafety = new NavigationExecutionSafetyCoordinator(
+            resourceLeases,
+            navigationStop,
+            navigationStopProvider,
+            navigationIntentStore);
         var manualMovementInput = new GameManualMovementInputSource();
         var manualMovement = new ManualMovementSafetyCoordinator(navigationStop);
         manualMovementSafety = new ManualMovementSafetyService(
@@ -66,7 +76,8 @@ public sealed class Plugin : IDalamudPlugin
             navigationMigration,
             resourceLeases,
             navigationStop,
-            manualMovementSafety);
+            manualMovementSafety,
+            navigationExecutionSafety);
         worldObserver = new WorldSnapshotObserver(ClientState, PlayerState, ObjectTable, Condition, worldStore);
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
@@ -91,6 +102,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        navigationExecutionSafety.Shutdown(DateTimeOffset.UtcNow);
         PluginInterface.UiBuilder.Draw -= Draw;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
@@ -107,6 +119,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         var now = Environment.TickCount64;
         worldObserver.Update(now);
+        navigationExecutionSafety.Update(DateTimeOffset.UtcNow);
         manualMovementSafety.Update(now);
 
         if (!ClientState.IsLoggedIn)

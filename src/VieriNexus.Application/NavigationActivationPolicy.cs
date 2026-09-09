@@ -38,6 +38,7 @@ public sealed record NavigationActivationAssessment(
     bool IsSourcePluginAuthoritative,
     bool IsStopAvailable,
     bool IsManualOverrideAvailable,
+    bool IsReloadReconciliationAvailable,
     IReadOnlyList<NavigationActivationBlocker> Blockers);
 
 public static class NavigationActivationPolicy
@@ -77,6 +78,7 @@ public static class NavigationActivationPolicy
             sourceAuthoritative,
             inputs.StopAvailable,
             inputs.ManualOverrideAvailable,
+            inputs.ReloadReconciliationAvailable,
             blockers);
     }
 

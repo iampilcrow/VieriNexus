@@ -3,7 +3,7 @@
   "Name": "VieriNexus",
   "InternalName": "VieriNexus",
   "Punchline": "Safe migration foundation for the unified Vieri experience.",
-  "Description": "An early testing build of the unified, modular Vieri suite. It provides the Nexus shell, dependency validation, migration discovery, shared state, a verified read-only staged route library, verified navigation Stop, and manual-movement yielding foundations without replacing or disabling the existing Vieri plugins.",
+  "Description": "An early testing build of the unified, modular Vieri suite. It provides the Nexus shell, dependency validation, migration discovery, shared state, a verified read-only staged route library, verified navigation Stop, manual-movement yielding, and no-replay reload recovery without replacing or disabling the existing Vieri plugins.",
   "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,

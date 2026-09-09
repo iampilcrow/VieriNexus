@@ -23,6 +23,7 @@ public sealed class NavigationActivationPolicyTests
         Assert.True(assessment.IsSourcePluginAuthoritative);
         Assert.False(assessment.IsStopAvailable);
         Assert.False(assessment.IsManualOverrideAvailable);
+        Assert.False(assessment.IsReloadReconciliationAvailable);
         Assert.Contains(assessment.Blockers, blocker => blocker.Code == "source-plugin-loaded");
         Assert.Contains(assessment.Blockers, blocker => blocker.Code == "stop-required");
         Assert.Contains(assessment.Blockers, blocker => blocker.Code == "manual-override-required");
@@ -42,6 +43,7 @@ public sealed class NavigationActivationPolicyTests
         Assert.False(waiting.CanActivate);
         Assert.True(waiting.IsStopAvailable);
         Assert.True(waiting.IsManualOverrideAvailable);
+        Assert.True(waiting.IsReloadReconciliationAvailable);
         Assert.Equal(NavigationActivationState.ReadyForActivation, approved.State);
         Assert.True(approved.CanActivate);
     }

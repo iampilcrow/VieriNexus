@@ -8,7 +8,8 @@ internal sealed class NavigationActivationService(
     NavigationMigrationService migration,
     ResourceLeaseManager leases,
     NavigationStopCoordinator stop,
-    ManualMovementSafetyService manualMovement)
+    ManualMovementSafetyService manualMovement,
+    NavigationExecutionSafetyCoordinator executionSafety)
 {
     internal NavigationActivationAssessment Assess()
     {
@@ -26,7 +27,7 @@ internal sealed class NavigationActivationService(
             HasNavigationOrMovementLeaseConflict: leaseConflict,
             StopAvailable: stop.IsProviderAvailable,
             ManualOverrideAvailable: manualMovement.IsReadyForActivation,
-            ReloadReconciliationAvailable: false,
+            ReloadReconciliationAvailable: executionSafety.IsReadyForActivation,
             ExplicitActivationApproved: false,
             NexusExecutionEnabled: false));
     }

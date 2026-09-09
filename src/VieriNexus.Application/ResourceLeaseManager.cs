@@ -20,6 +20,13 @@ public sealed class ResourceLeaseManager
 {
     private readonly object sync = new();
     private readonly Dictionary<ResourceKind, Lease> owners = [];
+    private readonly Dictionary<Guid, ResourceLeaseSnapshot> expiredAwaitingWatchdog = [];
+    private readonly Func<DateTimeOffset> utcNow;
+
+    public ResourceLeaseManager(Func<DateTimeOffset>? utcNow = null)
+    {
+        this.utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+    }
 
     public bool TryAcquire(
         LeaseOwner owner,
@@ -37,7 +44,8 @@ public sealed class ResourceLeaseManager
 
         lock (sync)
         {
-            ExpireDeadLeases(DateTimeOffset.UtcNow);
+            DateTimeOffset now = utcNow();
+            ExpireDeadLeases(now);
             foreach (var resource in requested)
             {
                 if (!owners.TryGetValue(resource, out var current))
@@ -48,7 +56,7 @@ public sealed class ResourceLeaseManager
                 return false;
             }
 
-            var lease = new Lease(Guid.NewGuid(), owner, requested.ToHashSet(), DateTimeOffset.UtcNow, lifetime);
+            var lease = new Lease(Guid.NewGuid(), owner, requested.ToHashSet(), now, lifetime);
             foreach (var resource in requested)
                 owners.Add(resource, lease);
 
@@ -62,8 +70,38 @@ public sealed class ResourceLeaseManager
     {
         lock (sync)
         {
-            ExpireDeadLeases(DateTimeOffset.UtcNow);
+            ExpireDeadLeases(utcNow());
             return owners.Values.DistinctBy(x => x.Id).Select(x => x.Snapshot).ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Actively expires dead leases and returns every expiration that has not yet been
+    /// observed by the watchdog. Expirations discovered by acquisition, snapshots, or a
+    /// late heartbeat are retained here so a safety response cannot be skipped.
+    /// </summary>
+    public IReadOnlyList<ResourceLeaseSnapshot> SweepExpired(DateTimeOffset now)
+    {
+        lock (sync)
+        {
+            ExpireDeadLeases(now);
+            ResourceLeaseSnapshot[] expired = expiredAwaitingWatchdog.Values.ToArray();
+            expiredAwaitingWatchdog.Clear();
+            return expired;
+        }
+    }
+
+    public bool LeaseOwns(Guid leaseId, params ResourceKind[] requiredResources)
+    {
+        ArgumentNullException.ThrowIfNull(requiredResources);
+        if (leaseId == Guid.Empty || requiredResources.Length == 0)
+            return false;
+
+        lock (sync)
+        {
+            ExpireDeadLeases(utcNow());
+            Lease? lease = owners.Values.FirstOrDefault(x => x.Id == leaseId);
+            return lease is not null && requiredResources.All(lease.Resources.Contains);
         }
     }
 
@@ -74,10 +112,11 @@ public sealed class ResourceLeaseManager
 
         lock (sync)
         {
+            ExpireDeadLeases(utcNow());
             var lease = owners.Values.FirstOrDefault(x => x.Id == leaseId);
             if (lease is null)
                 return false;
-            lease.ExpiresAt = DateTimeOffset.UtcNow + lifetime;
+            lease.ExpiresAt = utcNow() + lifetime;
             return true;
         }
     }
@@ -93,8 +132,22 @@ public sealed class ResourceLeaseManager
 
     private void ExpireDeadLeases(DateTimeOffset now)
     {
-        foreach (var resource in owners.Where(x => x.Value.ExpiresAt <= now).Select(x => x.Key).ToArray())
-            owners.Remove(resource);
+        Lease[] expired = owners.Values
+            .DistinctBy(x => x.Id)
+            .Where(x => x.ExpiresAt <= now)
+            .ToArray();
+        foreach (Lease lease in expired)
+        {
+            foreach (ResourceKind resource in owners
+                         .Where(x => x.Value.Id == lease.Id)
+                         .Select(x => x.Key)
+                         .ToArray())
+            {
+                owners.Remove(resource);
+            }
+
+            expiredAwaitingWatchdog.TryAdd(lease.Id, lease.Snapshot);
+        }
     }
 
     private static IEnumerable<ResourceKind> Expand(IEnumerable<ResourceKind> requested)
@@ -152,6 +205,8 @@ public sealed class ResourceLeaseHandle : IDisposable
         this.manager = manager;
         this.leaseId = leaseId;
     }
+
+    public Guid LeaseId => leaseId;
 
     public bool Heartbeat(TimeSpan lifetime) => Volatile.Read(ref disposed) == 0 && manager.Heartbeat(leaseId, lifetime);
 

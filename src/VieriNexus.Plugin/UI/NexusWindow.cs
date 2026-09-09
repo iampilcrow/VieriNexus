@@ -529,9 +529,10 @@ internal sealed class NexusWindow : Window
             .Where(blocker => blocker.Code != "source-plugin-loaded")
             .ToArray();
         int readinessLines = (assessment.IsStopAvailable ? 1 : 0) +
-                             (assessment.IsManualOverrideAvailable ? 1 : 0);
+                             (assessment.IsManualOverrideAvailable ? 1 : 0) +
+                             (assessment.IsReloadReconciliationAvailable ? 1 : 0);
         float height = MathF.Ceiling(
-            (ImGui.GetTextLineHeightWithSpacing() * ((displayedBlockers.Length * 2f) + 4f + readinessLines)) +
+            (ImGui.GetTextLineHeightWithSpacing() * ((displayedBlockers.Length * 2f) + 4f + (readinessLines * 2f))) +
             (ImGui.GetStyle().WindowPadding.Y * 2f) + 12f);
         BeginPanel("ACTIVATION SAFETY", height);
         NexusTheme.StatusDot(assessment.CanActivate ? NexusTheme.Green : NexusTheme.Amber,
@@ -550,6 +551,9 @@ internal sealed class NexusWindow : Window
         if (assessment.IsManualOverrideAvailable)
             TextWrapped(NexusTheme.Green,
                 "• Manual movement yielding is connected; player movement input always takes priority.");
+        if (assessment.IsReloadReconciliationAvailable)
+            TextWrapped(NexusTheme.Green,
+                "• Reload recovery and the lease watchdog are connected; stale movement intent is stopped, never replayed.");
         foreach (NavigationActivationBlocker blocker in displayedBlockers)
             TextWrapped(NexusTheme.Muted, $"• {blocker.Message}");
         EndPanel();
