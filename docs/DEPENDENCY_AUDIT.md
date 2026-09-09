@@ -2,6 +2,8 @@
 
 This catalog was checked against the live integration and dependency surfaces in VieriAutoDuty, VieriAutoMarket, VieriAvarice, VieriCodex, VieriDeck, VieriDelvUI, VieriLink, and VieriRotationHelper.
 
+The 2026-09-09 provider audit pins Boss Mod 7.5.6.0 (`a96b0a4614a8ae28c6fc7949ec221207c56bd5f9`) and Lifestream 2.5.4.21 (`62a6f68fc0966530f6baa380c1082e41f6cd6d7c`) in `upstreams/source-lock.json`. Boss Mod retains every preset/configuration/action-queue IPC endpoint and rotation-module identifier used by AutoDuty, Codex, Avarice, and RotationHelper. Its transient-strategy implementation now resolves the existing string identifiers through the rotation-module registry, with no public signature change. Lifestream retains every travel, busy-state, character-switch, command, and abort endpoint used by AutoDuty and Codex; 2.5.4.21 changes internal duty-transfer scheduling only. VieriDeck contributes fixed chat-command shortcuts and has no binary Lifestream IPC contract. No consumer compatibility patch or unrelated rebuild is required for either provider update.
+
 ## Required external providers
 
 | Provider | Current Vieri consumers | Purpose |
@@ -37,6 +39,7 @@ This catalog was checked against the live integration and dependency surfaces in
 ## Intentionally not external dependencies
 
 - Questionable is incorporated through VieriCodex's maintained quest engine and route library. It must not be installed beside VieriCodex or listed as a Nexus dependency.
+- Questionable 15.756.0.1 is incorporated through VieriCodex 1.12.2.80 at source commit `5c03483bccd2551257b61c45dcf9a5d53fbab844`. It adds `Hearts Aligned`, Beastmaster/Bastion model support, the level-16 Beastmaster quest override, current Allied Society route validations, and Boss Mod execution for the `A Rush of Cold Wind` solo duty while retaining the Vieri live-gearset guard.
 - The eight Vieri products are temporary migration sources, not final third-party dependencies.
 - Wrath Combo and VieriWrathSwitch are already incorporated into VieriRotationHelper and migrate as Nexus's embedded combat engine.
 - Rotation Solver Reborn and BossMod AutoRotation are alternative rotation engines, not requirements for the Nexus combat engine.
