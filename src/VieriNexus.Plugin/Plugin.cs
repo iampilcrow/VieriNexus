@@ -50,14 +50,16 @@ public sealed class Plugin : IDalamudPlugin
             navigationImport.Imported ? navigationImport.ReceiptId : null);
         var moduleRegistry = BuiltInModuleCatalog.Create();
         var worldStore = new WorldStateStore();
+        var resourceLeases = new ResourceLeaseManager();
+        var navigationActivation = new NavigationActivationService(dependencyService, navigationMigration, resourceLeases);
         worldObserver = new WorldSnapshotObserver(ClientState, PlayerState, ObjectTable, Condition, worldStore);
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
-        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, moduleRegistry, worldStore, logo);
+        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, navigationActivation, moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 
-        ipc = new NexusIpcProvider(PluginInterface, dependencyService, navigationMigration, worldStore);
+        ipc = new NexusIpcProvider(PluginInterface, dependencyService, navigationMigration, navigationActivation, worldStore);
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {

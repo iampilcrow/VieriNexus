@@ -31,6 +31,7 @@ internal sealed class NexusWindow : Window
     private readonly DependencyService dependencies;
     private readonly LegacyConfigurationInventory legacyInventory;
     private readonly NavigationMigrationService navigationMigration;
+    private readonly NavigationActivationService navigationActivation;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
@@ -42,6 +43,7 @@ internal sealed class NexusWindow : Window
         DependencyService dependencies,
         LegacyConfigurationInventory legacyInventory,
         NavigationMigrationService navigationMigration,
+        NavigationActivationService navigationActivation,
         ModuleRegistry modules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
@@ -51,6 +53,7 @@ internal sealed class NexusWindow : Window
         this.dependencies = dependencies;
         this.legacyInventory = legacyInventory;
         this.navigationMigration = navigationMigration;
+        this.navigationActivation = navigationActivation;
         this.modules = modules;
         this.world = world;
         this.logo = logo;
@@ -357,6 +360,7 @@ internal sealed class NexusWindow : Window
                 plugin.Save();
             }
             EndPanel();
+            DrawNavigationActivationSafety();
             return;
         }
 
@@ -385,6 +389,7 @@ internal sealed class NexusWindow : Window
             TextWrapped(NexusTheme.Muted, "Create routes in VieriNavPlotter while it remains the active route owner, then import again to refresh staging.");
             EndPanel();
             DrawStagedNavigationSettings(snapshot);
+            DrawNavigationActivationSafety();
             return;
         }
 
@@ -437,6 +442,7 @@ internal sealed class NexusWindow : Window
 
         ImGui.Spacing();
         DrawStagedNavigationSettings(snapshot);
+        DrawNavigationActivationSafety();
     }
 
     private static void DrawRouteDetails(NavigationRouteSnapshot? route)
@@ -513,6 +519,28 @@ internal sealed class NexusWindow : Window
         ImGui.TextUnformatted($"Minimum point distance: {snapshot.MinimumPointDistance:0.##}");
         ImGui.TextUnformatted($"World preview: {(snapshot.ShowWorldPreview ? "Shown" : "Hidden")} • Point numbers: {(snapshot.ShowPointNumbers ? "Shown" : "Hidden")}");
         ImGui.TextUnformatted($"Live navigation path: {(snapshot.ShowLiveNavigationPath ? "Shown" : "Hidden")}");
+        EndPanel();
+    }
+
+    private void DrawNavigationActivationSafety()
+    {
+        NavigationActivationAssessment assessment = navigationActivation.Assess();
+        float height = MathF.Ceiling(
+            (ImGui.GetTextLineHeightWithSpacing() * ((assessment.Blockers.Count * 2f) + 4f)) +
+            (ImGui.GetStyle().WindowPadding.Y * 2f) + 12f);
+        BeginPanel("ACTIVATION SAFETY", height);
+        NexusTheme.StatusDot(assessment.CanActivate ? NexusTheme.Green : NexusTheme.Amber,
+            assessment.CanActivate ? "Ready for explicit activation" : "Staging only — execution blocked");
+        TextWrapped(NexusTheme.Muted,
+            "Nexus will not draw, travel, or play routes until every safety gate passes.");
+        string sourceState = assessment.IsSourcePluginLoaded
+            ? "VieriNavPlotter is loaded and is the current navigation owner."
+            : assessment.IsSourcePluginInstalled
+                ? "VieriNavPlotter is installed but not loaded; Nexus execution remains disabled."
+                : "VieriNavPlotter is not installed; Nexus execution remains disabled.";
+        TextWrapped(NexusTheme.Muted, sourceState);
+        foreach (NavigationActivationBlocker blocker in assessment.Blockers)
+            TextWrapped(NexusTheme.Muted, $"• {blocker.Message}");
         EndPanel();
     }
 

@@ -14,6 +14,8 @@ Staged migration status survives a Nexus reload: the saved receipt, target path,
 
 The Routes page now presents that verified staged snapshot as a read-only library. It shows imported preferences and, when present, searchable route metadata, movement settings, assignments, tolerances, and ordered points. Versioned Nexus navigation IPC provides read-only status/list/detail access with compatibility-shaped JSON, while execution, override resolution, route drawing, travel, and playback remain disabled.
 
+An activation-safety assessment now makes the coexistence boundary explicit. It detects the installed/loaded source owner, required-provider readiness, Navigation/Movement lease conflicts, and the mandatory Stop, manual-override, reload-reconciliation, and explicit-approval gates. Nexus cannot activate navigation while any gate is blocked, and this release intentionally leaves the execution primitives unavailable.
+
 ## Current safety guarantees
 
 - Existing Vieri configurations are discovered read-only and left in place.
@@ -21,6 +23,7 @@ The Routes page now presents that verified staged snapshot as a read-only librar
 - The Communications discovery card checks only whether VieriLink configuration exists; it does not open that file.
 - Route imports preserve disabled overrides as disabled and never activate navigation automatically.
 - Route-library browsing and IPC read only the verified staged snapshot; they do not query or change the live VieriNavPlotter configuration.
+- A loaded VieriNavPlotter is reported as the current route owner and blocks Nexus activation; there is no activation action in the current build.
 - No migration-source plugin is disabled automatically.
 - No gameplay automation is started by the foundation build.
 - The Nexus window waits until a targetable character is fully in the world.

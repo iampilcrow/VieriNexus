@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\VieriNexus.Application\VieriNexus.Application.csproj" />
+    <ProjectReference Include="..\..\src\VieriNexus.Contracts\VieriNexus.Contracts.csproj" />
     <ProjectReference Include="..\..\src\VieriNexus.Domain\VieriNexus.Domain.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageReference Include="xunit" Version="2.9.3" />

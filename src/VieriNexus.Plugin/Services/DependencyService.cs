@@ -19,6 +19,8 @@ internal sealed record DependencyStatus(
     internal bool IsReady => Health == DependencyHealth.Healthy;
 }
 
+internal sealed record PluginPresence(bool IsInstalled, bool IsLoaded, string? Version);
+
 internal sealed class DependencyService(IDalamudPluginInterface pluginInterface)
 {
     internal IReadOnlyList<DependencyStatus> Snapshot()
@@ -36,6 +38,13 @@ internal sealed class DependencyService(IDalamudPluginInterface pluginInterface)
     }
 
     internal bool RequiredReady => Snapshot().Where(x => x.Definition.Required).All(x => x.IsReady);
+
+    internal PluginPresence FindPlugin(string internalName)
+    {
+        var plugin = pluginInterface.InstalledPlugins.FirstOrDefault(candidate =>
+            string.Equals(candidate.InternalName, internalName, StringComparison.OrdinalIgnoreCase));
+        return new(plugin is not null, plugin?.IsLoaded == true, plugin?.Version?.ToString());
+    }
 
     internal void OpenInstaller(DependencyStatus dependency)
     {

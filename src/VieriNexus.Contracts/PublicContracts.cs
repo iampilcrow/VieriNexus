@@ -10,6 +10,7 @@ public static class NexusIpc
     public const string GetNavigationStatus = "VieriNexus.Navigation.V1.GetStatus";
     public const string ListNavigationRoutes = "VieriNexus.Navigation.V1.ListRoutes";
     public const string GetNavigationRoute = "VieriNexus.Navigation.V1.GetRoute";
+    public const string GetNavigationActivationStatus = "VieriNexus.Navigation.V1.GetActivationStatus";
 }
 
 public sealed record NexusStatusDto(
@@ -83,3 +84,24 @@ public sealed record NavigationRouteDto(
     string TargetLabel,
     bool OverrideEnabled,
     DateTime UpdatedAtUtc);
+
+public sealed record NavigationActivationBlockerDto(string Code, string Message);
+
+public sealed record NavigationActivationStatusDto(
+    int ContractVersion,
+    string State,
+    bool CanActivate,
+    bool IsExecutionEnabled,
+    bool IsSourcePluginInstalled,
+    bool IsSourcePluginLoaded,
+    bool IsSourcePluginAuthoritative,
+    IReadOnlyList<NavigationActivationBlockerDto> Blockers);
+
+public static class NavigationContractJson
+{
+    public static string SerializeRouteList(IReadOnlyList<NavigationRouteListEntryDto> routes) =>
+        System.Text.Json.JsonSerializer.Serialize(routes);
+
+    public static string SerializeRoute(NavigationRouteDto route) =>
+        System.Text.Json.JsonSerializer.Serialize(route);
+}

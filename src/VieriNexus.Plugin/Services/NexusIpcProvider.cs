@@ -1,6 +1,5 @@
 using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
-using System.Text.Json;
 using VieriNexus.Application;
 using VieriNexus.Contracts;
 
@@ -14,18 +13,22 @@ internal sealed class NexusIpcProvider : IDisposable
     private readonly ICallGateProvider<NavigationLibraryStatusDto> navigationStatusProvider;
     private readonly ICallGateProvider<string> navigationListProvider;
     private readonly ICallGateProvider<string, string?> navigationGetProvider;
+    private readonly ICallGateProvider<NavigationActivationStatusDto> navigationActivationProvider;
     private readonly DependencyService dependencies;
     private readonly NavigationMigrationService navigation;
+    private readonly NavigationActivationService navigationActivation;
     private readonly WorldStateStore world;
 
     internal NexusIpcProvider(
         IDalamudPluginInterface pluginInterface,
         DependencyService dependencies,
         NavigationMigrationService navigation,
+        NavigationActivationService navigationActivation,
         WorldStateStore world)
     {
         this.dependencies = dependencies;
         this.navigation = navigation;
+        this.navigationActivation = navigationActivation;
         this.world = world;
         statusProvider = pluginInterface.GetIpcProvider<NexusStatusDto>(NexusIpc.GetStatus);
         dependencyProvider = pluginInterface.GetIpcProvider<DependencyDto[]>(NexusIpc.GetDependencies);
@@ -33,12 +36,14 @@ internal sealed class NexusIpcProvider : IDisposable
         navigationStatusProvider = pluginInterface.GetIpcProvider<NavigationLibraryStatusDto>(NexusIpc.GetNavigationStatus);
         navigationListProvider = pluginInterface.GetIpcProvider<string>(NexusIpc.ListNavigationRoutes);
         navigationGetProvider = pluginInterface.GetIpcProvider<string, string?>(NexusIpc.GetNavigationRoute);
+        navigationActivationProvider = pluginInterface.GetIpcProvider<NavigationActivationStatusDto>(NexusIpc.GetNavigationActivationStatus);
         statusProvider.RegisterFunc(GetStatus);
         dependencyProvider.RegisterFunc(GetDependencies);
         navigationVersionProvider.RegisterFunc(() => NexusIpc.CurrentVersion);
         navigationStatusProvider.RegisterFunc(GetNavigationStatus);
         navigationListProvider.RegisterFunc(ListNavigationRoutes);
         navigationGetProvider.RegisterFunc(GetNavigationRoute);
+        navigationActivationProvider.RegisterFunc(GetNavigationActivationStatus);
     }
 
     private NexusStatusDto GetStatus()
@@ -71,17 +76,20 @@ internal sealed class NexusIpcProvider : IDisposable
     private NavigationLibraryStatusDto GetNavigationStatus()
     {
         NavigationLibrarySnapshot? snapshot = navigation.StagedSnapshot;
+        NavigationActivationAssessment activation = navigationActivation.Assess();
         return new NavigationLibraryStatusDto(
             NexusIpc.CurrentVersion,
             snapshot is not null,
             false,
-            true,
+            activation.IsSourcePluginAuthoritative,
             snapshot?.Routes.Count ?? 0,
             snapshot?.Routes.Count(route => route.OverrideEnabled) ?? 0,
             snapshot is null ? "NotStaged" : "ReadOnlyStaged",
             snapshot is null
                 ? "No verified staged route library is available."
-                : "Verified staged route data is available read-only; VieriNavPlotter remains authoritative.");
+                : activation.IsSourcePluginAuthoritative
+                    ? "Verified staged route data is available read-only; VieriNavPlotter remains authoritative."
+                    : "Verified staged route data is available read-only; Nexus navigation execution is disabled.");
     }
 
     private string ListNavigationRoutes()
@@ -92,7 +100,7 @@ internal sealed class NexusIpcProvider : IDisposable
 
         NavigationRouteListEntryDto[] routes = snapshot.Routes.Select(route => new NavigationRouteListEntryDto(
             route.Id, route.Name, route.TerritoryId, route.Points.Count, route.Notes, route.Tags)).ToArray();
-        return JsonSerializer.Serialize(routes);
+        return NavigationContractJson.SerializeRouteList(routes);
     }
 
     private string? GetNavigationRoute(string nameOrId)
@@ -104,7 +112,7 @@ internal sealed class NexusIpcProvider : IDisposable
         if (route is null)
             return null;
 
-        return JsonSerializer.Serialize(new NavigationRouteDto(
+        return NavigationContractJson.SerializeRoute(new NavigationRouteDto(
             route.Id,
             route.Name,
             route.TerritoryId,
@@ -122,8 +130,24 @@ internal sealed class NexusIpcProvider : IDisposable
             route.UpdatedAtUtc));
     }
 
+    private NavigationActivationStatusDto GetNavigationActivationStatus()
+    {
+        NavigationActivationAssessment assessment = navigationActivation.Assess();
+        return new NavigationActivationStatusDto(
+            NexusIpc.CurrentVersion,
+            assessment.State.ToString(),
+            assessment.CanActivate,
+            false,
+            assessment.IsSourcePluginInstalled,
+            assessment.IsSourcePluginLoaded,
+            assessment.IsSourcePluginAuthoritative,
+            assessment.Blockers.Select(blocker =>
+                new NavigationActivationBlockerDto(blocker.Code, blocker.Message)).ToArray());
+    }
+
     public void Dispose()
     {
+        navigationActivationProvider.UnregisterFunc();
         navigationGetProvider.UnregisterFunc();
         navigationListProvider.UnregisterFunc();
         navigationStatusProvider.UnregisterFunc();
