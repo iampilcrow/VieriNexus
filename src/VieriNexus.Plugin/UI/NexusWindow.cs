@@ -503,7 +503,12 @@ internal sealed class NexusWindow : Window
 
     private static void DrawStagedNavigationSettings(NavigationLibrarySnapshot snapshot)
     {
-        BeginPanel("STAGED SETTINGS", 150);
+        float settingsHeight = MathF.Ceiling(
+            (ImGui.GetTextLineHeightWithSpacing() * 6f) +
+            (ImGui.GetStyle().WindowPadding.Y * 2f) +
+            ImGui.GetStyle().ItemSpacing.Y +
+            8f);
+        BeginPanel("STAGED SETTINGS", settingsHeight);
         ImGui.TextUnformatted($"Recording interval: {snapshot.RecordingIntervalSeconds:0.##} seconds");
         ImGui.TextUnformatted($"Minimum point distance: {snapshot.MinimumPointDistance:0.##}");
         ImGui.TextUnformatted($"World preview: {(snapshot.ShowWorldPreview ? "Shown" : "Hidden")} • Point numbers: {(snapshot.ShowPointNumbers ? "Shown" : "Hidden")}");

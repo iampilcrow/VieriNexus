@@ -2,7 +2,7 @@
 
 Recovery snapshot: 2026-09-08 (America/New_York)  
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.6`
+Current product version: `0.1.0.7`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -174,7 +174,7 @@ Several target concepts already have types or tests but are not live subsystems.
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — global presentation/setup settings, character-scoped safety settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.6`, assembly/internal root `VieriNexus`.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.7`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -611,7 +611,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project/live-feed version: `0.1.0.6`, Dalamud API 15.
+- Plugin project version: `0.1.0.7`, Dalamud API 15. The live feed remains 0.1.0.6 until the layout correction is published and verified.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -655,6 +655,8 @@ The user's 0.1.0.4 reload test then proved that the configuration, staged route 
 
 The user then confirmed 0.1.0.5 restores the exact staged message after disabling/re-enabling Nexus. Version 0.1.0.6 builds the first consumer of that recovered data: a dedicated read-only Routes page and versioned Nexus navigation IPC. Both consume only the verified staged snapshot. The empty-library view still exposes imported preferences; non-empty libraries add search, details, ordered points, and visible inactive execution controls. The IPC surface provides API version, staging status, list, and detail calls under `VieriNexus.Navigation.V1.*`; it deliberately does not claim `VieriNavPlotter.*`, resolve overrides, or run routes. All 23 Nexus tests and the zero-warning Release build pass. Source commit `460e730`; Daily Pilcrow release commit `3be445d`; production deployment `dpl_2KVVzGiGwUAZQh7WGJp4WUL8LrDy`; live runtime/source archives and Discord workflow `34299175777` are verified.
 
+The user's first 0.1.0.6 Routes-page screenshot confirmed the verified zero-route state, summary cards, explanatory copy, and first three staged settings render correctly. The user also confirmed guarded rollback and re-import both work and immediately reflect the correct no-staging/staged state on the Routes page. The screenshot exposed that the fourth `Live navigation path` row was clipped inside the Staged Settings child because that panel still used a fixed 150-pixel height. Version 0.1.0.7 derives the panel height from the active text-line metrics, window padding, and item spacing so all four preferences remain visible across supported interface scales. No migration, staged data, IPC, source-plugin, or navigation behavior changes in this correction. All 23 Nexus tests and the zero-warning Release build pass before publication.
+
 ### Current workstream
 
 The user had said all vendor routes were in a good place and instructed development to continue piecing VieriNexus together while preserving every setting and Discord key. The assistant chose Routes & Navigation as the first safe vertical migration slice and completed staging/rollback.
@@ -663,13 +665,12 @@ The user subsequently confirmed that VieriNexus installs and updates through Dal
 
 The explicit next gate is:
 
-1. Publish and update to Nexus 0.1.0.6 through Dalamud.
-2. Open Routes and confirm the zero-route view shows the verified staging state and imported preferences without clipping.
-3. Exercise **Rollback staged import**, confirm the Routes page returns to its no-staging state, then import again and repeat the reload check.
-4. Add a non-empty personal-route fixture with a disabled override and verify search/detail/point rendering plus the read-only IPC payloads.
-5. Design the activation/conflict/ownership contract; do not enable route execution until its full safety matrix passes.
+1. Publish and update to Nexus 0.1.0.7 through Dalamud.
+2. Open Routes and confirm all four staged setting rows are visible, including `Live navigation path`.
+3. Add a non-empty personal-route fixture with a disabled override and verify search/detail/point rendering plus the read-only IPC payloads.
+4. Design the activation/conflict/ownership contract; do not enable route execution until its full safety matrix passes.
 
-The import, responsive text, on-disk persistence, direct source-integrity checks, and 0.1.0.5 reload recovery are confirmed. Guarded rollback, a non-empty fixture, the 0.1.0.6 Routes page, and its IPC remain user-side/in-game verification items.
+The import, responsive Migration text, on-disk persistence, direct source-integrity checks, 0.1.0.5 reload recovery, guarded rollback/re-import, and the 0.1.0.6 zero-route page state are confirmed. Rollback and import immediately produce the correct Routes-page state. The final Staged Settings row was clipped in 0.1.0.6 and is corrected in 0.1.0.7. A non-empty fixture, the corrected layout, and navigation IPC remain user-side/in-game verification items.
 
 ### Completed versus unfinished
 
@@ -685,7 +686,7 @@ There is no known external blocker. The old conversation's context window, not t
 
 ### Current Nexus implementation concerns
 
-- **Partially verified live migration:** Dalamud installation/update, responsive text, a zero-route import, window reopen, on-disk persistence, source/backup hash integrity, and 0.1.0.5 receipt/payload recovery across disable/re-enable are confirmed. Guarded rollback, a non-empty personal-route fixture, and the 0.1.0.6 read-only UI/IPC remain unverified in game.
+- **Partially verified live migration:** Dalamud installation/update, responsive Migration text, a zero-route import, window reopen, on-disk persistence, source/backup hash integrity, receipt/payload recovery, guarded rollback/re-import, and correct Routes-page staging transitions are confirmed. The Staged Settings final row clipped in 0.1.0.6; 0.1.0.7 corrects its fixed-height calculation. A non-empty personal-route fixture, corrected layout, and read-only IPC remain unverified in game.
 - **Partial command contract:** `VieriNexus.Commands.V1.Execute` is public but unregistered. Consumers must not assume it works.
 - **Partial knowledge model:** `KnowledgeState.Stale/Unavailable` exist but are never emitted by the current observer; provider state is always empty.
 - **Readiness semantics:** `SessionSnapshot.IsLoading` currently mirrors the between-area flags rather than representing every loading/occupied state.
@@ -851,7 +852,7 @@ NPC object coordinates remain separate lookup metadata and must not replace auth
 Firm next gates, in priority order:
 
 1. **IMPLEMENTED / IN-GAME CHECK PENDING:** the hash-verified staged message survives disable/re-enable, and the verified snapshot now feeds a read-only Nexus route-library view plus Nexus-namespaced compatibility-shaped IPC. Execution remains inactive. Validate 0.1.0.6's empty and non-empty UI/IPC paths in game.
-2. **REQUIRED:** exercise guarded rollback, re-import/reload, and a non-empty route fixture with a disabled override. Confirm the source remains unchanged and the Routes page/IPC expose every staged field without activating it.
+2. **PARTIALLY VERIFIED:** guarded rollback and re-import correctly update the Routes page. Add a non-empty route fixture with a disabled override and confirm the source remains unchanged and the Routes page/IPC expose every staged field without activating it.
 3. **PLANNED:** add an explicit activation/conflict gate, resource ownership, pause/stop/manual override, reload reconciliation, and rollback around the route module before any live route execution.
 4. **PLANNED:** generalize the transactional importer/store carefully and implement the remaining source importers one at a time, each with complete field inventory, golden fixtures, behavior/IPC parity, and rollback.
 5. **DEFERRED UNTIL SECURITY TESTS:** Communications/VieriLink importer only after same-account encrypted round-trip and secret redaction tests.
@@ -884,8 +885,8 @@ All of these remain planned; no standalone product may be retired until configur
 
 Do not execute these as part of recovery. The next normal development thread should:
 
-1. Have the user update to 0.1.0.6 and validate the Routes page's zero-route state, imported preference display, responsive wrapping, and verified-staging label.
-2. Exercise rollback, import again, repeat the reload check, and validate a non-empty route with a disabled override. Verify search/detail/point rendering and all four read-only navigation IPC calls. The current source/backup hash integrity is already confirmed without opening unrelated or protected VieriLink data.
+1. Have the user update to 0.1.0.7 and confirm every zero-route staged preference is visible, especially the final `Live navigation path` row.
+2. Validate a non-empty route with a disabled override. Verify search/detail/point rendering and all four read-only navigation IPC calls. Guarded rollback, re-import, reload recovery, and current source/backup hash integrity are already confirmed without opening unrelated or protected VieriLink data.
 3. Design the resource/activation conflict contract; do not add playback in the same unproven step.
 4. Implement activation only with explicit old/new conflict detection, atomic Navigation/Movement ownership, Stop, manual movement inhibition, provider-loss handling, reload reconciliation, audit explanation, and rollback.
 6. Continue Phase 0 inventory: freeze every predecessor command, IPC, config field, hotkey, public UI action, and replay-worthy incident. The current source lock is exact but not a complete compatibility matrix.
@@ -933,8 +934,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release:** `0.1.0.6`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.6</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current release being prepared:** `0.1.0.7`; the currently verified public release remains 0.1.0.6 until publication completes.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.7</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1037,7 +1038,7 @@ The exact archive naming convention, hosted path, and generation command must be
 
 ### 18.6 Version synchronization
 
-Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.6` in:
+Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.7` in:
 
 `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj`
 
@@ -1355,7 +1356,7 @@ This reduces dependence on model context and prevents project knowledge from bei
 - Compaction payload summaries were encrypted and not directly readable. However, the rollout retained user-visible messages, assistant conclusions, tool-visible results, repository references, and the durable architecture/status/policy documents. Private chain-of-thought was neither needed nor reconstructed.
 - The thread covered many FFXIV projects before VieriNexus. This recovery preserved Nexus-relevant requirements and the behaviors Nexus must absorb, but it did not attempt to turn every unrelated historical plugin conversation into Nexus implementation truth.
 - The three UI inspiration images and original architecture brief were still locally available and were inspected during recovery. Their exact intended pixel-level behavior was not specified; they are visual direction, not a binding layout.
-- At recovery there was no user reply confirming the 0.1.0.3 route import/rollback. The user later confirmed Dalamud installation/update, responsive text, a successful staging import of settings with zero personal routes, window reopen persistence, and a reload-only message loss. The scoped Nexus route/receipt/configuration files were then inspected to diagnose that report; they proved the staged data survived and that the current VieriNavPlotter source plus timestamped backup match the recorded SHA-256. No unrelated or protected VieriLink configuration was opened. Version 0.1.0.5 restores the staged message from the verified saved receipt, and the user confirmed that disable/re-enable recovery. Guarded rollback and a non-empty route fixture remain pending; 0.1.0.6 adds read-only inspection/IPC over the verified snapshot.
+- At recovery there was no user reply confirming the 0.1.0.3 route import/rollback. The user later confirmed Dalamud installation/update, responsive text, a successful staging import of settings with zero personal routes, window reopen persistence, and a reload-only message loss. The scoped Nexus route/receipt/configuration files were then inspected to diagnose that report; they proved the staged data survived and that the current VieriNavPlotter source plus timestamped backup match the recorded SHA-256. No unrelated or protected VieriLink configuration was opened. Version 0.1.0.5 restores the staged message from the verified saved receipt, and the user confirmed that disable/re-enable recovery. The user then confirmed guarded rollback/re-import and correct Routes-page state transitions on 0.1.0.6. A non-empty route fixture remains pending; 0.1.0.6 adds read-only inspection/IPC over the verified snapshot, and 0.1.0.7 corrects its last clipped settings row.
 - The transcript says 0.1.0.3 and its website/Dalamud/source/runtime/Discord release were successfully published and verified. The user subsequently supplied the authoritative custom Dalamud repository URL `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`. Although the low-level release details were not fully preserved in the recovery transcript, the 2026-09-08 foundation intake independently verified the website source paths, archive naming/generation, feed update/deployment mechanism, SHA-256 workflow, public validation, and safe Discord release-bot invocation from the real infrastructure; section 18.15 now records those durable facts.
 - The exact coexistence/deprecation duration for old plugins remains undecided.
 - SQLite is the architectural recommendation for durable orchestration state but was not explicitly approved or implemented.
