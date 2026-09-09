@@ -606,12 +606,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit before the 0.1.0.6 publication: `101058d Restore staged migration state after reload`.
-- The 0.1.0.6 read-only route-library implementation is pending its final source commit and publication at this documentation pass.
+- Current released implementation commit: `460e730 Add read-only staged route library`.
+- `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.6`, Dalamud API 15. The live feed remains 0.1.0.5 until the current release is published and verified.
+- Plugin project/live-feed version: `0.1.0.6`, Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -625,7 +625,7 @@ These are migration requirements, not current Nexus features:
 - `ecaa8c7` — added the transactional NavPlotter importer, backup/atomic store/receipt/rollback, UI card, migration state, and tests; 720 insertions across 14 files.
 - `54510ce` — released 0.1.0.4 with scale-aware Migration-card layout, untruncated button/status text, explicit zero-personal-route success wording, and a regression test.
 - `101058d` — released 0.1.0.5 with hash-verified staged-receipt recovery across plugin reloads and compare-before-swap world revision publication.
-- Pending 0.1.0.6 source commit — adds the verified read-only Routes page, pure route query behavior, and four Nexus-namespaced read-only navigation IPC calls without activation or legacy-name collisions.
+- `460e730` — released 0.1.0.6 with the verified read-only Routes page, pure route query behavior, and four Nexus-namespaced read-only navigation IPC calls without activation or legacy-name collisions.
 
 ### Last completed work
 
@@ -653,7 +653,7 @@ The current task then implemented and published `0.1.0.4`:
 
 The user's 0.1.0.4 reload test then proved that the configuration, staged route file, backups, and receipts survived disabling/re-enabling Nexus, but the green import message did not. The cause was service-local receipt state being initialized only during the import click. Version 0.1.0.5 now reloads the persisted receipt ID, verifies its source ID, target path, target hash, schema, and staged payload, and reconstructs the exact staged status without touching VieriNavPlotter. The same slice fixes `WorldStateStore.Publish(...)` so a rejected non-increasing revision never replaces `Current` or raises `Changed`. All 21 Nexus tests and the zero-warning full Release build pass. Source `101058d`; Daily Pilcrow release `a2bc367`; deployment `dpl_BnbzJgDxC1xQYp35B3tCqGKeffka`; live runtime/source archives and Discord workflow `34295565914` are verified.
 
-The user then confirmed 0.1.0.5 restores the exact staged message after disabling/re-enabling Nexus. Version 0.1.0.6 builds the first consumer of that recovered data: a dedicated read-only Routes page and versioned Nexus navigation IPC. Both consume only the verified staged snapshot. The empty-library view still exposes imported preferences; non-empty libraries add search, details, ordered points, and visible inactive execution controls. The IPC surface provides API version, staging status, list, and detail calls under `VieriNexus.Navigation.V1.*`; it deliberately does not claim `VieriNavPlotter.*`, resolve overrides, or run routes. All 23 Nexus tests and the zero-warning Release build pass before publication.
+The user then confirmed 0.1.0.5 restores the exact staged message after disabling/re-enabling Nexus. Version 0.1.0.6 builds the first consumer of that recovered data: a dedicated read-only Routes page and versioned Nexus navigation IPC. Both consume only the verified staged snapshot. The empty-library view still exposes imported preferences; non-empty libraries add search, details, ordered points, and visible inactive execution controls. The IPC surface provides API version, staging status, list, and detail calls under `VieriNexus.Navigation.V1.*`; it deliberately does not claim `VieriNavPlotter.*`, resolve overrides, or run routes. All 23 Nexus tests and the zero-warning Release build pass. Source commit `460e730`; Daily Pilcrow release commit `3be445d`; production deployment `dpl_2KVVzGiGwUAZQh7WGJp4WUL8LrDy`; live runtime/source archives and Discord workflow `34299175777` are verified.
 
 ### Current workstream
 
@@ -933,7 +933,7 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release being prepared:** `0.1.0.6` (public verification pending at this documentation pass).
+- **Current release:** `0.1.0.6`.
 - **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.6</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
@@ -1233,6 +1233,8 @@ Verification evidence for the existing 0.1.0.3 release: Daily Pilcrow commit `ec
 Verification evidence for 0.1.0.4: Nexus source commit `54510ce` and Daily Pilcrow release commit `684703f` are on their respective `main` branches. The focused local and live validators pass; the public runtime and source archives return HTTP 200, are valid ZIPs, and match local SHA-256 values `17C72FF131316DA719AABC152F6969CAC06A0BE88941E0217433633ED8E8032C` and `703DBDDFF38FB7B71854EBC6B105D2C41F6DAB2B846124816251731B7862043A`. The Vercel deployment check completed successfully, and GitHub Actions Discord run `34282262570` completed successfully for `684703f`. Dalamud installation/update, the responsive visual correction, zero-route import, window reopen, on-disk persistence, and source/backup hash integrity are user-confirmed. The reload-only message loss found in this version is corrected by 0.1.0.5; guarded rollback remains pending.
 
 Verification evidence for 0.1.0.5: Nexus source commit `101058d` and Daily Pilcrow release commit `a2bc367` are on their respective `main` branches. All 21 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, inventory guard, and production build pass. Vercel production deployment `dpl_BnbzJgDxC1xQYp35B3tCqGKeffka` is Ready. The focused live validator confirms HTTP 200, valid ZIPs, and exact runtime/source SHA-256 matches `A172881796EF06D272268E3E1E0DAC2E61F585F309FC002DE851D1C86F9D2A23` / `10351C1E2EC08995D72B3A83FCE23C3E7A075ED3EAB469EAD1FE72EE8B055787`. GitHub Actions Discord run `34295565914` completed successfully. The user confirmed corrected disable/re-enable recovery; guarded rollback remains unverified.
+
+Verification evidence for 0.1.0.6: Nexus source commit `460e730` and Daily Pilcrow release commit `3be445d` are on their respective `main` branches. All 23 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel production deployment `dpl_2KVVzGiGwUAZQh7WGJp4WUL8LrDy` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.6 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `0E35214FB5E42EABF3CA509CF1FC3B4C1A3067B0AB97D92AC1F49452697FA377` / `C4E0374DA7738BFC3434BE4E63808A5422D8FFFCF6D339008AC93CA3CD5F67AA`. GitHub Actions Discord run `34299175777` completed successfully. Dalamud update and the zero/non-empty Routes-page/IPC behaviors remain user-side verification.
 
 ### 18.16 Release report format
 
