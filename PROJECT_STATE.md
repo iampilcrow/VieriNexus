@@ -2,7 +2,7 @@
 
 Recovery snapshot: 2026-09-08 (America/New_York)  
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.11` release candidate
+Current product version: `0.1.0.11`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -631,12 +631,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `685dca5 Add manual movement safety interlock`.
+- Current released implementation commit: `3900673 Add reload-safe navigation watchdog`.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project release-candidate version: `0.1.0.11`, Dalamud API 15. The live feed remains 0.1.0.10 until publication completes.
+- Plugin project/live-feed version: `0.1.0.11`, Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -655,7 +655,7 @@ These are migration requirements, not current Nexus features:
 - `7df701c` — released 0.1.0.8 with a fail-closed activation/conflict policy, runtime source/lease/dependency assessment, visible safety blockers, activation-status IPC, and contract serialization tests without enabling execution.
 - `e99faaf` — released 0.1.0.9 with idempotent verified Stop coordination, separate vnavmesh inactive-path confirmation, lease retention for every unconfirmed outcome, and removal of the duplicate source-owner line without enabling execution.
 - `685dca5` — released 0.1.0.10 with configured-action manual-movement observation, start inhibition, quiet-period handling, verified Stop takeover, and explicit-resume latching without enabling execution.
-- Current 0.1.0.11 candidate — adds a minimal atomic execution-intent journal, no-replay reload/shutdown reconciliation, exactly-once lease-expiry observation, and an every-draw Navigation/Movement watchdog without enabling execution.
+- `3900673` — released 0.1.0.11 with a minimal atomic execution-intent journal, no-replay reload/shutdown reconciliation, exactly-once lease-expiry observation, and an every-draw Navigation/Movement watchdog without enabling execution.
 
 ### Last completed work
 
@@ -693,7 +693,7 @@ The user confirmed the live 0.1.0.8 Activation Safety panel correctly detects lo
 
 The user confirmed the live 0.1.0.9 panel shows Verified Stop connected, removes the Stop blocker and duplicate source-owner sentence, keeps all four staged settings visible, and still blocks manual movement/reload/approval. Version 0.1.0.10 implements the manual-movement foundation against FFXIV's configured movement actions. Player input blocks new starts through the quiet period; a takeover during tracked navigation latches verified Stop and cannot auto-resume. Turning the character protection setting off during tracked navigation also stops and blocks. All 43 tests and the zero-warning Release build pass; execution remains unavailable. Source commit `685dca5`; Daily Pilcrow release commit `b872861`; production deployment `dpl_ACdJrq7HN6ENtipicZungpjSE66n`; live runtime/source archives and Discord workflow `34306054991` are verified.
 
-The user confirmed the live 0.1.0.10 panel shows both Verified Stop and Manual movement yielding connected, removes the manual blocker, leaves only reload reconciliation and explicit approval, preserves the complete staged-settings view, and remains staging-only under VieriNavPlotter ownership. Version 0.1.0.11 implements reload/no-replay and active-watchdog readiness without an executor. The atomic journal stores only execution, route, lease, state, and timestamp; startup, shutdown, and missed heartbeat paths can only Stop and require acknowledgement. All 59 tests and the zero-warning Release build pass before packaging.
+The user confirmed the live 0.1.0.10 panel shows both Verified Stop and Manual movement yielding connected, removes the manual blocker, leaves only reload reconciliation and explicit approval, preserves the complete staged-settings view, and remains staging-only under VieriNavPlotter ownership. Version 0.1.0.11 implements reload/no-replay and active-watchdog readiness without an executor. The atomic journal stores only execution, route, lease, state, and timestamp; startup, shutdown, and missed heartbeat paths can only Stop and require acknowledgement. All 59 tests and the zero-warning Release build pass. Source commit `3900673`; Daily Pilcrow release commit `12ba98a`; production deployment `dpl_E3gfwt2hYyXP9iRvgFkhR7K1EgQm`; live runtime/source archives and Discord workflow `34308239307` are verified.
 
 ### Current workstream
 
@@ -974,8 +974,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release:** `0.1.0.10`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains release candidate `<Version>0.1.0.11</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current release:** `0.1.0.11`.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.11</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1284,6 +1284,8 @@ Verification evidence for 0.1.0.8: Nexus source commit `7df701c` and Daily Pilcr
 Verification evidence for 0.1.0.9: Nexus source commit `e99faaf` and Daily Pilcrow release commit `8f08016` are on their respective `main` branches. All 35 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_5GqCHKMNSyqhmEKm3LurT5c7ZaRd` is Ready. Daily Pilcrow documentation commit `45bd900` is also pushed and its final production deployment `dpl_BkF9GrDZmX7bpowaXMAUo5am2WmL` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.9 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `D6D39E25AF72B991942ECCC47DB7CB374E10407196650E9ABE095102BFF8D85D` / `5F7F49720D16536FEEF48ED64DCCB6E436C9FCA02C0A4DDE7EFC0B4CB3EFE0A7`. GitHub Actions Discord run `34303920092` completed successfully. Dalamud discovery/update and the revised Activation Safety display remain user-side in-game verification.
 
 Verification evidence for 0.1.0.10: Nexus source commit `685dca5` and Daily Pilcrow release commit `b872861` are on their respective `main` branches. All 43 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_ACdJrq7HN6ENtipicZungpjSE66n` is Ready. Daily Pilcrow documentation commit `e18585f` is also pushed and its final production deployment `dpl_2EYChq79JPvJCu9GxWQQ1VFMPUz3` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.10 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `684064BB745695E9BED759D2752CC8BC109B3ECF6DC3CB94BC5CBE74A092F377` / `80733CDDE32DAFD877A4B5DD4645FA639795B839E49F65E517B8B7947C72F6F8`. GitHub Actions Discord run `34306054991` completed successfully. Dalamud discovery/update and the manual-yield readiness display remain user-side in-game verification.
+
+Verification evidence for 0.1.0.11: Nexus source commit `3900673` and Daily Pilcrow release commit `12ba98a` are on their respective `main` branches. All 59 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_E3gfwt2hYyXP9iRvgFkhR7K1EgQm` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.11 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `9679B9E2EB70FB6EFE83FF4D9103F295EDA0E4DDF1B32A81EF88924E868943E4` / `A409323DE691B83CE2137BC9EA5970A3CBCEEF709F64C87B0736C5FBA4FF8496`. GitHub Actions Discord run `34308239307` completed successfully. Dalamud update and the reload/watchdog readiness display remain user-side in-game verification.
 
 ### 18.16 Release report format
 
