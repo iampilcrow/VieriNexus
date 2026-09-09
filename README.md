@@ -24,6 +24,8 @@ Reload reconciliation and active lease enforcement are now connected behind the 
 
 The explicit navigation-authority handoff is now available as a reversible, session-only decision. Nexus will not disable or enable VieriNavPlotter: the user must unload it manually before approval becomes available. Approval atomically probes the complete Navigation/Movement resource bundle but starts nothing. Any future route start must re-check the source and every safety prerequisite, atomically acquire the bundle, persist no-replay intent, and register verified Stop before a provider may be called. If the source reappears or safety is lost, Nexus revokes authority and stops tracked work. Returning to staging changes no source plugin, and reload never remembers approval.
 
+The Routes page now includes live provider-health and transition-audit panels for vnavmesh Stop, manual movement, reload/watchdog state, predecessor ownership, the atomic resource bundle, and Nexus authority. These observations also populate the shared world snapshot instead of leaving provider health empty. A user-triggered non-moving simulation runs the production safety coordinators against isolated memory-only leases, journals, and a Stop-only provider. It checks guarded start/Stop, manual takeover, reload recovery, source return, and lease expiry without touching live ownership, the live journal, or any movement provider.
+
 ## Current safety guarantees
 
 - Existing Vieri configurations are discovered read-only and left in place.
@@ -37,6 +39,8 @@ The explicit navigation-authority handoff is now available as a reversible, sess
 - Reload recovery never replays a saved movement instruction; it stops first and requires explicit acknowledgement.
 - Expired ownership leases are reported to the active watchdog and trigger the same fail-closed Stop path instead of disappearing silently.
 - Navigation-authority approval is session-only, starts no route, can be returned to staging, and is revoked if the predecessor or another owner conflicts.
+- Provider health is observed read-only and its bounded session audit records transitions rather than every frame.
+- The non-moving safety simulation uses isolated memory-only state and has no movement operation.
 - No migration-source plugin is disabled automatically.
 - No gameplay automation is started by the foundation build.
 - The Nexus window waits until a targetable character is fully in the world.

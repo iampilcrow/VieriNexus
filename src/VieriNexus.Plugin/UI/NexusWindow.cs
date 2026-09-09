@@ -32,6 +32,7 @@ internal sealed class NexusWindow : Window
     private readonly LegacyConfigurationInventory legacyInventory;
     private readonly NavigationMigrationService navigationMigration;
     private readonly NavigationActivationService navigationActivation;
+    private readonly NavigationDiagnosticsService navigationDiagnostics;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
@@ -44,6 +45,7 @@ internal sealed class NexusWindow : Window
         LegacyConfigurationInventory legacyInventory,
         NavigationMigrationService navigationMigration,
         NavigationActivationService navigationActivation,
+        NavigationDiagnosticsService navigationDiagnostics,
         ModuleRegistry modules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
@@ -54,6 +56,7 @@ internal sealed class NexusWindow : Window
         this.legacyInventory = legacyInventory;
         this.navigationMigration = navigationMigration;
         this.navigationActivation = navigationActivation;
+        this.navigationDiagnostics = navigationDiagnostics;
         this.modules = modules;
         this.world = world;
         this.logo = logo;
@@ -361,6 +364,7 @@ internal sealed class NexusWindow : Window
             }
             EndPanel();
             DrawNavigationActivationSafety();
+            DrawNavigationDiagnostics();
             return;
         }
 
@@ -390,6 +394,7 @@ internal sealed class NexusWindow : Window
             EndPanel();
             DrawStagedNavigationSettings(snapshot);
             DrawNavigationActivationSafety();
+            DrawNavigationDiagnostics();
             return;
         }
 
@@ -443,6 +448,7 @@ internal sealed class NexusWindow : Window
         ImGui.Spacing();
         DrawStagedNavigationSettings(snapshot);
         DrawNavigationActivationSafety();
+        DrawNavigationDiagnostics();
     }
 
     private static void DrawRouteDetails(NavigationRouteSnapshot? route)
@@ -582,6 +588,83 @@ internal sealed class NexusWindow : Window
                 ImGui.SetTooltip(authority.CanApprove
                     ? "Activates Nexus navigation authority for this session without starting movement."
                     : authority.Message);
+        }
+        EndPanel();
+    }
+
+    private void DrawNavigationDiagnostics()
+    {
+        NavigationDiagnosticsSnapshot diagnostics = navigationDiagnostics.Current;
+        float providerHeight = MathF.Ceiling(
+            (ImGui.GetTextLineHeightWithSpacing() * (diagnostics.Providers.Count + 6f)) +
+            (ImGui.GetStyle().WindowPadding.Y * 2f) + 18f);
+        BeginPanel("PROVIDER HEALTH", providerHeight);
+        TextWrapped(NexusTheme.Muted,
+            "Live, read-only observations used by the navigation safety gate. Audit entries are added only when state changes.");
+        foreach (NavigationProviderDiagnostic provider in diagnostics.Providers)
+        {
+            Vector4 color = provider.State switch
+            {
+                NavigationDiagnosticState.Healthy => NexusTheme.Green,
+                NavigationDiagnosticState.Attention => NexusTheme.Amber,
+                _ => NexusTheme.Red,
+            };
+            string version = string.IsNullOrWhiteSpace(provider.Version) ? string.Empty : $" • {provider.Version}";
+            string state = provider.State switch
+            {
+                NavigationDiagnosticState.Healthy => "Ready",
+                NavigationDiagnosticState.Attention => "Review",
+                _ => "Blocked",
+            };
+            NexusTheme.StatusDot(color, $"{provider.DisplayName}: {state}{version}");
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(provider.Detail);
+        }
+
+        ImGui.Spacing();
+        if (ImGui.Button("Run isolated non-moving safety simulation", new Vector2(-1, 0)))
+            navigationDiagnostics.RunSimulation();
+        TextWrapped(NexusTheme.Muted,
+            "Uses isolated memory-only state. It cannot move the character, call live movement, change live ownership, or modify the live safety journal.");
+        EndPanel();
+
+        NavigationSimulationReport? simulation = navigationDiagnostics.LastSimulation;
+        NavigationAuditEntry[] transitions = diagnostics.RecentTransitions.Take(6).ToArray();
+        int simulationLines = simulation is null ? 0 : (simulation.Scenarios.Count * 2) + 2;
+        float auditHeight = MathF.Ceiling(
+            (ImGui.GetTextLineHeightWithSpacing() * (transitions.Length + simulationLines + 4f)) +
+            (ImGui.GetStyle().WindowPadding.Y * 2f) + 16f);
+        BeginPanel("SAFETY AUDIT", auditHeight);
+        if (transitions.Length == 0)
+        {
+            TextWrapped(NexusTheme.Muted, "No provider or safety transitions have been observed this session.");
+        }
+        else
+        {
+            foreach (NavigationAuditEntry entry in transitions)
+            {
+                Vector4 color = entry.State switch
+                {
+                    NavigationDiagnosticState.Healthy => NexusTheme.Green,
+                    NavigationDiagnosticState.Attention => NexusTheme.Amber,
+                    _ => NexusTheme.Red,
+                };
+                TextWrapped(color,
+                    $"{entry.ObservedAtUtc.ToLocalTime():T} • {entry.DisplayName}: {entry.Code}");
+            }
+        }
+
+        if (simulation is not null)
+        {
+            ImGui.Spacing();
+            NexusTheme.SectionTitle(simulation.Passed
+                ? $"Simulation passed {simulation.PassedCount}/{simulation.Scenarios.Count}"
+                : $"Simulation needs attention {simulation.PassedCount}/{simulation.Scenarios.Count}");
+            foreach (NavigationSimulationScenario scenario in simulation.Scenarios)
+            {
+                TextWrapped(scenario.Passed ? NexusTheme.Green : NexusTheme.Red,
+                    $"{(scenario.Passed ? "✓" : "!")} {scenario.Name}: {scenario.Detail}");
+            }
         }
         EndPanel();
     }

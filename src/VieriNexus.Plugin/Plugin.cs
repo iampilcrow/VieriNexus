@@ -36,6 +36,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ManualMovementSafetyService manualMovementSafety;
     private readonly NavigationExecutionSafetyCoordinator navigationExecutionSafety;
     private readonly NavigationAuthorityCoordinator navigationAuthority;
+    private readonly NavigationDiagnosticsService navigationDiagnostics;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -95,11 +96,27 @@ public sealed class Plugin : IDalamudPlugin
             manualMovementSafety,
             navigationExecutionSafety,
             navigationAuthority);
-        worldObserver = new WorldSnapshotObserver(ClientState, PlayerState, ObjectTable, Condition, worldStore);
+        navigationDiagnostics = new NavigationDiagnosticsService(
+            dependencyService,
+            resourceLeases,
+            navigationStop,
+            manualMovementSafety,
+            navigationExecutionSafety,
+            navigationAuthority,
+            new NavigationDiagnosticsMonitor(),
+            new NavigationSafetySimulator());
+        navigationDiagnostics.Update(DateTimeOffset.UtcNow);
+        worldObserver = new WorldSnapshotObserver(
+            ClientState,
+            PlayerState,
+            ObjectTable,
+            Condition,
+            worldStore,
+            navigationDiagnostics.ProviderHealth);
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
-        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, navigationActivation, moduleRegistry, worldStore, logo);
+        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, navigationActivation, navigationDiagnostics, moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 
         ipc = new NexusIpcProvider(PluginInterface, dependencyService, navigationMigration, navigationActivation, worldStore);
@@ -140,6 +157,7 @@ public sealed class Plugin : IDalamudPlugin
         navigationExecutionSafety.Update(DateTimeOffset.UtcNow);
         manualMovementSafety.Update(now);
         navigationAuthority.Update();
+        navigationDiagnostics.Update(DateTimeOffset.UtcNow);
 
         if (!ClientState.IsLoggedIn)
         {

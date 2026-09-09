@@ -3,7 +3,7 @@
   "Name": "VieriNexus",
   "InternalName": "VieriNexus",
   "Punchline": "Safe migration foundation for the unified Vieri experience.",
-  "Description": "An early testing build of the unified, modular Vieri suite. It provides verified route staging, Stop/manual/reload safety, and a reversible session-only navigation ownership approval without disabling existing Vieri plugins or enabling playback.",
+  "Description": "An early testing build of the unified, modular Vieri suite. It provides verified route staging, guarded session-only navigation ownership, live provider/safety diagnostics, and an isolated non-moving safety simulation without disabling existing Vieri plugins or enabling playback.",
   "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,

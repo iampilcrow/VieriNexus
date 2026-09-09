@@ -10,7 +10,8 @@ internal sealed class WorldSnapshotObserver(
     IPlayerState playerState,
     IObjectTable objectTable,
     ICondition condition,
-    WorldStateStore store)
+    WorldStateStore store,
+    Func<IReadOnlyDictionary<ProviderId, ProviderHealthSnapshot>> observeProviders)
 {
     private long revision;
     private long nextUpdate;
@@ -42,6 +43,6 @@ internal sealed class WorldSnapshotObserver(
                 player is { IsTargetable: true },
                 clientState.TerritoryType),
             character,
-            new Dictionary<ProviderId, ProviderHealthSnapshot>()));
+            observeProviders()));
     }
 }
