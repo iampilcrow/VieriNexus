@@ -59,7 +59,7 @@ public static class NavigationRoutePlanner
                 ? kind == NavigationRoutePlanKind.TravelToStart
                     ? $"Ready to travel to the first point of {route.Name}."
                     : $"Ready to play all {points.Count} points of {route.Name} in order."
-                : $"This local route requires territory {route.TerritoryId}; cross-zone dispatch is not enabled yet.";
+                : $"This route requires territory {route.TerritoryId}; cross-zone execution needs the suite travel provider.";
 
         return new(kind, route.Id, route.Name, route.TerritoryId, points,
             route.UseMesh, route.UseFlight, route.Tolerance, route.LastPointTolerance,

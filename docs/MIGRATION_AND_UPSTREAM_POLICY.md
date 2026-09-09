@@ -46,6 +46,8 @@ For every upstream update:
 
 Questionable quest/path data should remain isolated from the Nexus orchestration core so routine upstream data updates do not destabilize combat, communications, the HUD, or market modules.
 
+Stock Questionable, Boss Mod, vnavmesh, Lifestream, and comparable providers should be consumed only through narrow capability/version adapters. Compatible provider updates must require no Nexus source change. VieriCodex remains authoritative until Nexus owns its planners, policies, safety fixes, custom-route overlay, and UI; only then may stock Questionable become the ordinary quest executor and the full fork be retired. Missing or changed capabilities fail closed and never trigger an automatic fallback that could duplicate active work.
+
 ## Rollback
 
 Each migrated module keeps the pre-import backup and migration receipt. Rollback restores Nexus-owned settings from that receipt without deleting or rewriting the predecessor configuration. Discord keys, channel IDs, message IDs, and per-character settings are verified before the standalone source is retired.

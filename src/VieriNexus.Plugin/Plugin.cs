@@ -21,6 +21,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
+    [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
@@ -110,20 +111,30 @@ public sealed class Plugin : IDalamudPlugin
             navigationExecutionSafety,
             navigationAuthority);
         var navigationPreview = new NavigationRoutePreviewService(ClientState, GameGui);
+        var navigationLivePath = new NavigationLivePathService(ObjectTable, GameGui, navigationStopProvider);
         var navigationRecording = new NavigationRouteRecordingService(
             navigationLibrary,
             new NavigationRouteRecordingCoordinator());
+        Func<bool> routeExecutionAllowed = () =>
+            manualMovementSafety.Current.CanStartExecution &&
+            worldStore.Current.Character.Value is { Key.IsKnown: true } character &&
+            Configuration.ForCharacter(character.Key.ToString()).AllowAutomation;
         var navigationExecution = new NavigationRouteExecutionCoordinator(
             navigationAuthority,
             navigationExecutionSafety,
             navigationStopProvider,
-            () => manualMovementSafety.Current.CanStartExecution &&
-                  worldStore.Current.Character.Value is { Key.IsKnown: true } character &&
-                  Configuration.ForCharacter(character.Key.ToString()).AllowAutomation,
+            routeExecutionAllowed,
             () => ClientState.TerritoryType);
+        var suiteTravelProvider = new AutoDutyRouteTravelProvider(PluginInterface, dependencyService);
+        var suiteTravel = new NavigationSuiteTravelCoordinator(
+            suiteTravelProvider,
+            () => navigationAuthority.Status.IsActive,
+            routeExecutionAllowed);
         navigationRuntime = new NavigationRouteRuntimeService(
             navigationExecution,
+            suiteTravel,
             navigationPreview,
+            navigationLivePath,
             navigationRecording,
             navigationLibrary);
         navigationDiagnostics = new NavigationDiagnosticsService(
@@ -168,7 +179,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
-        navigationRuntime.StopRecording("Recording stopped because Nexus is unloading.");
+        navigationRuntime.Shutdown();
         navigationAuthority.ReturnToStaging(DateTimeOffset.UtcNow);
         navigationExecutionSafety.Shutdown(DateTimeOffset.UtcNow);
         PluginInterface.UiBuilder.Draw -= Draw;

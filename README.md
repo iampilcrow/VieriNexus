@@ -16,13 +16,15 @@ The Routes page keeps that verified staging snapshot immutable and can explicitl
 
 Timed recording is observation-only: it neither requires nor acquires navigation authority and cannot move the character. It avoids duplicating an already-nearby final point, persists each accepted capture atomically, refreshes an active preview, and stops if the route disappears, the character becomes unavailable, the territory changes, the plugin unloads, or the character logs out. Route JSON imports accept both the versioned Nexus shape and the compatible legacy VieriNavPlotter shape, regenerate identity, bound untrusted data, and always disable automation assignment pending review.
 
-The route library also exposes all 27 verified VieriAutoDuty gear-vendor standing-point templates as immutable references. Adding a template creates an independent editable personal copy with its automation override disabled. The user may explicitly enable one route for an exact territory/vendor pair; Nexus disables any competing route for that same pair atomically, and a read-only Nexus IPC resolver fails closed on absent, invalid, or ambiguous assignments. No gear-shopping consumer is dispatched by this resolver yet.
+The route library also exposes all 27 verified VieriAutoDuty gear-vendor standing-point templates as immutable references. Adding a template creates an independent editable personal copy with its automation override disabled. The user may bind the current target and explicitly enable one route for an exact territory/vendor pair; Nexus disables any competing route for that same pair atomically. While Nexus owns navigation, VieriAutoDuty 1.0.0.438 prefers the versioned Nexus resolver, falls back to VieriNavPlotter during transition, and finally retains its built-in safe route. Absent, inactive, invalid, mismatched, empty, oversized, or ambiguous Nexus assignments fail closed.
 
 Recording interval, minimum point spacing, and preview preferences are rendered above the route-library/editor split whenever a working library exists. The route list and editor grow naturally with their content and use the Routes page's single outer scrollbar, avoiding nested-scroll discovery and clipping at supported window sizes and interface scales. Clear-points and delete-route actions open confirmation dialogs in the same UI scope as their buttons before changing the working library.
 
 The activation-safety assessment makes the coexistence boundary explicit. It detects the installed/loaded source owner, working-library readiness, required-provider readiness, Navigation/Movement lease conflicts, and the mandatory Stop, manual-override, reload-reconciliation, and explicit-approval gates. VieriNavPlotter must be unloaded manually before Nexus authority can be approved; approval starts no route automatically.
 
-The provider-neutral route executor acquires Navigation and Movement atomically, journals no-replay intent, and registers verified Stop before invoking vnavmesh. It heartbeats ownership throughout same-zone travel/playback. Natural completion releases ownership only after an independent inactive observation and sends no global Stop. If another plugin replaces the vnavmesh destination, Nexus marks its intent superseded and releases only its own lease—never stopping the replacement plugin's movement.
+The provider-neutral route executor acquires Navigation and Movement atomically, journals no-replay intent, and registers verified Stop before invoking vnavmesh. It heartbeats ownership throughout same-zone travel/playback. Cross-zone actions use a capability-checked VieriAutoDuty suite-travel adapter so teleport, Aethernet, flight, authored points, interaction arrival, and stall recovery remain under one provider. Nexus tracks and stops only suite travel it explicitly dispatched. Natural completion releases ownership only after an independent inactive observation and sends no global Stop. If another plugin replaces the vnavmesh destination, Nexus marks its intent superseded and releases only its own lease—never stopping the replacement plugin's movement.
+
+Live generated vnavmesh waypoints can now be shown separately from the saved route preview. The ownership filter draws them only during local Nexus execution or suite travel explicitly dispatched by the current Nexus process; ordinary AutoDuty, duty, Questionable, and unrelated vnavmesh movement remains hidden.
 
 Manual-movement yielding observes FFXIV's configured movement actions, covering remapped keyboard controls, mouse steering, gamepad movement, jump, and autorun. Physical player input blocks a new movement start; during tracked execution, takeover latches verified Stop and cannot silently auto-resume after input ends. The character setting must remain enabled for navigation readiness.
 
@@ -48,7 +50,7 @@ If execution is stopped by manual takeover, explicit Stop, reload recovery, sour
 - Reload recovery never replays a saved movement instruction; it stops first and requires explicit acknowledgement.
 - Expired ownership leases are reported to the active watchdog and trigger the same fail-closed Stop path instead of disappearing silently.
 - Navigation-authority approval is session-only, starts no route automatically, can be returned to staging, and is revoked if the predecessor or another owner conflicts.
-- Same-zone route travel/playback must enter through the guarded executor; cross-zone dispatch remains disabled.
+- Same-zone route travel/playback enters through the guarded executor; cross-zone actions use the capability-checked suite travel provider and never adopt unrelated provider work.
 - A replacement shared-provider path causes Nexus to yield its own lease without sending Stop to the new owner.
 - Provider health is observed read-only and its bounded session audit records transitions rather than every frame.
 - The non-moving safety simulation uses isolated memory-only state and has no movement operation.
@@ -57,7 +59,7 @@ If execution is stopped by manual takeover, explicit Stop, reload recovery, sour
 - Nexus starts route movement only from an explicit Routes-page or `/nexus play <name>` action after working-library and authority approval.
 - The Nexus window waits until a targetable character is fully in the world.
 - The supplied VieriNexus logo is the permanent Home experience, not a temporary popup window.
-- Questionable is not a runtime dependency. Its maintained quest engine and route data are incorporated through VieriCodex and will migrate into Nexus.
+- During migration VieriCodex remains authoritative and stock Questionable must not run beside it. The approved target architecture moves Vieri-specific planning, policy, safety, custom-route, and UI behavior into Nexus, then uses stock Questionable through a narrow versioned provider adapter for ordinary supported quest execution.
 
 The complete required/recommended provider inventory and its current-product evidence are recorded in [`docs/DEPENDENCY_AUDIT.md`](docs/DEPENDENCY_AUDIT.md).
 

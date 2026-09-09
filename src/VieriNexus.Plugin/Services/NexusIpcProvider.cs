@@ -122,6 +122,15 @@ internal sealed class NexusIpcProvider : IDisposable
 
     private string ResolveGearVendorOverride(uint territoryId, uint targetDataId)
     {
+        NavigationActivationAssessment activation = navigationActivation.Assess();
+        if (activation.State != NavigationActivationState.Active)
+        {
+            return NavigationContractJson.SerializeRouteResolution(new NavigationRouteResolutionDto(
+                false,
+                "navigation-not-authoritative",
+                "Nexus route overrides are unavailable until Nexus owns navigation for this session.",
+                null));
+        }
         NavigationRouteOverrideResolution result = NavigationRouteOverrideResolver.ResolveGearVendor(
             navigation.Current, territoryId, targetDataId);
         return NavigationContractJson.SerializeRouteResolution(new NavigationRouteResolutionDto(
@@ -151,11 +160,12 @@ internal sealed class NexusIpcProvider : IDisposable
     private NavigationActivationStatusDto GetNavigationActivationStatus()
     {
         NavigationActivationAssessment assessment = navigationActivation.Assess();
+        bool executionEnabled = assessment.State == NavigationActivationState.Active;
         return new NavigationActivationStatusDto(
             NexusIpc.CurrentVersion,
             assessment.State.ToString(),
             assessment.CanActivate,
-            false,
+            executionEnabled,
             assessment.IsSourcePluginInstalled,
             assessment.IsSourcePluginLoaded,
             assessment.IsSourcePluginAuthoritative,

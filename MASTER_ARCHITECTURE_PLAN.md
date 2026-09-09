@@ -50,7 +50,7 @@ An all-at-once merge is rejected. It would combine several mature state machines
 
 ### Nexus does not own
 
-- Reimplementing BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, or Allagan Market. VieriCodex's maintained Questionable-derived quest engine and routes migrate into Nexus rather than remaining a separate runtime dependency.
+- Reimplementing Questionable, BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, or Allagan Market. VieriCodex remains authoritative during migration; its Vieri-specific planners, policies, safety fixes, custom-route overlay, and UI migrate into Nexus, while stock Questionable becomes the replaceable provider for ordinary supported quest execution after capability/parity validation.
 - Per-frame combat decisions. Those remain inside the embedded Wrath engine.
 - General ownership of third-party dependencies or their update channels.
 - Arbitrary remote control without an explicit allowlist and local safety checks.
@@ -560,7 +560,7 @@ Faulted
 
 The Dependencies page offers explicit install/open/update actions. Nexus must never silently install, enable, disable, or update another plugin.
 
-BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, and Allagan Market are the core external providers. Recommended integrations are listed separately and include AutoRetainer, Glamour Log, Anti-AFK, Pandora's Box, Gearsetter, Stylist, Fast Job Switcher, CBT, Artisan, AutoHook, Mogmail, NotificationMaster, SelectString, QuestMap, YesAlready, and Skippy. VieriCodex's Questionable-derived quest engine is incorporated code and is not a runtime dependency.
+BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, and Allagan Market are the initial core external providers. Stock Questionable joins that provider model for ordinary supported quest execution only after the Vieri-specific Progression layer has migrated and its capability/version/fallback contract passes parity. Recommended integrations are listed separately and include AutoRetainer, Glamour Log, Anti-AFK, Pandora's Box, Gearsetter, Stylist, Fast Job Switcher, CBT, Artisan, AutoHook, Mogmail, NotificationMaster, SelectString, QuestMap, YesAlready, and Skippy.
 
 ## 15. Unified UI
 
@@ -668,7 +668,7 @@ Record sanitized world snapshots and domain events from known incidents. Replay 
 
 VieriNexus has one public version, one Dalamud manifest, one update channel, one changelog, and one source archive. Internal module and upstream-source versions are recorded in build metadata and the diagnostics page.
 
-Pin third-party source snapshots used by embedded systems. Maintain licenses, notices, patches, and upstream commit references. A repeatable update workflow should diff upstream Questionable/Wrath/AutoDuty changes, run contract/replay tests, and produce a reviewable integration report before release.
+Pin third-party source snapshots used by embedded systems. Maintain licenses, notices, patches, and upstream commit references. Prefer capability-versioned external providers so routine Questionable, Boss Mod, vnavmesh, Lifestream, and similar updates require no Nexus changes while their public contracts remain compatible. Embedded/custom overlays still require focused diff, contract, replay, configuration, and package validation.
 
 Builds must be reproducible from a clean checkout. Publishing is blocked if migrations, package validation, IPC compatibility, or critical replay tests fail.
 

@@ -3,7 +3,7 @@
   "Name": "VieriNexus",
   "InternalName": "VieriNexus",
   "Punchline": "Record, refine, preview, and safely play Nexus-owned routes.",
-  "Description": "The unified, modular Vieri suite in active development. Routes & Navigation provides timed/manual authoring, detailed point editing, safe clipboard exchange, 27 verified gear-vendor templates, explicit one-route-per-target overrides, persistent world preview, guarded same-zone travel/playback, verified Stop, manual takeover, reload recovery, and cross-plugin path yielding. VieriNavPlotter must be unloaded manually before Nexus movement can be approved.",
+  "Description": "The unified, modular Vieri suite in active development. Routes & Navigation provides timed/manual authoring, target binding, detailed point editing, safe clipboard exchange, 27 verified gear-vendor templates, explicit one-route-per-target overrides, static and provider-filtered live previews, guarded local playback, cross-zone suite travel, verified Stop, manual takeover, reload recovery, and cross-plugin path yielding. VieriNavPlotter must be unloaded manually before Nexus movement can be approved.",
   "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,

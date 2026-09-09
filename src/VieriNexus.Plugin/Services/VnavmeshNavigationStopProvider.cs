@@ -60,4 +60,23 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
         Vector3 expected = new(expectedDestination.X, expectedDestination.Y, expectedDestination.Z);
         return Vector3.Distance(points[^1], expected) <= 1.5f;
     }
+
+    internal IReadOnlyList<NavigationRoutePoint> GetActiveWaypoints()
+    {
+        if (!IsAvailable)
+            return [];
+        try
+        {
+            if (!isRunning.InvokeFunc())
+                return [];
+            return listWaypoints.InvokeFunc()
+                .Where(point => float.IsFinite(point.X) && float.IsFinite(point.Y) && float.IsFinite(point.Z))
+                .Select(point => new NavigationRoutePoint(point.X, point.Y, point.Z))
+                .ToArray();
+        }
+        catch
+        {
+            return [];
+        }
+    }
 }

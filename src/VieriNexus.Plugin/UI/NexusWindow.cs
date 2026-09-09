@@ -566,6 +566,33 @@ internal sealed class NexusWindow : Window
             }
             string binding = route.BindingKind == 1 ? "Gear vendor" : "None";
             ImGui.TextUnformatted($"Binding: {binding}");
+            if (navigationLibrary.HasWorkingLibrary)
+            {
+                int bindingKind = route.BindingKind;
+                ImGui.SetNextItemWidth(180);
+                if (ImGui.Combo("Use this route for", ref bindingKind, "No override\0Gear vendor\0"))
+                    routeOperationMessage = navigationLibrary.SetBinding(route.Id, bindingKind).Message;
+                if (bindingKind == 1)
+                {
+                    if (ImGui.Button("Bind current target"))
+                    {
+                        if (Plugin.TargetManager.Target is not { } target)
+                        {
+                            routeOperationMessage = "Target the vendor or object first.";
+                        }
+                        else
+                        {
+                            routeOperationMessage = navigationLibrary.BindCurrentTarget(
+                                route.Id,
+                                Plugin.ClientState.TerritoryType,
+                                target.BaseId,
+                                target.Name.ToString()).Message;
+                        }
+                    }
+                    TextWrapped(NexusTheme.Muted,
+                        "Capturing a target never enables its override; approval remains a separate action.");
+                }
+            }
             if (route.TargetDataId != 0 || !string.IsNullOrWhiteSpace(route.TargetLabel))
                 ImGui.TextUnformatted($"Target: {route.TargetLabel} ({route.TargetDataId})");
             if (navigationLibrary.HasWorkingLibrary && route.BindingKind == 1 && route.TargetDataId != 0)
@@ -622,18 +649,24 @@ internal sealed class NexusWindow : Window
                               navigationActivation.AuthorityStatus.IsActive &&
                               !navigationRuntime.Status.IsActive &&
                               !navigationRuntime.RecordingStatus.IsRecording;
-            if (!canExecute || !travelPlan.IsExecutable)
+            bool travelAvailable = travelPlan.IsExecutable ||
+                                   (travelPlan.IsValid && route.TerritoryId != Plugin.ClientState.TerritoryType &&
+                                    navigationRuntime.CanDispatchCrossZone);
+            if (!canExecute || !travelAvailable)
                 ImGui.BeginDisabled();
-            if (ImGui.Button("Travel to start") && canExecute && travelPlan.IsExecutable)
+            if (ImGui.Button("Travel to start") && canExecute && travelAvailable)
                 routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.TravelToStart).Message;
-            if (!canExecute || !travelPlan.IsExecutable)
+            if (!canExecute || !travelAvailable)
                 ImGui.EndDisabled();
             NavigationRoutePlan playbackPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.Playback);
-            if (!canExecute || !playbackPlan.IsExecutable)
+            bool playbackAvailable = playbackPlan.IsExecutable ||
+                                     (playbackPlan.IsValid && route.TerritoryId != Plugin.ClientState.TerritoryType &&
+                                      navigationRuntime.CanDispatchCrossZone);
+            if (!canExecute || !playbackAvailable)
                 ImGui.BeginDisabled();
-            if (ImGui.Button("Play route") && canExecute && playbackPlan.IsExecutable)
+            if (ImGui.Button("Play route") && canExecute && playbackAvailable)
                 routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.Playback).Message;
-            if (!canExecute || !playbackPlan.IsExecutable)
+            if (!canExecute || !playbackAvailable)
                 ImGui.EndDisabled();
             if (navigationRuntime.Status.CanStop)
             {
@@ -1041,7 +1074,7 @@ internal sealed class NexusWindow : Window
     {
         bool editable = navigationLibrary.HasWorkingLibrary;
         float settingsHeight = MathF.Ceiling(
-            (ImGui.GetTextLineHeightWithSpacing() * (editable ? 11f : 6f)) +
+            (ImGui.GetTextLineHeightWithSpacing() * (editable ? 12f : 6f)) +
             (ImGui.GetStyle().WindowPadding.Y * 2f) +
             ImGui.GetStyle().ItemSpacing.Y +
             8f);
@@ -1060,6 +1093,7 @@ internal sealed class NexusWindow : Window
         float spacing = snapshot.MinimumPointDistance;
         bool worldPreview = snapshot.ShowWorldPreview;
         bool pointNumbers = snapshot.ShowPointNumbers;
+        bool liveNavigationPath = snapshot.ShowLiveNavigationPath;
         bool changed = false;
         ImGui.SetNextItemWidth(220);
         changed |= ImGui.SliderFloat("Capture interval", ref interval, 0.2f, 5f, "%.1f sec");
@@ -1067,6 +1101,7 @@ internal sealed class NexusWindow : Window
         changed |= ImGui.SliderFloat("Minimum point spacing", ref spacing, 0.1f, 10f, "%.1f y");
         changed |= ImGui.Checkbox("Show connected route in the world", ref worldPreview);
         changed |= ImGui.Checkbox("Point numbers", ref pointNumbers);
+        changed |= ImGui.Checkbox("Show live generated navigation waypoints", ref liveNavigationPath);
         if (changed)
         {
             NavigationLibraryWriteResult result = navigationLibrary.UpdatePreferences(
@@ -1074,7 +1109,7 @@ internal sealed class NexusWindow : Window
                 spacing,
                 worldPreview,
                 pointNumbers,
-                snapshot.ShowLiveNavigationPath);
+                liveNavigationPath);
             routeOperationMessage = result.Message;
             if (!worldPreview)
                 navigationRuntime.ClearPreview();
@@ -1084,7 +1119,7 @@ internal sealed class NexusWindow : Window
         TextWrapped(NexusTheme.Muted,
             "Timed recording observes your movement only; it never acquires navigation ownership or moves the character.");
         TextWrapped(NexusTheme.Muted,
-            $"Live generated navigation waypoints: {(snapshot.ShowLiveNavigationPath ? "saved as shown" : "saved as hidden")} • rendering remains disabled until its ownership filter is migrated.");
+            "Live generated waypoints appear only for a route Nexus started locally or explicitly delegated to suite travel. Unrelated provider movement remains hidden.");
         EndPanel();
     }
 

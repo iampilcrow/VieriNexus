@@ -2,7 +2,7 @@
 
 Recovery snapshot: 2026-09-08 (America/New_York)  
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.19`
+Current product version: `0.1.0.20`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -23,7 +23,7 @@ The repository is authoritative for what exists today. The recovered conversatio
 
 `VieriNexus` is the permanent product and Dalamud internal name for the planned unified Vieri FFXIV suite. It is intended to replace the separately installed Vieri plugins with one coherent, modular Dalamud package. It is not intended to be a launcher for separate plugins, a collection of embedded predecessor windows, or one giant controller.
 
-The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, explicitly creates a separate Nexus-owned working library, manually or automatically records personal routes from live positions, performs detailed point editing and safe route exchange, draws static previews, and can perform guarded same-zone travel/playback after manual source unload and explicit session authority. Version 0.1.0.19 also compiles all 27 verified gear-vendor standing-point templates into Nexus, creates independent disabled personal copies on request, enforces one enabled route per exact territory/vendor pair, and exposes fail-closed read-only assignment resolution. It does not yet dispatch Gear/Duties consumers, replace VieriNavPlotter completely, or enable other gameplay modules.
+The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, explicitly creates a separate Nexus-owned working library, records and edits personal routes, previews saved and generated paths, and performs guarded local or delegated cross-zone travel after manual source unload and explicit session authority. Version 0.1.0.20 also captures exact route targets without implicit approval and lets VieriAutoDuty consume an enabled Nexus vendor override through a fail-closed versioned contract with transition fallbacks. It does not yet replace VieriNavPlotter completely or enable other gameplay modules.
 
 ### Product vision
 
@@ -77,7 +77,7 @@ Future expansion may include crafting, gathering, farming, dailies/weeklies, pro
 ### Scope boundaries
 
 - Nexus should coordinate existing strong providers rather than reimplementing Boss Mod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, or Allagan Market without a proven reason.
-- VieriCodex's maintained Questionable-derived quest engine and route data migrate into Nexus; Questionable is not a separate Nexus runtime dependency.
+- VieriCodex remains authoritative during Progression migration. Nexus will own its Vieri-specific planners, policies, safety fixes, custom-route overlay, and UI, then use stock Questionable through a narrow capability-versioned adapter for ordinary supported quest execution. The full fork retires only after parity and fallback validation.
 - Per-frame combat decisions stay inside the embedded Wrath-derived combat engine. The slower planner grants or denies authority but must not enter that hot path.
 - Remote commands may never bypass local authorization, current-character checks, ownership, manual override, or safety policy.
 - Natural-language goals may be a future frontend, but the engine should execute structured, versioned goal models.
@@ -171,6 +171,9 @@ Several target concepts already have types or tests but are not general live sub
 - `NavigationLibraryStore.cs` — atomic Nexus-owned working-library persistence, validation, and previous-file recovery copy, deliberately separate from immutable migration staging.
 - `NavigationRoutePlanner.cs` — side-effect-free Review, Travel to Start, and Playback planning with ordered points, distance, validation, and territory gating.
 - `NavigationBuiltInRouteCatalog.cs` — immutable 27-route catalog of verified VieriAutoDuty vendor standing points with target/territory provenance and disabled assignments.
+- `NavigationRouteTargetBinding.cs` — target/kind binding policy that never enables an override implicitly and rejects cross-territory capture for populated routes.
+- `NavigationSuiteRouteRequest.cs` — additive JSON suite-travel request plus a separate 27-target NPC fallback catalog that never replaces authored movement points.
+- `NavigationSuiteTravelCoordinator.cs` — provider-neutral tracking for cross-zone travel explicitly dispatched by the current Nexus process; unrelated provider activity is never adopted, drawn, or stopped.
 - `NavigationRouteOverrideResolver.cs` — pure exact-target assignment editor/resolver with one-winner enforcement and fail-closed invalid/ambiguous results.
 - `NavigationRouteRecordingCoordinator.cs` — non-moving timed-capture state machine with cadence, spacing, territory, and route-availability guards.
 - `NavigationRouteClipboardCodec.cs` — bounded versioned route exchange plus compatible legacy NavPlotter JSON ingestion with regenerated identity and disabled automation assignment.
@@ -189,7 +192,7 @@ Several target concepts already have types or tests but are not general live sub
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — global presentation/setup settings, character-scoped safety settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.19`, assembly/internal root `VieriNexus`.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.20`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -205,7 +208,9 @@ Several target concepts already have types or tests but are not general live sub
 - `Services/NavigationRecoveryService.cs` — character-aware runtime composition of the no-replay checkpoint gate and manual-input quiet period for the conditional Routes-page acknowledgement panel.
 - `Services/NavigationLibraryService.cs` — promotes verified staging into a separate working file and provides atomic route creation/edit/save/delete operations without touching the predecessor or receipt.
 - `Services/NavigationRoutePreviewService.cs` — persistent current-territory world drawing for explicitly selected Nexus route plans.
-- `Services/NavigationRouteRuntimeService.cs` — plugin-facing planning, preview, guarded execution, Stop, and per-frame runtime composition.
+- `Services/NavigationLivePathService.cs` — generated vnavmesh waypoint overlay gated to current-process Nexus local or delegated suite ownership.
+- `Services/AutoDutyRouteTravelProvider.cs` — capability-checked adapter over the existing public AutoDuty suite-travel/Stop/visualization contract.
+- `Services/NavigationRouteRuntimeService.cs` — plugin-facing planning, static/live preview, guarded local execution, delegated cross-zone execution, Stop, and per-frame runtime composition.
 - `Services/NavigationRouteRecordingService.cs` — live position observation and atomic capture persistence around the provider-neutral recording coordinator.
 - `Services/NexusIpcProvider.cs` — registered read-only status, dependency, and Nexus-namespaced navigation IPC.
 - `Services/WorldSnapshotObserver.cs` — throttled Dalamud client/player/object/condition observation plus the current read-only provider-health snapshot.
@@ -214,7 +219,7 @@ Several target concepts already have types or tests but are not general live sub
 
 ### `tests/VieriNexus.Application.Tests`
 
-There are 122 automated tests across:
+There are 133 automated tests across:
 
 - `DependencyCatalogTests.cs`
 - `NavigationRouteMigrationImporterTests.cs`
@@ -235,13 +240,16 @@ There are 122 automated tests across:
 - `NavigationBuiltInRouteCatalogTests.cs`
 - `NavigationRouteOverrideResolverTests.cs`
 - `NavigationRouteRecordingCoordinatorTests.cs`
+- `NavigationRouteTargetBindingTests.cs`
+- `NavigationSuiteRouteRequestTests.cs`
+- `NavigationSuiteTravelCoordinatorTests.cs`
 - `NavigationSafetySimulatorTests.cs`
 - `ResourceLeaseManagerTests.cs`
 - `SoloDutyCombatPolicyTests.cs`
 - `TransactionalMigrationStoreTests.cs`
 - `WorldStateStoreTests.cs`
 
-The published 0.1.0.19 source passes all 122 tests plus a zero-warning full plugin build.
+The 0.1.0.20 source passes all 133 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -314,7 +322,7 @@ Leases carry a goal/task/attempt owner, priority, reason, acquisition/expiry tim
 
 `Plugin` instantiates one manager and supplies it to activation assessment and the live route coordinator. `NavigationStopCoordinator` tracks each active route lease and treats Stop as idempotent: no tracked execution produces no provider call. When execution is tracked, provider unavailability, a failed request, unknown activity, or still-active movement retains and heartbeats the lease; only an explicit inactive result releases it. A vnavmesh adapter keeps the Stop request and `Path.IsRunning` confirmation separate. Natural completion performs observation-only release without sending Stop.
 
-The Routes UI and `/nexus play` now acquire and track execution leases through the sole guarded coordinator; `/nexus stop` and the UI Stop action enter verified no-replay recovery. There is still no automatic priority negotiation, cross-zone execution, or public resume action.
+The Routes UI and `/nexus play` acquire and track local execution leases through the sole guarded coordinator; `/nexus stop` and the UI Stop action enter verified no-replay recovery. Cross-zone actions use the capability-checked AutoDuty suite-travel adapter and are tracked only when explicitly dispatched by this Nexus process. There is still no automatic priority negotiation or public resume action.
 
 `ManualMovementSafetyCoordinator` gives physical player intent priority over Nexus movement. The runtime input source uses FFXIV's configured movement action IDs, so remapped keyboard movement, two-button mouse steering, gamepad movement, jump, and autorun are covered without treating camera or ordinary UI input as takeover. Input blocks starts through the configured quiet period. During tracked navigation it latches verified Stop, keeps retrying while Stop is unconfirmed, and never auto-resumes; the explicit stopped-intent acknowledgement can clear the latch only after movement is stopped and input remains quiet. Disabling character automation or movement protection during tracked navigation also fails closed and stops.
 
@@ -394,7 +402,7 @@ The shared-provider ownership rule is non-negotiable: while vnavmesh reports mov
 
 `NavigationRecoveryCoordinator` exposes the previously internal explicit acknowledgement as a conditional Stopped Intent Checkpoint panel. It can clear a durable `AwaitingExplicitResume` record and/or manual-yield latch only when no execution remains tracked, Stop has therefore released Navigation/Movement, and any manual-input quiet period has elapsed. The action persists `Completed` for stopped intent and clears the manual latch; it has no route/provider/resume operation and does not approve Nexus authority. Partial acknowledgement failure remains fail-closed.
 
-Critical limitation: migration staging alone provides no authority or active behavior; the user must explicitly create the separate working copy. Built-in vendor templates and exact-target override resolution are now available, but they do not dispatch Gear shopping or start movement. Cross-zone travel, live generated-waypoint rendering, and current-target capture remain inactive. Nexus does not disable VieriNavPlotter or activate duplicate navigation.
+Critical limitation: migration staging alone provides no authority or active behavior; the user must explicitly create the separate working copy and approve session authority. Built-in vendor templates, current-target capture, exact-target override resolution, filtered generated-waypoint drawing, and cross-zone suite travel are implemented. VieriAutoDuty 1.0.0.438 consumes a Nexus vendor override only while Nexus is authoritative, then falls back to VieriNavPlotter and finally its built-in route. Nexus does not disable VieriNavPlotter or activate duplicate navigation.
 
 ### 4.10 Public IPC — PARTIALLY IMPLEMENTED
 
@@ -421,7 +429,7 @@ Navigation status reports whether execution is actively running and reports sour
 
 | Source | Nexus-pinned/current commit |
 | --- | --- |
-| VieriAutoDuty | `bf769951318b8855d7e3e2633d28f7602b5bd4c9` |
+| VieriAutoDuty | `cffd9a021fe4fac1b74188d8e96ee19d41ebba43` |
 | VieriAutoMarket | `e08a70f7a9fece486962843cbe89ea9e2b969871` |
 | VieriAvarice | `d9f17fd1aa8c15f69608797ff95573ef01f16b3b` |
 | VieriCodex | `5c03483bccd2551257b61c45dcf9a5d53fbab844` |
@@ -466,7 +474,7 @@ These do not block setup: AutoRetainer, Glamour Log, Anti-AFK (`AntiAfkKick-Dala
 
 ### Intentionally not dependencies
 
-- Questionable: its maintained quest engine/data are incorporated through VieriCodex and later migrate into Nexus.
+- Questionable: VieriCodex remains authoritative during migration; after its Vieri-specific layer moves into Nexus, stock Questionable becomes the replaceable ordinary quest-execution provider behind a capability/version adapter.
 - The nine Vieri migration sources: temporary coexistence/migration inputs, not third-party dependencies in the final topology.
 - Wrath Combo and VieriWrathSwitch: already incorporated into VieriRotationHelper's combat suite.
 - Rotation Solver Reborn and BossMod AutoRotation: alternative engines, not Nexus combat requirements.
@@ -618,7 +626,7 @@ None of the planned general orchestration, retry, cancellation, or goal/task rec
 
 ### Dependencies and external ownership
 
-- **RECOVERED CORRECTION:** Questionable must not be listed as a Nexus dependency. Its maintained engine/data arrive through VieriCodex source migration. The initial dependency UI that listed it was corrected in 0.1.0.1.
+- **CURRENT TRANSITION RULE:** Questionable must not be enabled beside VieriCodex during migration and is not yet listed as a Nexus dependency. After Progression parity, the approved target is to retire the full fork and use stock Questionable as a capability-versioned ordinary quest provider while Nexus owns all Vieri-specific behavior.
 - **IMPLEMENTED:** required and recommended dependencies have their own page with install/manage actions. Recommended integrations do not block setup.
 - **PLANNED:** modules/providers eventually declare their own manifests and tested version/health contracts rather than dependency checks being scattered or permanently global.
 - **RECOVERED DECISION:** third-party providers keep their native implementation. Nexus coordinates them and owns cross-provider policy/resources; it does not take ownership of their update channels.
@@ -763,9 +771,9 @@ The 2026-09-09 upstream/provider integration audit is complete. VieriCodex 1.12.
 
 Version 0.1.0.19 is published from source `cf4313c7495dae56a2556ef5362beba65692f482`. All 27 verified VieriAutoDuty gear-vendor standing points are immutable built-in references; adding one creates a new independent working-library route with its override disabled. Enabling an assignment is explicit and atomically disables a competitor for that exact territory/vendor pair. `VieriNexus.Navigation.V1.ResolveGearVendorOverride` exposes only read-only resolution and fails closed for absent, invalid, or ambiguous assignments. The resolver does not start navigation or dispatch Gear/Duties work. All 122 automated tests and the zero-warning Release build pass. Daily Pilcrow release `1f2e4e52c89b31982a934aa231fc263df8aeaacc` is live in production deployment `dpl_fHUdKtsGDeahepUuJRkDk3XbqN6s`; documentation commit `57b2f65218bf13966c047833fead181723cb8ed7` is live in final deployment `dpl_FCtMirNZWUsb1bC481W7aJSsHJhh`. All 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, production build, public HTTP/ZIP/hash checks, and Discord workflow `34397580461` succeeded. Runtime/source SHA-256: `304C545BD904A05A66309CF03A33E005C556BC023500C3DC985B261D1BEAB6F0` / `8BCD52022F3FDCB3FCE8BF20B02300979304DAE70232041BA5F2A8B41B547404`.
 
-The user then accepted the 0.1.0.19 vendor-template persistence gate in game: after copying a vendor template and enabling `Use as gear vendor override`, disabling and re-enabling Nexus preserved that assignment. No automatic movement was reported. Template copying, explicit assignment, and reload persistence are therefore accepted; consumer dispatch remains intentionally absent.
+The user then accepted the 0.1.0.19 vendor-template persistence gate in game: after copying a vendor template and enabling `Use as gear vendor override`, disabling and re-enabling Nexus preserved that assignment. No automatic movement was reported. Template copying, explicit assignment, and reload persistence are therefore accepted.
 
-A read-only VieriCodex/Questionable architecture review found that stock Questionable exposes a useful but bounded IPC surface for starting/stopping supported quests and gathering work, querying current quest/step and quest eligibility/status, and managing its quest-priority list. It does not expose VieriCodex's Progression Queue, Progress Atlas, Hunting Log planner and target data, exploration/Aether Current/Aetheryte planners, one-click/local transport, gear-readiness and AutoDuty sequencing, solo-duty combat handoff, named VieriNavPlotter routes, custom UI/hotkeys/settings, or arbitrary custom quest-path injection. The preferred future direction is therefore a capability-versioned hybrid provider: retain VieriCodex as authoritative during migration, move the Vieri planning/policy/UI layer into Nexus, and prove stock Questionable as the external provider for ordinary supported quest execution before retiring whole-fork upstream merges. Custom or unsupported route data must remain in a small Nexus-owned overlay/executor or be accepted upstream; this is an assessment, not yet an approved dependency or runtime change.
+A read-only VieriCodex/Questionable architecture review found that stock Questionable exposes a useful but bounded IPC surface for starting/stopping supported quests and gathering work, querying current quest/step and quest eligibility/status, and managing its quest-priority list. It does not expose VieriCodex's Progression Queue, Progress Atlas, Hunting Log planner and target data, exploration/Aether Current/Aetheryte planners, one-click/local transport, gear-readiness and AutoDuty sequencing, solo-duty combat handoff, named VieriNavPlotter routes, custom UI/hotkeys/settings, or arbitrary custom quest-path injection. The user approved a capability-versioned hybrid target: retain VieriCodex as authoritative during migration, move the Vieri planning/policy/UI layer into Nexus, and prove stock Questionable as the external provider for ordinary supported quest execution before retiring whole-fork upstream merges. Custom or unsupported route data remains in a small Nexus-owned overlay/executor or is accepted upstream.
 
 ### Current workstream
 
@@ -781,17 +789,17 @@ The explicit next gate is:
 4. Verify duplicate receives a distinct name and disabled assignment; copy/import receives a new identity and disabled assignment.
 5. Verify recording stops when changing territory or disabling Nexus and does not resume automatically after reload.
 6. **CONFIRMED IN GAME ON 0.1.0.19:** a copied vendor template starts as an independent personal route, its exact-target override can be enabled explicitly, and the `Use as gear vendor override` assignment survives disabling and re-enabling Nexus without starting movement.
-7. Then integrate filtered live generated-waypoint rendering, current-target capture, and cross-zone Gear/Duties suite travel as the remaining NavPlotter parity.
+7. On 0.1.0.20, validate filtered live generated-waypoint rendering, current-target capture, cross-zone suite travel/Stop, and one real VieriAutoDuty Gear lookup using the enabled Nexus override. Confirm ordinary duty, Questionable, and unrelated vnavmesh paths remain hidden.
 
 The import, responsive Migration text, on-disk persistence, direct source-integrity checks, saved-receipt recovery, guarded rollback/re-import, correct Routes-page state transitions, source-owner assessment, all three navigation safety guarantees, disabled approval under loaded-source ownership, session-authority handoff, non-empty manual route authoring/preview/playback, both Stop paths, acknowledgement, safe return to VieriNavPlotter, destructive-action confirmations/cancellation, the corrected single-scroll layout, and vendor-template assignment persistence are confirmed. Navigation IPC, timed-recording shutdown, clipboard compatibility, and general preference persistence remain user-side/in-game verification items.
 
 ### Completed versus unfinished
 
-**Completed foundation:** solution layering, shell/Home/dependency/setup UI, basic character/world readiness, neutral module descriptors, domain contracts, tested lease/verified-Stop/manual-yield/reload-watchdog/authority/recovery primitives, live navigation provider health and bounded transition audit, isolated six-scenario non-moving safety simulation, read-only status/dependency/navigation/activation/override-resolution IPC, nine-source read-only discovery, exact source lock, first transactional importer, immutable verified staging, a separate atomic working-library store, provider-neutral route planning, manual and timed route authoring, detailed point editing and safe route exchange, the immutable 27-route vendor catalog, exact-target one-winner assignment, static world preview, and guarded same-zone execution/yield.
+**Completed foundation:** solution layering, shell/Home/dependency/setup UI, basic character/world readiness, neutral module descriptors, domain contracts, tested lease/verified-Stop/manual-yield/reload-watchdog/authority/recovery primitives, live navigation provider health and bounded transition audit, isolated six-scenario non-moving safety simulation, read-only status/dependency/navigation/activation/override-resolution IPC, nine-source read-only discovery, exact source lock, first transactional importer, immutable verified staging, a separate atomic working-library store, provider-neutral route planning, manual and timed route authoring, detailed point editing and safe route exchange, the immutable 27-route vendor catalog, exact-target one-winner assignment and current-target capture, static and ownership-filtered generated-path preview, guarded same-zone execution/yield, cross-zone suite travel, and VieriAutoDuty Gear consumption with transition fallbacks.
 
 **Partially complete:** world state, dependency health, module contract, IPC surface, configuration migration framework, ownership, solo-duty policy, navigation migration.
 
-**Not implemented:** live generated-waypoint overlay; current-target capture; cross-zone Gear/Duties suite travel; a consumer that dispatches resolved vendor overrides; any action that resumes interrupted movement; durable general audit/history; other eight transactional importers; Communications secret adapter; general planner/scheduler/executor/reconciler; command gateway/event bus; goals UI; SQLite history; diagnostics/support export; legacy IPC aliases; migrated combat/progression/duty/gear/market/communications/command-center/custom-UI runtimes; standalone retirement.
+**Not implemented:** any action that resumes interrupted movement; durable general audit/history; other eight transactional importers; Communications secret adapter; general planner/scheduler/executor/reconciler; command gateway/event bus; goals UI; SQLite history; diagnostics/support export; legacy IPC aliases; migrated combat/progression/duty/gear/market/communications/command-center/custom-UI runtimes; standalone retirement.
 
 There is no known external blocker. The old conversation's context window, not the repository, caused the handoff.
 
@@ -1010,8 +1018,8 @@ Do not execute these as part of recovery. The next normal development thread sho
 6. **CONFIRMED IN GAME ON 0.1.0.15:** create working copy/route/points, preview, guarded travel/playback, button Stop, manual takeover, no-replay acknowledgement, staging return, and VieriNavPlotter re-enable all passed.
 7. **CONFIRMED IN GAME ON 0.1.0.18:** single-scroll Routes layout and confirmation-protected clear/delete, including both cancellation paths.
 8. **CONFIRMED IN GAME ON 0.1.0.19:** a copied vendor template remained assigned as `Use as gear vendor override` after Nexus was disabled and re-enabled, with no automatic movement.
-9. Complete remaining NavPlotter parity in substantial slices: filtered live generated waypoints, current-target capture, and cross-zone Gear/Duties suite travel through the existing ownership gates.
-10. Continue Phase 0 inventory: freeze every predecessor command, IPC, config field, hotkey, public UI action, and replay-worthy incident. The current source lock is exact but not a complete compatibility matrix.
+9. Validate the 0.1.0.20 Routes closure batch: target capture remains disabled until approval; generated waypoints appear for Nexus-owned local/delegated route travel but not unrelated movement; cross-zone travel and Stop work; VieriAutoDuty Gear prefers an active Nexus override and retains both transition fallbacks.
+10. Begin the Progression foundation in a substantial slice: freeze VieriCodex custom behavior as Nexus-owned capabilities, add the capability-versioned stock Questionable provider boundary, and keep VieriCodex authoritative until parity is proven.
 11. Then choose the next low-risk importer. Do not choose Communications until encrypted-value tests exist; do not choose Market as an early runtime proof.
 12. For every substantial change, update this file, `IMPLEMENTATION_STATUS.md`, migration/upstream policy, source lock, tests, package metadata, and release documentation consistently.
 
@@ -1055,8 +1063,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release:** `0.1.0.19`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.19</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current release candidate:** `0.1.0.20`.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.20</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1159,7 +1167,7 @@ The exact archive naming convention, hosted path, and generation command must be
 
 ### 18.6 Version synchronization
 
-Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.19` in:
+Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.20` in:
 
 `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj`
 

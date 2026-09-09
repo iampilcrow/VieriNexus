@@ -5,11 +5,17 @@ namespace VieriNexus.Services;
 
 internal sealed class NavigationRouteRuntimeService(
     NavigationRouteExecutionCoordinator execution,
+    NavigationSuiteTravelCoordinator suiteTravel,
     NavigationRoutePreviewService preview,
+    NavigationLivePathService livePath,
     NavigationRouteRecordingService recording,
     NavigationLibraryService library)
 {
-    internal NavigationRouteExecutionStatus Status => execution.Status;
+    internal NavigationRouteExecutionStatus Status => execution.Status.IsActive
+        ? execution.Status
+        : suiteTravel.Status.State != NavigationRouteExecutionState.Idle
+            ? suiteTravel.Status
+            : execution.Status;
 
     internal NavigationRouteRecordingStatus RecordingStatus => recording.Status;
 
@@ -27,9 +33,49 @@ internal sealed class NavigationRouteRuntimeService(
 
     internal NavigationRouteExecutionStatus Start(
         NavigationRouteSnapshot route,
-        NavigationRoutePlanKind kind) => execution.Start(Plan(route, kind), DateTimeOffset.UtcNow);
+        NavigationRoutePlanKind kind)
+    {
+        NavigationRoutePlan plan = Plan(route, kind);
+        if (recording.Status.IsRecording)
+            return new NavigationRouteExecutionStatus(
+                NavigationRouteExecutionState.Blocked,
+                plan.RouteId,
+                plan.RouteName,
+                false,
+                false,
+                "route-recording-active",
+                "Stop timed recording before starting route movement.");
+        if (execution.Status.IsActive || suiteTravel.Status.IsActive)
+            return new NavigationRouteExecutionStatus(
+                NavigationRouteExecutionState.Blocked,
+                plan.RouteId,
+                plan.RouteName,
+                false,
+                false,
+                "route-already-running",
+                "Stop the current Nexus route before starting another one.");
+        if (plan.IsExecutable)
+        {
+            suiteTravel.ResetInactive();
+            return execution.Start(plan, DateTimeOffset.UtcNow);
+        }
+        return plan.IsValid && route.TerritoryId != Plugin.ClientState.TerritoryType
+            ? suiteTravel.Start(route, plan, DateTimeOffset.UtcNow)
+            : new NavigationRouteExecutionStatus(
+                NavigationRouteExecutionState.Blocked,
+                plan.RouteId,
+                plan.RouteName,
+                false,
+                false,
+                plan.Code,
+                plan.Message);
+    }
 
-    internal NavigationRouteExecutionStatus Stop() => execution.Stop(DateTimeOffset.UtcNow);
+    internal NavigationRouteExecutionStatus Stop() => suiteTravel.Status.IsActive
+        ? suiteTravel.Stop()
+        : execution.Stop(DateTimeOffset.UtcNow);
+
+    internal bool CanDispatchCrossZone => suiteTravel.CanDispatch;
 
     internal NavigationRouteRecordingStatus StartRecording(NavigationRouteSnapshot route, long now) =>
         recording.Start(route, now);
@@ -42,6 +88,7 @@ internal sealed class NavigationRouteRuntimeService(
     internal void Update(long now)
     {
         execution.Update(DateTimeOffset.UtcNow);
+        suiteTravel.Update(DateTimeOffset.UtcNow);
         recording.Update(now);
         if (recording.Status is { IsRecording: true, RouteId: { } routeId } &&
             preview.RouteId == routeId &&
@@ -52,7 +99,23 @@ internal sealed class NavigationRouteRuntimeService(
         }
     }
 
-    internal void DrawPreview() => preview.Draw();
+    internal void DrawPreview()
+    {
+        preview.Draw();
+        if (library.Current is not { } snapshot)
+            return;
+        livePath.Draw(
+            snapshot.ShowLiveNavigationPath,
+            snapshot.ShowPointNumbers,
+            execution.Status.IsActive,
+            suiteTravel.IsVisualizationAuthorized);
+    }
+
+    internal void Shutdown()
+    {
+        recording.Stop("Recording stopped because Nexus is unloading.");
+        suiteTravel.Shutdown();
+    }
 
     internal void ClearPreview(Guid routeId)
     {

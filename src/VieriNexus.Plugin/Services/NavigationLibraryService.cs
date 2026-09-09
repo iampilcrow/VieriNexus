@@ -290,6 +290,38 @@ internal sealed class NavigationLibraryService
             : Save(update.Library, update.Code, update.Message);
     }
 
+    internal NavigationLibraryWriteResult SetBinding(Guid routeId, int bindingKind)
+    {
+        NavigationLibrarySnapshot? current = Volatile.Read(ref working);
+        NavigationRouteSnapshot? route = current?.Routes.FirstOrDefault(item => item.Id == routeId);
+        if (current is null || route is null)
+            return Result(false, "route-not-found", "The selected Nexus route no longer exists.");
+
+        NavigationRouteBindingUpdate update = NavigationRouteTargetBinding.SetKind(
+            route, bindingKind, DateTime.UtcNow);
+        return !update.Success || update.Route is null
+            ? Result(false, update.Code, update.Message)
+            : Replace(current, update.Route, update.Code, update.Message);
+    }
+
+    internal NavigationLibraryWriteResult BindCurrentTarget(
+        Guid routeId,
+        uint territoryId,
+        uint targetDataId,
+        string? targetLabel)
+    {
+        NavigationLibrarySnapshot? current = Volatile.Read(ref working);
+        NavigationRouteSnapshot? route = current?.Routes.FirstOrDefault(item => item.Id == routeId);
+        if (current is null || route is null)
+            return Result(false, "route-not-found", "The selected Nexus route no longer exists.");
+
+        NavigationRouteBindingUpdate update = NavigationRouteTargetBinding.BindCurrentTarget(
+            route, territoryId, targetDataId, targetLabel, DateTime.UtcNow);
+        return !update.Success || update.Route is null
+            ? Result(false, update.Code, update.Message)
+            : Replace(current, update.Route, update.Code, update.Message);
+    }
+
     internal string ExportRoute(Guid routeId)
     {
         NavigationRouteSnapshot? route = Volatile.Read(ref working)?.Routes.FirstOrDefault(item => item.Id == routeId);
