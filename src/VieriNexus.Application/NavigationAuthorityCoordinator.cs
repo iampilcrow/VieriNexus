@@ -93,8 +93,8 @@ public sealed class NavigationAuthorityCoordinator
                     NavigationAuthorityState.ActiveWithoutExecution,
                     true,
                     false,
-                    "authority-active-no-execution",
-                    "Nexus owns the navigation authority for this session; route execution remains disabled.");
+                    "authority-active",
+                    "Nexus owns navigation for this session. Guarded route controls are available; no route starts automatically.");
                 return status;
             }
 
@@ -149,7 +149,7 @@ public sealed class NavigationAuthorityCoordinator
                 true,
                 false,
                 "authority-approved",
-                "Nexus navigation ownership is active for this session. No route was started and playback remains disabled.");
+                "Nexus navigation ownership is active for this session. No route was started automatically.");
             return status;
         }
     }

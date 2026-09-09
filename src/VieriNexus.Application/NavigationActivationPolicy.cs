@@ -49,7 +49,7 @@ public static class NavigationActivationPolicy
         List<NavigationActivationBlocker> blockers = [];
 
         AddIf(!inputs.HasVerifiedStagedLibrary, "staged-library-required",
-            "Import and verify a staged route library first.", blockers);
+            "Create and verify the Nexus working route library first.", blockers);
         AddIf(inputs.SourcePluginLoaded, "source-plugin-loaded",
             "VieriNavPlotter is loaded and remains the navigation owner.", blockers);
         AddIf(!inputs.RequiredDependenciesReady, "dependencies-required",

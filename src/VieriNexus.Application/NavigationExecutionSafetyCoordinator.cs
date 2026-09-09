@@ -192,6 +192,15 @@ public sealed class NavigationExecutionSafetyCoordinator
     }
 
     public NavigationExecutionSafetyStatus Shutdown(DateTimeOffset now)
+        => InterruptExecution(
+            now,
+            "shutdown-stopped",
+            "Plugin shutdown stopped navigation; the saved intent will not replay after reload.");
+
+    public NavigationExecutionSafetyStatus InterruptExecution(
+        DateTimeOffset now,
+        string confirmedCode = "execution-stopped",
+        string confirmedMessage = "Navigation was stopped and requires an explicit acknowledgement before another route can start.")
     {
         lock (sync)
         {
@@ -211,16 +220,87 @@ public sealed class NavigationExecutionSafetyCoordinator
             {
                 TrySaveState(NavigationExecutionIntentState.AwaitingExplicitResume, now);
                 currentProcessExecution = false;
-                status = AwaitingResume("shutdown-stopped",
-                    "Plugin shutdown stopped navigation; the saved intent will not replay after reload.");
+                status = AwaitingResume(confirmedCode, confirmedMessage);
             }
             else
             {
                 currentProcessExecution = false;
-                status = Recovering("shutdown-stop-unconfirmed",
-                    "Plugin shutdown requested Stop, but inactivity is not yet confirmed; reload recovery remains armed.");
+                status = Recovering("execution-stop-unconfirmed",
+                    "Navigation Stop was requested, but inactivity is not yet confirmed; recovery remains armed.");
             }
 
+            return status;
+        }
+    }
+
+    /// <summary>
+    /// Finishes a naturally completed execution only after the provider independently reports
+    /// movement inactive. Completion releases ownership and writes Completed; it never replays.
+    /// </summary>
+    public NavigationExecutionSafetyStatus CompleteExecution(DateTimeOffset now)
+    {
+        lock (sync)
+        {
+            if (!currentProcessExecution || intent is null || !stop.HasTrackedExecution)
+                return status;
+
+            bool? movementActive;
+            try
+            {
+                movementActive = provider.IsMovementActive();
+            }
+            catch
+            {
+                movementActive = null;
+            }
+
+            if (movementActive is not false)
+            {
+                status = Recovering(
+                    movementActive is true ? "completion-still-moving" : "completion-unconfirmed",
+                    "Route completion cannot release ownership until movement is confirmed inactive.");
+                return status;
+            }
+
+            NavigationStopResult stopped = stop.ConfirmInactiveAndRelease();
+            if (!stopped.IsStopConfirmed)
+            {
+                status = Recovering(stopped.Code,
+                    "Route completion was observed, but verified Stop could not confirm ownership release.");
+                return status;
+            }
+
+            currentProcessExecution = false;
+            if (!TrySaveState(NavigationExecutionIntentState.Completed, now))
+                return status;
+            status = Ready("execution-completed",
+                "The route completed, movement is inactive, and Navigation/Movement ownership was released.");
+            return status;
+        }
+    }
+
+    /// <summary>
+    /// Records that the shared provider path was independently proven to have been replaced.
+    /// Nexus releases only its own lease and never sends a global Stop to the new owner.
+    /// </summary>
+    public NavigationExecutionSafetyStatus ReleaseSupersededExecution(DateTimeOffset now)
+    {
+        lock (sync)
+        {
+            if (!currentProcessExecution || intent is null || !stop.HasTrackedExecution)
+                return status;
+            if (!stop.ReleaseOwnershipWithoutProviderStop())
+            {
+                status = Fault("superseded-ownership-release-failed",
+                    "The provider path changed, but Nexus could not release its internal ownership safely.");
+                return status;
+            }
+
+            currentProcessExecution = false;
+            if (!TrySaveState(NavigationExecutionIntentState.Superseded, now))
+                return status;
+            status = Ready("execution-superseded",
+                "Another provider replaced the Nexus path. Nexus yielded ownership without sending Stop.");
             return status;
         }
     }

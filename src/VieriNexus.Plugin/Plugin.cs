@@ -25,6 +25,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
 
     internal Configuration Configuration { get; }
 
@@ -38,6 +39,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NavigationAuthorityCoordinator navigationAuthority;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
     private readonly NavigationRecoveryService navigationRecovery;
+    private readonly NavigationRouteRuntimeService navigationRuntime;
+    private readonly NavigationLibraryService navigationLibrary;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -53,6 +56,9 @@ public sealed class Plugin : IDalamudPlugin
             legacyInventory,
             PluginInterface.GetPluginConfigDirectory(),
             navigationImport.Imported ? navigationImport.ReceiptId : null);
+        navigationLibrary = new NavigationLibraryService(
+            navigationMigration,
+            PluginInterface.GetPluginConfigDirectory());
         var moduleRegistry = BuiltInModuleCatalog.Create();
         var worldStore = new WorldStateStore();
         var resourceLeases = new ResourceLeaseManager();
@@ -88,7 +94,7 @@ public sealed class Plugin : IDalamudPlugin
             {
                 PluginPresence source = dependencyService.FindPlugin("VieriNavPlotter");
                 return new NavigationAuthorityPrerequisites(
-                    navigationMigration.StagedSnapshot is not null,
+                    navigationLibrary.HasWorkingLibrary,
                     source.IsLoaded,
                     dependencyService.RequiredReady,
                     navigationStop.IsProviderAvailable,
@@ -97,12 +103,22 @@ public sealed class Plugin : IDalamudPlugin
             });
         var navigationActivation = new NavigationActivationService(
             dependencyService,
-            navigationMigration,
+            navigationLibrary,
             resourceLeases,
             navigationStop,
             manualMovementSafety,
             navigationExecutionSafety,
             navigationAuthority);
+        var navigationPreview = new NavigationRoutePreviewService(ClientState, GameGui);
+        var navigationExecution = new NavigationRouteExecutionCoordinator(
+            navigationAuthority,
+            navigationExecutionSafety,
+            navigationStopProvider,
+            () => manualMovementSafety.Current.CanStartExecution &&
+                  worldStore.Current.Character.Value is { Key.IsKnown: true } character &&
+                  Configuration.ForCharacter(character.Key.ToString()).AllowAutomation,
+            () => ClientState.TerritoryType);
+        navigationRuntime = new NavigationRouteRuntimeService(navigationExecution, navigationPreview);
         navigationDiagnostics = new NavigationDiagnosticsService(
             dependencyService,
             resourceLeases,
@@ -123,14 +139,16 @@ public sealed class Plugin : IDalamudPlugin
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
-        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, navigationActivation, navigationDiagnostics, navigationRecovery, moduleRegistry, worldStore, logo);
+        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration,
+            navigationLibrary, navigationActivation, navigationDiagnostics, navigationRecovery,
+            navigationRuntime, moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 
-        ipc = new NexusIpcProvider(PluginInterface, dependencyService, navigationMigration, navigationActivation, worldStore);
+        ipc = new NexusIpcProvider(PluginInterface, dependencyService, navigationLibrary, navigationActivation, worldStore);
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Subcommands: home, show, hide, dependencies, migration.",
+            HelpMessage = "Open VieriNexus. Subcommands: routes, play <name>, preview <name>, stop, home, dependencies, migration.",
         });
         CommandManager.AddHandler(ShortCommand, new CommandInfo(OnCommand)
         {
@@ -164,6 +182,7 @@ public sealed class Plugin : IDalamudPlugin
         navigationExecutionSafety.Update(DateTimeOffset.UtcNow);
         manualMovementSafety.Update(now);
         navigationAuthority.Update();
+        navigationRuntime.Update();
         navigationRecovery.Update(now);
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
 
@@ -193,6 +212,7 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         windows.Draw();
+        navigationRuntime.DrawPreview();
     }
 
     private void OpenMain()
@@ -211,7 +231,19 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string _, string arguments)
     {
-        switch (arguments.Trim().ToLowerInvariant())
+        string trimmed = arguments.Trim();
+        if (trimmed.StartsWith("play ", StringComparison.OrdinalIgnoreCase))
+        {
+            RunNamedRoute(trimmed[5..].Trim().Trim('"'), previewOnly: false);
+            return;
+        }
+        if (trimmed.StartsWith("preview ", StringComparison.OrdinalIgnoreCase))
+        {
+            RunNamedRoute(trimmed[8..].Trim().Trim('"'), previewOnly: true);
+            return;
+        }
+
+        switch (trimmed.ToLowerInvariant())
         {
             case "show":
                 OpenMain();
@@ -227,6 +259,13 @@ public sealed class Plugin : IDalamudPlugin
                 Configuration.SelectedPage = "Migration";
                 mainWindow.IsOpen = true;
                 break;
+            case "routes":
+                Configuration.SelectedPage = "Routes & Navigation";
+                mainWindow.IsOpen = true;
+                break;
+            case "stop":
+                ChatGui.Print($"[VieriNexus] {navigationRuntime.Stop().Message}");
+                break;
             case "home":
             case "splash":
                 Configuration.SelectedPage = "Home";
@@ -238,5 +277,25 @@ public sealed class Plugin : IDalamudPlugin
                 mainWindow.Toggle();
                 break;
         }
+    }
+
+    private void RunNamedRoute(string nameOrId, bool previewOnly)
+    {
+        NavigationLibrarySnapshot? snapshot = navigationLibrary.Current;
+        NavigationRouteSnapshot? route = snapshot is null
+            ? null
+            : NavigationLibraryQuery.Find(snapshot, nameOrId);
+        if (route is null)
+        {
+            ChatGui.PrintError($"[VieriNexus] Route '{nameOrId}' was not found.");
+            return;
+        }
+
+        string result;
+        if (previewOnly)
+            result = navigationRuntime.TogglePreview(route, snapshot!.ShowPointNumbers).Message;
+        else
+            result = navigationRuntime.Start(route, NavigationRoutePlanKind.Playback).Message;
+        ChatGui.Print($"[VieriNexus] {result}");
     }
 }

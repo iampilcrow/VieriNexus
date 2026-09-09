@@ -9,6 +9,7 @@ public enum NavigationExecutionIntentState
     StopPending,
     AwaitingExplicitResume,
     Completed,
+    Superseded,
 }
 
 public sealed record NavigationExecutionIntent(

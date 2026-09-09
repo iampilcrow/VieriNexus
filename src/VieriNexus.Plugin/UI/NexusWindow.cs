@@ -31,23 +31,33 @@ internal sealed class NexusWindow : Window
     private readonly DependencyService dependencies;
     private readonly LegacyConfigurationInventory legacyInventory;
     private readonly NavigationMigrationService navigationMigration;
+    private readonly NavigationLibraryService navigationLibrary;
     private readonly NavigationActivationService navigationActivation;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
     private readonly NavigationRecoveryService navigationRecovery;
+    private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
     private string routeSearch = string.Empty;
     private Guid? selectedRouteId;
+    private Guid? editingRouteId;
+    private string routeNameEdit = string.Empty;
+    private string routeTagsEdit = string.Empty;
+    private string routeNotesEdit = string.Empty;
+    private string routeOperationMessage = string.Empty;
+    private Guid? pendingDeleteRouteId;
 
     internal NexusWindow(
         Plugin plugin,
         DependencyService dependencies,
         LegacyConfigurationInventory legacyInventory,
         NavigationMigrationService navigationMigration,
+        NavigationLibraryService navigationLibrary,
         NavigationActivationService navigationActivation,
         NavigationDiagnosticsService navigationDiagnostics,
         NavigationRecoveryService navigationRecovery,
+        NavigationRouteRuntimeService navigationRuntime,
         ModuleRegistry modules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
@@ -57,9 +67,11 @@ internal sealed class NexusWindow : Window
         this.dependencies = dependencies;
         this.legacyInventory = legacyInventory;
         this.navigationMigration = navigationMigration;
+        this.navigationLibrary = navigationLibrary;
         this.navigationActivation = navigationActivation;
         this.navigationDiagnostics = navigationDiagnostics;
         this.navigationRecovery = navigationRecovery;
+        this.navigationRuntime = navigationRuntime;
         this.modules = modules;
         this.world = world;
         this.logo = logo;
@@ -351,13 +363,13 @@ internal sealed class NexusWindow : Window
 
     private void DrawRoutesAndNavigation()
     {
-        PageHeading("Routes & Navigation", "Review the verified route data staged for Nexus without changing or running it.");
+        PageHeading("Routes & Navigation", "Build, preview, and safely run Nexus-owned routes through one guarded navigation authority.");
 
-        NavigationLibrarySnapshot? snapshot = navigationMigration.StagedSnapshot;
+        NavigationLibrarySnapshot? snapshot = navigationLibrary.Current;
         if (snapshot is null)
         {
-            BeginPanel("READ-ONLY LIBRARY", 180);
-            NexusTheme.StatusDot(NexusTheme.Muted, "No verified staged library");
+            BeginPanel("ROUTE LIBRARY", 180);
+            NexusTheme.StatusDot(NexusTheme.Muted, "No verified route library");
             ImGui.TextWrapped("Import VieriNavPlotter on the Migration page before Nexus can show its staged settings and personal routes here.");
             TextWrapped(NexusTheme.Muted, "VieriNavPlotter remains unchanged and authoritative.");
             if (ImGui.Button("Open Migration", new Vector2(ButtonWidth("Open Migration"), 0)))
@@ -372,15 +384,22 @@ internal sealed class NexusWindow : Window
             return;
         }
 
-        NexusTheme.StatusDot(NexusTheme.Green, "Verified staged library available");
+        DrawNavigationWorkingLibrary();
+
+        NexusTheme.StatusDot(NexusTheme.Green, navigationLibrary.HasWorkingLibrary
+            ? "Nexus working library available"
+            : "Verified staged library available");
         ImGui.SameLine();
-        ImGui.TextDisabled("Read-only • VieriNavPlotter remains authoritative");
+        ImGui.TextDisabled(navigationLibrary.HasWorkingLibrary
+            ? "Nexus-owned • atomic saves • previous working copy retained"
+            : "Read-only staging • VieriNavPlotter remains authoritative");
         ImGui.Spacing();
 
         if (ImGui.BeginTable("###RouteSummary", 3, ImGuiTableFlags.SizingStretchSame))
         {
             ImGui.TableNextColumn();
-            StatusCard("PERSONAL ROUTES", snapshot.Routes.Count.ToString(), "Imported into Nexus staging", NexusTheme.Cyan);
+            StatusCard("PERSONAL ROUTES", snapshot.Routes.Count.ToString(),
+                navigationLibrary.HasWorkingLibrary ? "Nexus working library" : "Imported into Nexus staging", NexusTheme.Cyan);
             ImGui.TableNextColumn();
             int enabledOverrides = snapshot.Routes.Count(route => route.OverrideEnabled);
             StatusCard("ENABLED OVERRIDES", enabledOverrides.ToString(), "Visible here; not active in Nexus", NexusTheme.Amber);
@@ -391,10 +410,22 @@ internal sealed class NexusWindow : Window
 
         if (snapshot.Routes.Count == 0)
         {
-            BeginPanel("PERSONAL ROUTES", 150);
+            BeginPanel("PERSONAL ROUTES", navigationLibrary.HasWorkingLibrary ? 205 : 150);
             ImGui.TextUnformatted("No personal routes have been created yet.");
-            ImGui.TextWrapped("Your recording, display, pane, selection, tolerance, and navigation preferences are still present in the verified staged snapshot.");
-            TextWrapped(NexusTheme.Muted, "Create routes in VieriNavPlotter while it remains the active route owner, then import again to refresh staging.");
+            ImGui.TextWrapped("Your recording, display, pane, selection, tolerance, and navigation preferences are present in the library.");
+            if (navigationLibrary.HasWorkingLibrary)
+            {
+                TextWrapped(NexusTheme.Muted,
+                    "Create a route at your current position, move to the next desired waypoint, and add another point.");
+                if (ImGui.Button("Create route at current position", new Vector2(ButtonWidth("Create route at current position"), 0)))
+                    CreateRouteAtCurrentPosition();
+                DrawRouteOperationMessage();
+            }
+            else
+            {
+                TextWrapped(NexusTheme.Muted,
+                    "Create a separate Nexus working copy before adding or changing routes.");
+            }
             EndPanel();
             DrawStagedNavigationSettings(snapshot);
             DrawNavigationActivationSafety();
@@ -414,7 +445,7 @@ internal sealed class NexusWindow : Window
         ImGui.TableSetupColumn("Routes", ImGuiTableColumnFlags.WidthFixed, Math.Clamp(snapshot.LibraryPaneWidth, 240f, 520f));
         ImGui.TableSetupColumn("Details", ImGuiTableColumnFlags.WidthStretch);
         ImGui.TableNextColumn();
-        if (ImGui.BeginChild("###RouteList", new Vector2(0, 410), true))
+        if (ImGui.BeginChild("###RouteList", new Vector2(0, 650), true))
         {
             if (filtered.Count == 0)
             {
@@ -447,7 +478,7 @@ internal sealed class NexusWindow : Window
         NavigationRouteSnapshot? selectedRoute = selectedRouteId is { } id
             ? filtered.FirstOrDefault(route => route.Id == id)
             : null;
-        DrawRouteDetails(selectedRoute);
+        DrawRouteDetails(selectedRoute, snapshot.ShowPointNumbers);
         ImGui.EndTable();
 
         ImGui.Spacing();
@@ -455,11 +486,12 @@ internal sealed class NexusWindow : Window
         DrawNavigationActivationSafety();
         DrawNavigationRecovery();
         DrawNavigationDiagnostics();
+        DrawDeleteRouteConfirmation();
     }
 
-    private static void DrawRouteDetails(NavigationRouteSnapshot? route)
+    private void DrawRouteDetails(NavigationRouteSnapshot? route, bool showPointNumbers)
     {
-        if (ImGui.BeginChild("###RouteDetails", new Vector2(0, 410), true))
+        if (ImGui.BeginChild("###RouteDetails", new Vector2(0, 650), true))
         {
             if (route is null)
             {
@@ -467,34 +499,144 @@ internal sealed class NexusWindow : Window
             }
             else
             {
-                ImGui.TextColored(NexusTheme.Gold, route.Name);
+                PrepareRouteEditor(route);
+                if (navigationLibrary.HasWorkingLibrary)
+                {
+                    ImGui.SetNextItemWidth(-1);
+                    ImGui.InputText("###NexusRouteName", ref routeNameEdit, 120);
+                }
+                else
+                {
+                    ImGui.TextColored(NexusTheme.Gold, route.Name);
+                }
                 ImGui.Separator();
                 ImGui.TextUnformatted($"Territory: {route.TerritoryId}");
                 ImGui.TextUnformatted($"Points: {route.Points.Count}");
                 ImGui.TextUnformatted($"Movement: {(route.UseMesh ? "Mesh" : "Direct")} • {(route.UseFlight ? "Flight allowed" : "Ground only")}");
                 ImGui.TextUnformatted($"Tolerance: {route.Tolerance:0.##} • Final point: {route.LastPointTolerance:0.##}");
+                if (navigationLibrary.HasWorkingLibrary)
+                {
+                    bool mesh = route.UseMesh;
+                    bool flight = route.UseFlight;
+                    float tolerance = route.Tolerance;
+                    float finalTolerance = route.LastPointTolerance;
+                    bool changed = ImGui.Checkbox("Mesh-assisted", ref mesh);
+                    ImGui.SameLine();
+                    changed |= ImGui.Checkbox("Allow flight", ref flight);
+                    ImGui.SetNextItemWidth(180);
+                    changed |= ImGui.SliderFloat("Route tolerance", ref tolerance, 0.1f, 20f, "%.2f");
+                    ImGui.SetNextItemWidth(180);
+                    changed |= ImGui.SliderFloat("Final tolerance", ref finalTolerance, 0.1f, 30f, "%.2f");
+                    if (changed)
+                    {
+                        routeOperationMessage = navigationLibrary.UpdateRoute(route with
+                        {
+                            UseMesh = mesh,
+                            UseFlight = flight,
+                            Tolerance = tolerance,
+                            LastPointTolerance = finalTolerance,
+                        }).Message;
+                    }
+                }
                 string binding = route.BindingKind == 1 ? "Gear vendor" : "None";
                 ImGui.TextUnformatted($"Binding: {binding}");
                 if (route.TargetDataId != 0 || !string.IsNullOrWhiteSpace(route.TargetLabel))
                     ImGui.TextUnformatted($"Target: {route.TargetLabel} ({route.TargetDataId})");
-                if (!string.IsNullOrWhiteSpace(route.Tags))
-                    ImGui.TextWrapped($"Tags: {route.Tags}");
-                if (!string.IsNullOrWhiteSpace(route.Notes))
-                    ImGui.TextWrapped($"Notes: {route.Notes}");
+                if (navigationLibrary.HasWorkingLibrary)
+                {
+                    ImGui.SetNextItemWidth(-1);
+                    ImGui.InputTextWithHint("###NexusRouteTags", "Tags", ref routeTagsEdit, 240);
+                    ImGui.SetNextItemWidth(-1);
+                    ImGui.InputTextMultiline("###NexusRouteNotes", ref routeNotesEdit, 600, new Vector2(-1, 46));
+                    if (ImGui.Button("Save route details"))
+                    {
+                        NavigationLibraryWriteResult result = navigationLibrary.UpdateRoute(route with
+                        {
+                            Name = routeNameEdit,
+                            Tags = routeTagsEdit,
+                            Notes = routeNotesEdit,
+                        });
+                        routeOperationMessage = result.Message;
+                    }
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(route.Tags))
+                        ImGui.TextWrapped($"Tags: {route.Tags}");
+                    if (!string.IsNullOrWhiteSpace(route.Notes))
+                        ImGui.TextWrapped($"Notes: {route.Notes}");
+                }
                 ImGui.TextDisabled($"Updated {route.UpdatedAtUtc.ToLocalTime():g}");
 
                 ImGui.Spacing();
-                ImGui.BeginDisabled();
-                ImGui.Button("Show route");
+                if (ImGui.Button(navigationRuntime.IsPreviewing(route.Id) ? "Hide route" : "Show route"))
+                {
+                    NavigationRoutePlan preview = navigationRuntime.TogglePreview(route, showPointNumbers);
+                    routeOperationMessage = preview.Message;
+                }
                 ImGui.SameLine();
-                ImGui.Button("Travel to start");
+                NavigationRoutePlan travelPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.TravelToStart);
+                bool canExecute = navigationLibrary.HasWorkingLibrary &&
+                                  navigationActivation.AuthorityStatus.IsActive &&
+                                  !navigationRuntime.Status.IsActive;
+                if (!canExecute || !travelPlan.IsExecutable)
+                    ImGui.BeginDisabled();
+                if (ImGui.Button("Travel to start") && canExecute && travelPlan.IsExecutable)
+                    routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.TravelToStart).Message;
+                if (!canExecute || !travelPlan.IsExecutable)
+                    ImGui.EndDisabled();
                 ImGui.SameLine();
-                ImGui.Button("Play route");
-                ImGui.EndDisabled();
-                TextWrapped(NexusTheme.Muted, "Drawing, travel, and playback stay disabled until the navigation activation and ownership gate is proven.");
+                NavigationRoutePlan playbackPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.Playback);
+                if (!canExecute || !playbackPlan.IsExecutable)
+                    ImGui.BeginDisabled();
+                if (ImGui.Button("Play route") && canExecute && playbackPlan.IsExecutable)
+                    routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.Playback).Message;
+                if (!canExecute || !playbackPlan.IsExecutable)
+                    ImGui.EndDisabled();
+                if (navigationRuntime.Status.CanStop)
+                {
+                    ImGui.SameLine();
+                    if (ImGui.Button("Stop playback"))
+                        routeOperationMessage = navigationRuntime.Stop().Message;
+                }
+                TextWrapped(NexusTheme.Muted,
+                    $"Plan: {playbackPlan.Points.Count} point(s) • {playbackPlan.TotalDistance:0.0} yalms • {playbackPlan.Message}");
+                NavigationRouteExecutionStatus executionStatus = navigationRuntime.Status;
+                if (executionStatus.RouteId == route.Id && executionStatus.State != NavigationRouteExecutionState.Idle)
+                {
+                    Vector4 executionColor = executionStatus.State switch
+                    {
+                        NavigationRouteExecutionState.Running => NexusTheme.Green,
+                        NavigationRouteExecutionState.Completed => NexusTheme.Green,
+                        NavigationRouteExecutionState.Blocked => NexusTheme.Amber,
+                        NavigationRouteExecutionState.AwaitingAcknowledgement => NexusTheme.Amber,
+                        _ => NexusTheme.Red,
+                    };
+                    TextWrapped(executionColor, executionStatus.Message);
+                }
+
+                if (navigationLibrary.HasWorkingLibrary)
+                {
+                    ImGui.Spacing();
+                    bool routeExecutionActive = navigationRuntime.Status.IsActive &&
+                                                navigationRuntime.Status.RouteId == route.Id;
+                    if (routeExecutionActive)
+                        ImGui.BeginDisabled();
+                    if (ImGui.Button("Add current position"))
+                        AddCurrentPosition(route.Id);
+                    ImGui.SameLine();
+                    if (ImGui.Button("Undo last point"))
+                        routeOperationMessage = navigationLibrary.RemoveLastPoint(route.Id).Message;
+                    ImGui.SameLine();
+                    if (ImGui.Button("Reverse points"))
+                        routeOperationMessage = navigationLibrary.Reverse(route.Id).Message;
+                    if (routeExecutionActive)
+                        ImGui.EndDisabled();
+                }
+                DrawRouteOperationMessage();
 
                 ImGui.Spacing();
-                NexusTheme.SectionTitle("Staged points");
+                NexusTheme.SectionTitle(navigationLibrary.HasWorkingLibrary ? "Route points" : "Staged points");
                 if (ImGui.BeginTable("###RoutePoints", 4,
                         ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchSame))
                 {
@@ -514,9 +656,118 @@ internal sealed class NexusWindow : Window
                     }
                     ImGui.EndTable();
                 }
+
+                if (navigationLibrary.HasWorkingLibrary)
+                {
+                    ImGui.Spacing();
+                    bool routeExecutionActive = navigationRuntime.Status.IsActive &&
+                                                navigationRuntime.Status.RouteId == route.Id;
+                    if (routeExecutionActive)
+                        ImGui.BeginDisabled();
+                    if (ImGui.Button("Delete route"))
+                    {
+                        pendingDeleteRouteId = route.Id;
+                        ImGui.OpenPopup("Delete Nexus route?###DeleteNexusRoute");
+                    }
+                    if (routeExecutionActive)
+                        ImGui.EndDisabled();
+                }
             }
         }
         ImGui.EndChild();
+    }
+
+    private void DrawNavigationWorkingLibrary()
+    {
+        NavigationLibraryStatus status = navigationLibrary.Status;
+        float height = navigationLibrary.HasWorkingLibrary ? 115 : 175;
+        BeginPanel("NEXUS WORKING LIBRARY", height);
+        NexusTheme.StatusDot(navigationLibrary.HasWorkingLibrary ? NexusTheme.Green : NexusTheme.Amber,
+            navigationLibrary.HasWorkingLibrary ? "Editable Nexus copy active" : "Verified staging remains immutable");
+        TextWrapped(NexusTheme.Muted, status.Message);
+        if (!navigationLibrary.HasWorkingLibrary)
+        {
+            if (ImGui.Button("Create Nexus working copy", new Vector2(ButtonWidth("Create Nexus working copy"), 0)))
+            {
+                NavigationLibraryWriteResult result = navigationLibrary.CreateWorkingCopy();
+                routeOperationMessage = result.Message;
+            }
+            ImGui.SameLine();
+            ImGui.TextDisabled("Does not modify VieriNavPlotter or its migration receipt");
+        }
+        EndPanel();
+    }
+
+    private void PrepareRouteEditor(NavigationRouteSnapshot route)
+    {
+        if (editingRouteId == route.Id)
+            return;
+        editingRouteId = route.Id;
+        routeNameEdit = route.Name;
+        routeTagsEdit = route.Tags;
+        routeNotesEdit = route.Notes;
+    }
+
+    private void CreateRouteAtCurrentPosition()
+    {
+        if (Plugin.ObjectTable.LocalPlayer is not { } player)
+        {
+            routeOperationMessage = "The current character position is unavailable.";
+            return;
+        }
+        NavigationLibraryWriteResult result = navigationLibrary.CreateRoute(
+            Plugin.ClientState.TerritoryType, player.Position);
+        routeOperationMessage = result.Message;
+        selectedRouteId = result.Snapshot?.SelectedRouteId;
+        editingRouteId = null;
+    }
+
+    private void AddCurrentPosition(Guid routeId)
+    {
+        if (Plugin.ObjectTable.LocalPlayer is not { } player)
+        {
+            routeOperationMessage = "The current character position is unavailable.";
+            return;
+        }
+        routeOperationMessage = navigationLibrary.AddCurrentPoint(
+            routeId, Plugin.ClientState.TerritoryType, player.Position).Message;
+    }
+
+    private void DrawRouteOperationMessage()
+    {
+        if (!string.IsNullOrWhiteSpace(routeOperationMessage))
+            TextWrapped(NexusTheme.Muted, routeOperationMessage);
+    }
+
+    private void DrawDeleteRouteConfirmation()
+    {
+        if (!ImGui.BeginPopupModal("Delete Nexus route?###DeleteNexusRoute", ImGuiWindowFlags.AlwaysAutoResize))
+            return;
+
+        NavigationRouteSnapshot? route = pendingDeleteRouteId is { } id
+            ? navigationLibrary.Current?.Routes.FirstOrDefault(item => item.Id == id)
+            : null;
+        ImGui.TextUnformatted(route is null
+            ? "The selected route no longer exists."
+            : $"Delete '{route.Name}' from the Nexus working library?");
+        ImGui.TextDisabled("The previous complete working-library file is retained on disk.");
+        if (route is not null && ImGui.Button("Delete route"))
+        {
+            navigationRuntime.ClearPreview(route.Id);
+            routeOperationMessage = navigationLibrary.DeleteRoute(route.Id).Message;
+            selectedRouteId = navigationLibrary.Current?.SelectedRouteId;
+            editingRouteId = null;
+            pendingDeleteRouteId = null;
+            ImGui.CloseCurrentPopup();
+        }
+        if (route is not null)
+            ImGui.SameLine();
+        if (ImGui.Button("Cancel"))
+        {
+            pendingDeleteRouteId = null;
+            ImGui.CloseCurrentPopup();
+        }
+        ImGui.EndPopup();
     }
 
     private static void DrawStagedNavigationSettings(NavigationLibrarySnapshot snapshot)
@@ -550,15 +801,15 @@ internal sealed class NexusWindow : Window
         BeginPanel("ACTIVATION SAFETY", height);
         NexusTheme.StatusDot(authority.IsActive ? NexusTheme.Green : NexusTheme.Amber,
             authority.IsActive
-                ? "Nexus ownership active — route execution still disabled"
+                ? "Nexus ownership active — guarded route controls available"
                 : "Staging only — execution blocked");
         TextWrapped(NexusTheme.Muted,
-            "Nexus will not draw, travel, or play routes until every safety gate passes.");
+            "Static preview is non-moving. Travel and playback require every safety gate and explicit Nexus ownership.");
         string sourceState = assessment.IsSourcePluginLoaded
             ? "VieriNavPlotter is loaded and is the current navigation owner."
             : assessment.IsSourcePluginInstalled
-                ? "VieriNavPlotter is installed but not loaded; Nexus execution remains disabled."
-                : "VieriNavPlotter is not installed; Nexus execution remains disabled.";
+                ? "VieriNavPlotter is installed but not loaded; Nexus may own navigation after explicit approval."
+                : "VieriNavPlotter is not installed; Nexus may own navigation after explicit approval.";
         TextWrapped(NexusTheme.Muted, sourceState);
         if (assessment.IsStopAvailable)
             TextWrapped(NexusTheme.Green,
@@ -583,7 +834,7 @@ internal sealed class NexusWindow : Window
         {
             if (!authority.CanApprove)
                 ImGui.BeginDisabled();
-            if (ImGui.Button("Approve Nexus navigation ownership (no playback)", new Vector2(-1, 0)) &&
+            if (ImGui.Button("Approve Nexus navigation ownership", new Vector2(-1, 0)) &&
                 authority.CanApprove)
             {
                 navigationActivation.ApproveAuthority();
@@ -592,7 +843,7 @@ internal sealed class NexusWindow : Window
                 ImGui.EndDisabled();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(authority.CanApprove
-                    ? "Activates Nexus navigation authority for this session without starting movement."
+                    ? "Activates Nexus navigation authority for this session. No route starts automatically."
                     : authority.Message);
         }
         EndPanel();

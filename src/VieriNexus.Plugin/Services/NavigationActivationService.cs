@@ -5,7 +5,7 @@ namespace VieriNexus.Services;
 
 internal sealed class NavigationActivationService(
     DependencyService dependencies,
-    NavigationMigrationService migration,
+    NavigationLibraryService library,
     ResourceLeaseManager leases,
     NavigationStopCoordinator stop,
     ManualMovementSafetyService manualMovement,
@@ -29,7 +29,7 @@ internal sealed class NavigationActivationService(
              lease.Resources.Contains(ResourceKind.Movement)));
 
         return NavigationActivationPolicy.Evaluate(new NavigationActivationInputs(
-            migration.StagedSnapshot is not null,
+            library.HasWorkingLibrary,
             source.IsInstalled,
             source.IsLoaded,
             dependencies.RequiredReady,

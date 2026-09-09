@@ -15,14 +15,14 @@ internal sealed class NexusIpcProvider : IDisposable
     private readonly ICallGateProvider<string, string?> navigationGetProvider;
     private readonly ICallGateProvider<NavigationActivationStatusDto> navigationActivationProvider;
     private readonly DependencyService dependencies;
-    private readonly NavigationMigrationService navigation;
+    private readonly NavigationLibraryService navigation;
     private readonly NavigationActivationService navigationActivation;
     private readonly WorldStateStore world;
 
     internal NexusIpcProvider(
         IDalamudPluginInterface pluginInterface,
         DependencyService dependencies,
-        NavigationMigrationService navigation,
+        NavigationLibraryService navigation,
         NavigationActivationService navigationActivation,
         WorldStateStore world)
     {
@@ -75,26 +75,28 @@ internal sealed class NexusIpcProvider : IDisposable
 
     private NavigationLibraryStatusDto GetNavigationStatus()
     {
-        NavigationLibrarySnapshot? snapshot = navigation.StagedSnapshot;
+        NavigationLibrarySnapshot? snapshot = navigation.Current;
         NavigationActivationAssessment activation = navigationActivation.Assess();
         return new NavigationLibraryStatusDto(
             NexusIpc.CurrentVersion,
             snapshot is not null,
-            false,
+            activation.State == NavigationActivationState.Active,
             activation.IsSourcePluginAuthoritative,
             snapshot?.Routes.Count ?? 0,
             snapshot?.Routes.Count(route => route.OverrideEnabled) ?? 0,
-            snapshot is null ? "NotStaged" : "ReadOnlyStaged",
+            snapshot is null ? "NotStaged" : navigation.HasWorkingLibrary ? "NexusWorkingLibrary" : "ReadOnlyStaged",
             snapshot is null
                 ? "No verified staged route library is available."
-                : activation.IsSourcePluginAuthoritative
+                : navigation.HasWorkingLibrary
+                    ? "The Nexus working route library is available."
+                    : activation.IsSourcePluginAuthoritative
                     ? "Verified staged route data is available read-only; VieriNavPlotter remains authoritative."
                     : "Verified staged route data is available read-only; Nexus navigation execution is disabled.");
     }
 
     private string ListNavigationRoutes()
     {
-        NavigationLibrarySnapshot? snapshot = navigation.StagedSnapshot;
+        NavigationLibrarySnapshot? snapshot = navigation.Current;
         if (snapshot is null)
             return "[]";
 
@@ -105,7 +107,7 @@ internal sealed class NexusIpcProvider : IDisposable
 
     private string? GetNavigationRoute(string nameOrId)
     {
-        NavigationLibrarySnapshot? snapshot = navigation.StagedSnapshot;
+        NavigationLibrarySnapshot? snapshot = navigation.Current;
         NavigationRouteSnapshot? route = snapshot is null
             ? null
             : NavigationLibraryQuery.Find(snapshot, nameOrId);

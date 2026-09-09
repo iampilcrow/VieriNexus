@@ -108,6 +108,24 @@ public sealed class NavigationStopCoordinatorTests
         second!.Dispose();
     }
 
+    [Fact]
+    public void NaturalCompletionReleasesWithoutSendingGlobalStop()
+    {
+        var leases = new ResourceLeaseManager();
+        ResourceLeaseHandle lease = AcquireNavigation(leases);
+        var provider = new FakeProvider { MovementActive = false };
+        var coordinator = Coordinator(provider);
+        coordinator.TrackExecution(lease);
+
+        NavigationStopResult result = coordinator.ConfirmInactiveAndRelease();
+
+        Assert.True(result.IsStopConfirmed);
+        Assert.True(result.NavigationLeaseReleased);
+        Assert.False(result.ProviderStopRequested);
+        Assert.Equal(0, provider.StopRequests);
+        Assert.Empty(leases.Snapshot());
+    }
+
     private static NavigationStopCoordinator Coordinator(FakeProvider provider) =>
         new(provider, TimeSpan.FromMinutes(1));
 

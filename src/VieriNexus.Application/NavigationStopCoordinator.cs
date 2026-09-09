@@ -172,6 +172,94 @@ public sealed class NavigationStopCoordinator
         }
     }
 
+    /// <summary>
+    /// Releases a naturally completed execution only after observing the shared provider as
+    /// inactive. It does not send Stop, avoiding a race that could interrupt a new provider
+    /// which starts after Nexus completes.
+    /// </summary>
+    public NavigationStopResult ConfirmInactiveAndRelease()
+    {
+        lock (sync)
+        {
+            if (activeLease is null)
+            {
+                return Result(
+                    NavigationStopState.AlreadyStopped,
+                    confirmed: true,
+                    requested: false,
+                    movementActive: null,
+                    retained: false,
+                    released: false,
+                    "already-stopped",
+                    "No Nexus navigation execution is active.");
+            }
+            if (!IsProviderAvailable)
+            {
+                return RetainOrReportOwnershipLoss(
+                    NavigationStopState.ProviderUnavailable,
+                    requested: false,
+                    movementActive: null,
+                    "completion-provider-unavailable",
+                    "Movement inactivity cannot be confirmed while the provider is unavailable.");
+            }
+
+            bool? movementActive;
+            try
+            {
+                movementActive = provider.IsMovementActive();
+            }
+            catch
+            {
+                movementActive = null;
+            }
+            if (movementActive is false)
+            {
+                activeLease.Dispose();
+                activeLease = null;
+                return Result(
+                    NavigationStopState.Stopped,
+                    confirmed: true,
+                    requested: false,
+                    movementActive: false,
+                    retained: false,
+                    released: true,
+                    "completion-inactive-confirmed",
+                    "Movement is inactive and Nexus navigation ownership was released without sending Stop.");
+            }
+
+            return movementActive is true
+                ? RetainOrReportOwnershipLoss(
+                    NavigationStopState.StillMoving,
+                    requested: false,
+                    movementActive: true,
+                    "completion-still-moving",
+                    "Movement remains active; Nexus retains ownership.")
+                : RetainOrReportOwnershipLoss(
+                    NavigationStopState.ConfirmationUnavailable,
+                    requested: false,
+                    movementActive: null,
+                    "completion-unconfirmed",
+                    "Movement inactivity could not be confirmed; Nexus retains ownership.");
+        }
+    }
+
+    /// <summary>
+    /// Releases only Nexus's internal lease after an independent caller has proven that the
+    /// shared provider path is no longer Nexus-owned. This deliberately does not call Stop,
+    /// because doing so could interrupt the provider that replaced Nexus.
+    /// </summary>
+    public bool ReleaseOwnershipWithoutProviderStop()
+    {
+        lock (sync)
+        {
+            if (activeLease is null)
+                return false;
+            activeLease.Dispose();
+            activeLease = null;
+            return true;
+        }
+    }
+
     private NavigationStopResult RetainOrReportOwnershipLoss(
         NavigationStopState state,
         bool requested,
