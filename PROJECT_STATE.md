@@ -2,7 +2,7 @@
 
 Recovery snapshot: 2026-09-08 (America/New_York)  
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.15`
+Current product version: `0.1.0.16`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -23,7 +23,7 @@ The repository is authoritative for what exists today. The recovered conversatio
 
 `VieriNexus` is the permanent product and Dalamud internal name for the planned unified Vieri FFXIV suite. It is intended to replace the separately installed Vieri plugins with one coherent, modular Dalamud package. It is not intended to be a launcher for separate plugins, a collection of embedded predecessor windows, or one giant controller.
 
-The current production release is an early migration foundation, while 0.1.0.15 is the first working module-capability candidate. It can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, explicitly creates a separate Nexus-owned working library, authors personal routes from live positions, draws static previews, and can perform guarded same-zone travel/playback after manual source unload and explicit session authority. It does not yet replace VieriNavPlotter completely or enable other gameplay modules.
+The current production release is an early migration foundation, while 0.1.0.15 established the first accepted working module capability and 0.1.0.16 expands it into everyday personal-route authoring parity. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, explicitly creates a separate Nexus-owned working library, manually or automatically records personal routes from live positions, performs detailed point editing and safe route exchange, draws static previews, and can perform guarded same-zone travel/playback after manual source unload and explicit session authority. It does not yet replace VieriNavPlotter completely or enable other gameplay modules.
 
 ### Product vision
 
@@ -107,9 +107,9 @@ VieriNexus.Contracts    (no project references)
 - `VieriNexus.Plugin` is the current Dalamud entry point and composition root. It also contains game-state observers, dependency/legacy discovery, migration orchestration, IPC registration, and all ImGui UI code.
 - `VieriNexus.Application.Tests` tests pure application/domain behavior.
 
-At startup, `Plugin.Plugin()` loads `Configuration`, creates `DependencyService`, `LegacyConfigurationInventory`, `NavigationMigrationService`, the neutral built-in `ModuleRegistry`, `WorldStateStore`, `WorldSnapshotObserver`, `NexusWindow`, and `NexusIpcProvider`; registers `/vierinexus` and `/nexus`; and attaches Dalamud UI callbacks.
+At startup, `Plugin.Plugin()` loads `Configuration`, creates `DependencyService`, `LegacyConfigurationInventory`, `NavigationMigrationService`, the Nexus working-library, recording, preview, guarded execution, authority, recovery, diagnostics, neutral built-in `ModuleRegistry`, `WorldStateStore`, `WorldSnapshotObserver`, `NexusWindow`, and `NexusIpcProvider`; registers `/vierinexus` and `/nexus`; and attaches Dalamud UI callbacks.
 
-On each draw callback, `WorldSnapshotObserver.Update(...)` publishes at most every 250 ms. `GameplayReadyGate.Evaluate(...)` prevents the window system from drawing until the player is logged in, targetable, has a territory, is not between areas, and has remained eligible for 900 ms. The main window then renders navigation and the selected page. No planner or gameplay executor runs.
+On each draw callback, `WorldSnapshotObserver.Update(...)` publishes at most every 250 ms. Navigation safety, authority, guarded execution, recording capture, recovery, and diagnostics update even while the Nexus window is closed. `GameplayReadyGate.Evaluate(...)` prevents the window system from drawing until the player is logged in, targetable, has a territory, is not between areas, and has remained eligible for 900 ms. The main window then renders navigation and the selected page.
 
 ### Planned end-state architecture
 
@@ -131,7 +131,7 @@ Cross-module work communicates through desired-state requirements, capabilities,
 
 ### Current-versus-target warning
 
-Several target concepts already have types or tests but are not live subsystems. In particular, `NexusGoal`, `NexusTask`, `ResourceLeaseManager`, `SoloDutyCombatPolicy`, and `NexusCommandDto` are foundation contracts/primitives. The plugin instantiates `ResourceLeaseManager` for navigation-conflict assessment and every-draw expiry observation, but no live executor calls a movement provider. It now instantiates a navigation-only reload/watchdog safety reconciler plus a bounded session transition audit; it does not yet instantiate the general planner, scheduler, executor, command gateway, durable general audit log, or SQLite store, and it does not register the declared command IPC endpoint.
+Several target concepts already have types or tests but are not general live subsystems. In particular, `NexusGoal`, `NexusTask`, `SoloDutyCombatPolicy`, and `NexusCommandDto` remain foundation contracts/primitives. The plugin now instantiates `ResourceLeaseManager`, a navigation-only planner/recorder/executor, reload/watchdog reconciler, and bounded session transition audit. It does not yet instantiate the general goal planner, scheduler, cross-module executor, command gateway, durable general audit log, or SQLite store, and it does not register the declared command IPC endpoint.
 
 ## 3. Repository Map
 
@@ -170,6 +170,8 @@ Several target concepts already have types or tests but are not live subsystems.
 - `NavigationRecoveryCoordinator.cs` — combines durable stopped-intent and manual-yield latches into one explicit acknowledgement gate that requires confirmed Stop, released ownership, and elapsed input quiet period; it cannot resume movement.
 - `NavigationLibraryStore.cs` — atomic Nexus-owned working-library persistence, validation, and previous-file recovery copy, deliberately separate from immutable migration staging.
 - `NavigationRoutePlanner.cs` — side-effect-free Review, Travel to Start, and Playback planning with ordered points, distance, validation, and territory gating.
+- `NavigationRouteRecordingCoordinator.cs` — non-moving timed-capture state machine with cadence, spacing, territory, and route-availability guards.
+- `NavigationRouteClipboardCodec.cs` — bounded versioned route exchange plus compatible legacy NavPlotter JSON ingestion with regenerated identity and disabled automation assignment.
 - `NavigationRouteExecutionCoordinator.cs` — guarded same-zone movement entry, lease heartbeat, natural completion, explicit Stop/manual interruption handling, and shared-provider destination ownership yielding.
 - `WorldStateStore.cs` — current immutable snapshot reference plus change event and monotonic revision check.
 - `SoloDutyCombatPolicy.cs` — preserved provider-neutral policy for the VieriCodex 1.12.2.74–76 targeting incident.
@@ -185,7 +187,7 @@ Several target concepts already have types or tests but are not live subsystems.
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — global presentation/setup settings, character-scoped safety settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.15`, assembly/internal root `VieriNexus`.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.16`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -202,6 +204,7 @@ Several target concepts already have types or tests but are not live subsystems.
 - `Services/NavigationLibraryService.cs` — promotes verified staging into a separate working file and provides atomic route creation/edit/save/delete operations without touching the predecessor or receipt.
 - `Services/NavigationRoutePreviewService.cs` — persistent current-territory world drawing for explicitly selected Nexus route plans.
 - `Services/NavigationRouteRuntimeService.cs` — plugin-facing planning, preview, guarded execution, Stop, and per-frame runtime composition.
+- `Services/NavigationRouteRecordingService.cs` — live position observation and atomic capture persistence around the provider-neutral recording coordinator.
 - `Services/NexusIpcProvider.cs` — registered read-only status, dependency, and Nexus-namespaced navigation IPC.
 - `Services/WorldSnapshotObserver.cs` — throttled Dalamud client/player/object/condition observation plus the current read-only provider-health snapshot.
 - `UI/NexusWindow.cs` — entire current shell and pages.
@@ -209,7 +212,7 @@ Several target concepts already have types or tests but are not live subsystems.
 
 ### `tests/VieriNexus.Application.Tests`
 
-There are 96 `[Fact]` tests across:
+There are 109 `[Fact]` tests across:
 
 - `DependencyCatalogTests.cs`
 - `NavigationRouteMigrationImporterTests.cs`
@@ -225,7 +228,9 @@ There are 96 `[Fact]` tests across:
 - `NavigationLibraryStoreTests.cs`
 - `NavigationRecoveryCoordinatorTests.cs`
 - `NavigationRouteExecutionCoordinatorTests.cs`
+- `NavigationRouteClipboardCodecTests.cs`
 - `NavigationRoutePlannerTests.cs`
+- `NavigationRouteRecordingCoordinatorTests.cs`
 - `NavigationSafetySimulatorTests.cs`
 - `ResourceLeaseManagerTests.cs`
 - `SoloDutyCombatPolicyTests.cs`
@@ -373,7 +378,7 @@ The Migration page has **Create backup and import to staging** and, after a succ
 
 The Migration card sizes both actions from their rendered labels, keeps them on one row only when they fit, wraps long preview/operation/safety text, and scales its panel height with the configured UI scale. Successful zero-route imports explicitly say that settings and zero personal routes were imported, avoiding the false impression that no migration work occurred.
 
-The Routes page preserves the verified staged snapshot recovered from the saved receipt or produced by import as immutable evidence. An explicit action creates a separate Nexus-owned working library in `NexusData/navigation-library.v1.json`; each atomic replacement retains `.previous`. With zero routes, the user can create one at the live character position and add later positions. With routes present the page supports search, selection, editable names/tags/notes/movement settings, add/undo/reverse points, confirmed deletion, ordered-point inspection, persistent current-territory world preview, Travel to Start, ordered Play Route, and Stop. These operations never write the staged file or live VieriNavPlotter source.
+The Routes page preserves the verified staged snapshot recovered from the saved receipt or produced by import as immutable evidence. An explicit action creates a separate Nexus-owned working library in `NexusData/navigation-library.v1.json`; each atomic replacement retains `.previous`. With zero routes, the user can create one at the live character position or import compatible route JSON. With routes present the page supports search and persisted selection; editable names/tags/notes/movement settings; timed observation-only recording with configurable interval and spacing; add/replace/reorder/remove/undo/reverse points; duplicate; bounded Nexus/legacy NavPlotter JSON exchange; confirmed point clearing and route deletion; ordered-point inspection; automatically refreshed current-territory world preview; Travel to Start; ordered Play Route; and Stop. Imports receive a new identity and cannot enable automation assignment. These operations never write the staged file or live VieriNavPlotter source.
 
 `NavigationActivationPolicy` is a pure fail-closed assessment covering verified staging, installed/loaded source ownership, required dependencies, ownership-service connection, Navigation/Movement lease conflict, verified Stop, manual override, reload reconciliation/watchdog readiness, explicit user approval, and current Nexus execution state. `NavigationActivationService` reports Stop ready only while the vnavmesh adapter is loaded, manual yielding ready only while FFXIV input observation is available and the current character protection setting is enabled, and reload readiness only after the durable journal and active watchdog have completed their first safe observation.
 
@@ -385,7 +390,7 @@ The shared-provider ownership rule is non-negotiable: while vnavmesh reports mov
 
 `NavigationRecoveryCoordinator` exposes the previously internal explicit acknowledgement as a conditional Stopped Intent Checkpoint panel. It can clear a durable `AwaitingExplicitResume` record and/or manual-yield latch only when no execution remains tracked, Stop has therefore released Navigation/Movement, and any manual-input quiet period has elapsed. The action persists `Completed` for stopped intent and clears the manual latch; it has no route/provider/resume operation and does not approve Nexus authority. Partial acknowledgement failure remains fail-closed.
 
-Critical limitation: importing does not provide route drawing, route authoring, travel, playback, override resolution, or any navigation ownership. It does not import NavPlotter's built-in vendor catalog because those are compiled/plugin-supplied routes, not personal settings. It does not disable VieriNavPlotter or activate duplicate navigation.
+Critical limitation: migration staging alone provides no authority or active behavior; the user must explicitly create the separate working copy. Built-in vendor templates, cross-zone travel, live generated-waypoint rendering, current-target binding, and override resolution are not yet active because NavPlotter's catalog/provider behavior is compiled rather than personal configuration. Nexus does not disable VieriNavPlotter or activate duplicate navigation.
 
 ### 4.10 Public IPC — PARTIALLY IMPLEMENTED
 
@@ -737,6 +742,8 @@ Version 0.1.0.14 adds the explicit stopped-intent acknowledgement/reset gate and
 
 The user confirmed the 0.1.0.14 isolated simulation passes 6/6. Version 0.1.0.15 then changes cadence from micro safety releases to a working vertical slice. Verified staging remains immutable while an explicitly created Nexus working library becomes editable and recoverable. Manual route construction, metadata/movement editing, world preview, guarded same-zone Travel to Start/Play Route, UI/command Stop, per-frame lease heartbeat, natural completion, and shared-vnavmesh path ownership detection are connected. Another provider replacing the path causes observation-only Nexus yield without a Stop call. All 96 tests and the zero-warning Release build pass. Source commit `f5c6f91`; Daily Pilcrow release commit `2e5957a`; release deployment `dpl_AzHaXQoGRPjHFTcAXXgwxa5TH6z7`; documentation commit `f7dc587`; final production deployment `dpl_gCLKGwZ3T4FzgWVqgvyw834NUEFQ`; live runtime/source archives and Discord workflow `34353177958` are verified.
 
+The user then accepted the complete 0.1.0.15 live flow: creating points, seeing the route, traveling to its start, ordered playback, stopping by button and manual movement, acknowledging the stopped-intent checkpoint, returning authority to staging, and manually re-enabling VieriNavPlotter all worked. No movement auto-resumed. Version 0.1.0.16 is the next larger slice: non-moving timed recording, persisted capture/display preferences, detailed point replacement/reordering/removal, confirmed clear, route duplication, safe versioned clipboard exchange, compatible legacy NavPlotter JSON import, and automatic preview refresh. Recording stops on territory change, unavailable character/route, logout, or unload and never acquires movement authority.
+
 ### Current workstream
 
 The user had said all vendor routes were in a good place and instructed development to continue piecing VieriNexus together while preserving every setting and Discord key. The assistant chose Routes & Navigation as the first safe vertical migration slice and completed staging/rollback.
@@ -745,22 +752,22 @@ The user subsequently confirmed that VieriNexus installs and updates through Dal
 
 The explicit next gate is:
 
-1. **CONFIRMED IN GAME ON 0.1.0.14:** the isolated non-moving safety simulation passed all six scenarios.
-2. Update to 0.1.0.15 and create the separate Nexus working library from the verified zero-route staging snapshot.
-3. Create a route at the current position, add a second point, save metadata/settings, and verify persistent world preview.
-4. Manually unload VieriNavPlotter, approve Nexus navigation authority, test Travel to Start, ordered Play Route, explicit Stop, and manual takeover/no-replay acknowledgement.
-5. During a controlled ownership test, verify another provider replacing the vnavmesh path continues moving without Nexus sending Stop.
-6. After the same-zone vertical slice passes, integrate cross-zone suite travel, timed recording, detailed point editing, built-in vendor templates, live waypoint rendering, import/export, and override resolution as the remainder of NavPlotter parity.
+1. **CONFIRMED IN GAME ON 0.1.0.15:** working-library creation, points, preview, Travel to Start, ordered playback, button Stop, manual takeover, no-replay acknowledgement, return to staging, and manual source re-enable all passed.
+2. Update to 0.1.0.16 and verify timed recording captures movement at the configured cadence without duplicating nearby samples or taking navigation authority.
+3. Verify selecting a point then replacing it with the current position, moving it up/down, and removing it immediately updates the saved route and active preview.
+4. Verify duplicate receives a distinct name and disabled assignment; copy/import receives a new identity and disabled assignment; clear points requires confirmation.
+5. Verify recording stops when changing territory or disabling Nexus and does not resume automatically after reload.
+6. After authoring parity passes, integrate built-in vendor templates, filtered live generated-waypoint rendering, assignment/current-target handling, override resolution, and cross-zone suite travel as the remaining NavPlotter parity.
 
-The import, responsive Migration text, on-disk persistence, direct source-integrity checks, saved-receipt recovery, guarded rollback/re-import, correct Routes-page state transitions, corrected layout, source-owner assessment, all three navigation safety guarantees, disabled approval under loaded-source ownership, and the no-movement session-authority handoff are confirmed. A real non-empty fixture and navigation IPC remain user-side/in-game verification items.
+The import, responsive Migration text, on-disk persistence, direct source-integrity checks, saved-receipt recovery, guarded rollback/re-import, correct Routes-page state transitions, corrected layout, source-owner assessment, all three navigation safety guarantees, disabled approval under loaded-source ownership, session-authority handoff, non-empty manual route authoring/preview/playback, both Stop paths, acknowledgement, and safe return to VieriNavPlotter are confirmed. Navigation IPC and the new 0.1.0.16 authoring controls remain user-side/in-game verification items.
 
 ### Completed versus unfinished
 
-**Completed foundation:** solution layering, shell/Home/dependency/setup UI, basic character/world readiness, neutral module descriptors, domain contracts, tested lease/verified-Stop/manual-yield/reload-watchdog/authority/recovery primitives, live navigation provider health and bounded transition audit, isolated six-scenario non-moving safety simulation, read-only status/dependency/navigation/activation IPC, nine-source read-only discovery, exact source lock, first transactional importer, immutable verified staging, a separate atomic working-library store, provider-neutral route planning, manual route authoring, static world preview, and guarded same-zone execution/yield.
+**Completed foundation:** solution layering, shell/Home/dependency/setup UI, basic character/world readiness, neutral module descriptors, domain contracts, tested lease/verified-Stop/manual-yield/reload-watchdog/authority/recovery primitives, live navigation provider health and bounded transition audit, isolated six-scenario non-moving safety simulation, read-only status/dependency/navigation/activation IPC, nine-source read-only discovery, exact source lock, first transactional importer, immutable verified staging, a separate atomic working-library store, provider-neutral route planning, manual and timed route authoring, detailed point editing and safe route exchange, static world preview, and guarded same-zone execution/yield.
 
 **Partially complete:** world state, dependency health, module contract, IPC surface, configuration migration framework, ownership, solo-duty policy, navigation migration.
 
-**Not implemented:** timed route recording; detailed point replacement/reordering; clipboard import/export; built-in vendor catalog UI; live generated-waypoint overlay; cross-zone AutoDuty suite travel; route override resolution; any action that resumes interrupted movement; durable general audit/history; other eight transactional importers; Communications secret adapter; general planner/scheduler/executor/reconciler; command gateway/event bus; goals UI; SQLite history; diagnostics/support export; legacy IPC aliases; migrated combat/progression/duty/gear/market/communications/command-center/custom-UI runtimes; standalone retirement.
+**Not implemented:** built-in vendor catalog UI; live generated-waypoint overlay; current-target assignment; cross-zone AutoDuty suite travel; route override resolution; any action that resumes interrupted movement; durable general audit/history; other eight transactional importers; Communications secret adapter; general planner/scheduler/executor/reconciler; command gateway/event bus; goals UI; SQLite history; diagnostics/support export; legacy IPC aliases; migrated combat/progression/duty/gear/market/communications/command-center/custom-UI runtimes; standalone retirement.
 
 There is no known external blocker. The old conversation's context window, not the repository, caused the handoff.
 
@@ -976,11 +983,12 @@ Do not execute these as part of recovery. The next normal development thread sho
 3. Optionally exercise the explicit session-only handoff: manually unload VieriNavPlotter, approve Nexus authority, verify that no route starts, return to staging, then manually re-enable VieriNavPlotter.
 4. **CONFIRMED IN GAME ON 0.1.0.13:** provider-health/audit visibility and the isolated simulator passed 5/5 while VieriCodex was moving through a duty, without interrupting movement.
 5. **CONFIRMED IN GAME ON 0.1.0.14:** explicit stopped-intent acknowledgement/reset requires safe conditions, and the isolated simulator including provider-loss/retry passed 6/6.
-6. Validate 0.1.0.15 end to end: create the working copy and a two-point route, preview it, unload VieriNavPlotter manually, approve Nexus, travel/play/Stop, exercise manual takeover, and confirm a replacement provider path is not interrupted.
-7. Complete remaining NavPlotter parity in another substantial slice: cross-zone suite travel, timed recording, detailed point editing, built-in templates, live generated waypoints, import/export, and override resolution.
-8. Continue Phase 0 inventory: freeze every predecessor command, IPC, config field, hotkey, public UI action, and replay-worthy incident. The current source lock is exact but not a complete compatibility matrix.
-9. Then choose the next low-risk importer. Do not choose Communications until encrypted-value tests exist; do not choose Market as an early runtime proof.
-10. For every substantial change, update this file, `IMPLEMENTATION_STATUS.md`, migration/upstream policy, source lock, tests, package metadata, and release documentation consistently.
+6. **CONFIRMED IN GAME ON 0.1.0.15:** create working copy/route/points, preview, guarded travel/playback, button Stop, manual takeover, no-replay acknowledgement, staging return, and VieriNavPlotter re-enable all passed.
+7. Validate 0.1.0.16 timed recording, preference persistence, detailed point editing, confirmation-protected clear, duplicate, compatible clipboard exchange, preview refresh, and automatic recording shutdown.
+8. Complete remaining NavPlotter parity in another substantial slice: cross-zone suite travel, built-in templates, filtered live generated waypoints, current-target binding, and override resolution.
+9. Continue Phase 0 inventory: freeze every predecessor command, IPC, config field, hotkey, public UI action, and replay-worthy incident. The current source lock is exact but not a complete compatibility matrix.
+10. Then choose the next low-risk importer. Do not choose Communications until encrypted-value tests exist; do not choose Market as an early runtime proof.
+11. For every substantial change, update this file, `IMPLEMENTATION_STATUS.md`, migration/upstream policy, source lock, tests, package metadata, and release documentation consistently.
 
 ## 17. New Codex Thread Startup Procedure
 
@@ -1023,7 +1031,7 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - **Current release:** `0.1.0.15`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.15</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.16</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1126,7 +1134,7 @@ The exact archive naming convention, hosted path, and generation command must be
 
 ### 18.6 Version synchronization
 
-Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.15` in:
+Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.16` in:
 
 `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj`
 
@@ -1341,7 +1349,7 @@ Verification evidence for 0.1.0.13: Nexus source commit `b12f2f3` and Daily Pilc
 
 Verification evidence for 0.1.0.14: Nexus source commit `723ef16` and Daily Pilcrow release commit `7a74a9d` are on their respective `main` branches. All 82 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_2wWdfsvANQyPyJh4WavnPqUCzo49` is Ready. Daily Pilcrow documentation commit `1421810` is also pushed and its final production deployment `dpl_3p3i4TWqaX1fZqH1xWgcbLDfGydr` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.14 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `C33EC28759C4EF0FBBA857EB9E2239D0B3F2D561C3E4E028536A71C0AB4FA457` / `C4CB1B7BC85C46EAA2CE37C6F8A66D3F0EAF811781C50F8E62829BEE115884EC`. GitHub Actions Discord run `34348284685` completed successfully. The user confirmed the isolated safety simulator passes 6/6 in game. The conditional stopped-intent checkpoint remains unforced because no route playback is enabled.
 
-Verification evidence for 0.1.0.15: Nexus source commit `f5c6f91` and Daily Pilcrow release commit `2e5957a` are on their respective `main` branches. All 96 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_AzHaXQoGRPjHFTcAXXgwxa5TH6z7` is Ready. Daily Pilcrow documentation commit `f7dc587` is also pushed and its final production deployment `dpl_gCLKGwZ3T4FzgWVqgvyw834NUEFQ` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.15 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `F46FB370C26594B086E954B9BEB4D914C860580DBA6526B61425F8DE42A96216` / `3010FE1FA211698AAE6DF865CF301A46B9619038F831C957D9AEE59523D81AB8`. GitHub Actions Discord run `34353177958` completed successfully. Working-library creation, route authoring/preview, guarded same-zone travel/playback/Stop, manual takeover, no-replay acknowledgement, and non-interrupting shared-provider yield remain pending controlled in-game verification.
+Verification evidence for 0.1.0.15: Nexus source commit `f5c6f91` and Daily Pilcrow release commit `2e5957a` are on their respective `main` branches. All 96 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_AzHaXQoGRPjHFTcAXXgwxa5TH6z7` is Ready. Daily Pilcrow documentation commit `f7dc587` is also pushed and its final production deployment `dpl_gCLKGwZ3T4FzgWVqgvyw834NUEFQ` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.15 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `F46FB370C26594B086E954B9BEB4D914C860580DBA6526B61425F8DE42A96216` / `3010FE1FA211698AAE6DF865CF301A46B9619038F831C957D9AEE59523D81AB8`. GitHub Actions Discord run `34353177958` completed successfully. The user confirmed working-library/point creation, preview, guarded Travel to Start and ordered playback, button Stop, manual takeover, stopped-intent acknowledgement, staging return, and manual VieriNavPlotter re-enable. The shared-provider replacement branch remains locked by automated no-global-Stop regression coverage rather than a forced live conflict test.
 
 ### 18.16 Release report format
 

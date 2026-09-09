@@ -85,4 +85,29 @@ public sealed class NavigationRouteMigrationImporterTests
         Assert.False(preview.CanImport);
         Assert.Contains(preview.Issues, issue => issue.Severity == MigrationIssueSeverity.Error && issue.Message.Contains("duplicated"));
     }
+
+    [Fact]
+    public void PreviewRejectsRouteBeyondPointSafetyLimit()
+    {
+        string json = JsonSerializer.Serialize(new
+        {
+            Version = 1,
+            Routes = new[]
+            {
+                new
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Too large",
+                    TerritoryId = 1,
+                    Points = Enumerable.Range(0, 10_001).Select(index => new { X = index, Y = 0, Z = 0 }),
+                },
+            },
+        });
+
+        NavigationMigrationPreview preview = new NavigationRouteMigrationImporter().Preview(json);
+
+        Assert.False(preview.CanImport);
+        Assert.Contains(preview.Issues,
+            issue => issue.Severity == MigrationIssueSeverity.Error && issue.Message.Contains("10,000-point"));
+    }
 }

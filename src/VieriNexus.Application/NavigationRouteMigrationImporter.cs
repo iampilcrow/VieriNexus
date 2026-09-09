@@ -43,6 +43,8 @@ public sealed class NavigationRouteMigrationImporter
                 issues.Add(new(MigrationIssueSeverity.Warning, $"Route '{route.Name}' has no territory yet; it will remain an editable draft."));
             if (route.Points is null || route.Points.Count == 0)
                 issues.Add(new(MigrationIssueSeverity.Warning, $"Route '{route.Name}' has no points yet; it will remain an editable draft."));
+            if (route.Points is { Count: > 10_000 })
+                issues.Add(new(MigrationIssueSeverity.Error, $"Route '{route.Name}' exceeds the 10,000-point safety limit."));
             if (!float.IsFinite(route.Tolerance) || !float.IsFinite(route.LastPointTolerance))
                 issues.Add(new(MigrationIssueSeverity.Error, $"Route '{route.Name}' contains a non-finite arrival tolerance."));
 

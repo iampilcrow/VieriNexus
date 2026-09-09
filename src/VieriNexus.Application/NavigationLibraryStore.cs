@@ -69,15 +69,23 @@ public sealed class FileNavigationLibraryStore(string path) : INavigationLibrary
     {
         if (snapshot.SchemaVersion != 1)
             throw new InvalidDataException($"Unsupported Nexus route-library schema {snapshot.SchemaVersion}.");
+        if (!float.IsFinite(snapshot.RecordingIntervalSeconds))
+            throw new InvalidDataException("The Nexus route-library capture interval is invalid.");
+        if (!float.IsFinite(snapshot.MinimumPointDistance))
+            throw new InvalidDataException("The Nexus route-library point spacing is invalid.");
         if (snapshot.Routes.Select(route => route.Id).Distinct().Count() != snapshot.Routes.Count)
             throw new InvalidDataException("The Nexus route library contains duplicate route IDs.");
         foreach (NavigationRouteSnapshot route in snapshot.Routes)
         {
             if (route.Id == Guid.Empty)
                 throw new InvalidDataException("A Nexus route has no stable ID.");
+            if (route.Points.Count > 10_000)
+                throw new InvalidDataException($"Route '{route.Name}' exceeds the 10,000-point safety limit.");
             if (route.Points.Any(point =>
                     !float.IsFinite(point.X) || !float.IsFinite(point.Y) || !float.IsFinite(point.Z)))
                 throw new InvalidDataException($"Route '{route.Name}' contains a non-finite coordinate.");
+            if (!float.IsFinite(route.Tolerance) || !float.IsFinite(route.LastPointTolerance))
+                throw new InvalidDataException($"Route '{route.Name}' contains an invalid tolerance.");
         }
     }
 }

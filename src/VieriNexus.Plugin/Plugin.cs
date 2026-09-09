@@ -110,6 +110,9 @@ public sealed class Plugin : IDalamudPlugin
             navigationExecutionSafety,
             navigationAuthority);
         var navigationPreview = new NavigationRoutePreviewService(ClientState, GameGui);
+        var navigationRecording = new NavigationRouteRecordingService(
+            navigationLibrary,
+            new NavigationRouteRecordingCoordinator());
         var navigationExecution = new NavigationRouteExecutionCoordinator(
             navigationAuthority,
             navigationExecutionSafety,
@@ -118,7 +121,11 @@ public sealed class Plugin : IDalamudPlugin
                   worldStore.Current.Character.Value is { Key.IsKnown: true } character &&
                   Configuration.ForCharacter(character.Key.ToString()).AllowAutomation,
             () => ClientState.TerritoryType);
-        navigationRuntime = new NavigationRouteRuntimeService(navigationExecution, navigationPreview);
+        navigationRuntime = new NavigationRouteRuntimeService(
+            navigationExecution,
+            navigationPreview,
+            navigationRecording,
+            navigationLibrary);
         navigationDiagnostics = new NavigationDiagnosticsService(
             dependencyService,
             resourceLeases,
@@ -161,6 +168,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        navigationRuntime.StopRecording("Recording stopped because Nexus is unloading.");
         navigationAuthority.ReturnToStaging(DateTimeOffset.UtcNow);
         navigationExecutionSafety.Shutdown(DateTimeOffset.UtcNow);
         PluginInterface.UiBuilder.Draw -= Draw;
@@ -182,12 +190,14 @@ public sealed class Plugin : IDalamudPlugin
         navigationExecutionSafety.Update(DateTimeOffset.UtcNow);
         manualMovementSafety.Update(now);
         navigationAuthority.Update();
-        navigationRuntime.Update();
+        navigationRuntime.Update(now);
         navigationRecovery.Update(now);
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
 
         if (!ClientState.IsLoggedIn)
         {
+            if (navigationRuntime.RecordingStatus.IsRecording)
+                navigationRuntime.StopRecording("Recording stopped because the character logged out.");
             sessionInitialized = false;
             return;
         }

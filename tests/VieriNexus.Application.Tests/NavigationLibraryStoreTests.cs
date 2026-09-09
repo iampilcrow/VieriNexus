@@ -47,6 +47,30 @@ public sealed class NavigationLibraryStoreTests : IDisposable
         Assert.False(File.Exists(path));
     }
 
+    [Fact]
+    public void InvalidRecordingPreferencesAreRejectedBeforeWrite()
+    {
+        string path = Path.Combine(root, "navigation-library.v1.json");
+        var store = new FileNavigationLibraryStore(path);
+        NavigationLibrarySnapshot invalid = Snapshot("Invalid") with { RecordingIntervalSeconds = float.NaN };
+
+        Assert.Throws<InvalidDataException>(() => store.Save(invalid));
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void NonFiniteRouteToleranceIsRejectedBeforeWrite()
+    {
+        string path = Path.Combine(root, "navigation-library.v1.json");
+        var store = new FileNavigationLibraryStore(path);
+        NavigationLibrarySnapshot source = Snapshot("Invalid");
+        NavigationRouteSnapshot invalidRoute = source.Routes[0] with { Tolerance = float.PositiveInfinity };
+        NavigationLibrarySnapshot invalid = source with { Routes = [invalidRoute] };
+
+        Assert.Throws<InvalidDataException>(() => store.Save(invalid));
+        Assert.False(File.Exists(path));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(root))
