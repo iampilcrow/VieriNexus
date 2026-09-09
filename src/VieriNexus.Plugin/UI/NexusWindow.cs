@@ -525,6 +525,7 @@ internal sealed class NexusWindow : Window
     private void DrawNavigationActivationSafety()
     {
         NavigationActivationAssessment assessment = navigationActivation.Assess();
+        NavigationAuthorityStatus authority = navigationActivation.AuthorityStatus;
         NavigationActivationBlocker[] displayedBlockers = assessment.Blockers
             .Where(blocker => blocker.Code != "source-plugin-loaded")
             .ToArray();
@@ -532,11 +533,13 @@ internal sealed class NexusWindow : Window
                              (assessment.IsManualOverrideAvailable ? 1 : 0) +
                              (assessment.IsReloadReconciliationAvailable ? 1 : 0);
         float height = MathF.Ceiling(
-            (ImGui.GetTextLineHeightWithSpacing() * ((displayedBlockers.Length * 2f) + 4f + (readinessLines * 2f))) +
+            (ImGui.GetTextLineHeightWithSpacing() * ((displayedBlockers.Length * 2f) + 9f + (readinessLines * 2f))) +
             (ImGui.GetStyle().WindowPadding.Y * 2f) + 12f);
         BeginPanel("ACTIVATION SAFETY", height);
-        NexusTheme.StatusDot(assessment.CanActivate ? NexusTheme.Green : NexusTheme.Amber,
-            assessment.CanActivate ? "Ready for explicit activation" : "Staging only — execution blocked");
+        NexusTheme.StatusDot(authority.IsActive ? NexusTheme.Green : NexusTheme.Amber,
+            authority.IsActive
+                ? "Nexus ownership active — route execution still disabled"
+                : "Staging only — execution blocked");
         TextWrapped(NexusTheme.Muted,
             "Nexus will not draw, travel, or play routes until every safety gate passes.");
         string sourceState = assessment.IsSourcePluginLoaded
@@ -556,6 +559,30 @@ internal sealed class NexusWindow : Window
                 "• Reload recovery and the lease watchdog are connected; stale movement intent is stopped, never replayed.");
         foreach (NavigationActivationBlocker blocker in displayedBlockers)
             TextWrapped(NexusTheme.Muted, $"• {blocker.Message}");
+
+        ImGui.Spacing();
+        TextWrapped(authority.IsActive ? NexusTheme.Green : NexusTheme.Muted, authority.Message);
+        if (authority.IsActive)
+        {
+            if (ImGui.Button("Return Nexus navigation to staging", new Vector2(-1, 0)))
+                navigationActivation.ReturnAuthorityToStaging();
+        }
+        else
+        {
+            if (!authority.CanApprove)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Approve Nexus navigation ownership (no playback)", new Vector2(-1, 0)) &&
+                authority.CanApprove)
+            {
+                navigationActivation.ApproveAuthority();
+            }
+            if (!authority.CanApprove)
+                ImGui.EndDisabled();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(authority.CanApprove
+                    ? "Activates Nexus navigation authority for this session without starting movement."
+                    : authority.Message);
+        }
         EndPanel();
     }
 

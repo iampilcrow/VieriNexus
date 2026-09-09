@@ -9,14 +9,24 @@ internal sealed class NavigationActivationService(
     ResourceLeaseManager leases,
     NavigationStopCoordinator stop,
     ManualMovementSafetyService manualMovement,
-    NavigationExecutionSafetyCoordinator executionSafety)
+    NavigationExecutionSafetyCoordinator executionSafety,
+    NavigationAuthorityCoordinator authority)
 {
+    internal NavigationAuthorityStatus AuthorityStatus => authority.Status;
+
+    internal NavigationAuthorityStatus ApproveAuthority() => authority.Approve();
+
+    internal NavigationAuthorityStatus ReturnAuthorityToStaging() =>
+        authority.ReturnToStaging(DateTimeOffset.UtcNow);
+
     internal NavigationActivationAssessment Assess()
     {
         PluginPresence source = dependencies.FindPlugin("VieriNavPlotter");
+        Guid? trackedLeaseId = executionSafety.TrackedLeaseId;
         bool leaseConflict = leases.Snapshot().Any(lease =>
-            lease.Resources.Contains(ResourceKind.Navigation) ||
-            lease.Resources.Contains(ResourceKind.Movement));
+            lease.LeaseId != trackedLeaseId &&
+            (lease.Resources.Contains(ResourceKind.Navigation) ||
+             lease.Resources.Contains(ResourceKind.Movement)));
 
         return NavigationActivationPolicy.Evaluate(new NavigationActivationInputs(
             migration.StagedSnapshot is not null,
@@ -28,7 +38,7 @@ internal sealed class NavigationActivationService(
             StopAvailable: stop.IsProviderAvailable,
             ManualOverrideAvailable: manualMovement.IsReadyForActivation,
             ReloadReconciliationAvailable: executionSafety.IsReadyForActivation,
-            ExplicitActivationApproved: false,
-            NexusExecutionEnabled: false));
+            ExplicitActivationApproved: authority.IsActive,
+            NexusExecutionEnabled: trackedLeaseId is not null));
     }
 }

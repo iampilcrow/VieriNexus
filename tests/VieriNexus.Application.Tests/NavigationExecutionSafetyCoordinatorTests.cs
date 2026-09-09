@@ -186,6 +186,24 @@ public sealed class NavigationExecutionSafetyCoordinatorTests
         Assert.Equal(1, setup.Provider.StopRequests);
     }
 
+    [Fact]
+    public void ExternalVerifiedStopBecomesANoReplayCheckpointOnNextObservation()
+    {
+        var setup = Setup();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Assert.True(setup.Leases.TryAcquire(
+            Owner(), [ResourceKind.Navigation], TimeSpan.FromMinutes(1), out var lease, out _));
+        setup.Safety.Update(now);
+        setup.Safety.BeginExecution(Guid.NewGuid(), lease!, now);
+
+        Assert.True(setup.Stop.Stop().IsStopConfirmed);
+        NavigationExecutionSafetyStatus status = setup.Safety.Update(now.AddSeconds(1));
+
+        Assert.Equal(NavigationExecutionSafetyState.AwaitingExplicitResume, status.State);
+        Assert.False(status.IsReadyForActivation);
+        Assert.Equal(NavigationExecutionIntentState.AwaitingExplicitResume, setup.Store.Current!.State);
+    }
+
     private static SetupState Setup(NavigationExecutionIntent? intent = null)
     {
         var leases = new ResourceLeaseManager();
@@ -193,7 +211,7 @@ public sealed class NavigationExecutionSafetyCoordinatorTests
         var stop = new NavigationStopCoordinator(provider, TimeSpan.FromMinutes(1));
         var store = new FakeStore { Current = intent };
         var safety = new NavigationExecutionSafetyCoordinator(leases, stop, provider, store);
-        return new SetupState(leases, provider, store, safety);
+        return new SetupState(leases, provider, stop, store, safety);
     }
 
     private static NavigationExecutionIntent Intent(NavigationExecutionIntentState state) => new(
@@ -210,6 +228,7 @@ public sealed class NavigationExecutionSafetyCoordinatorTests
     private sealed record SetupState(
         ResourceLeaseManager Leases,
         FakeProvider Provider,
+        NavigationStopCoordinator Stop,
         FakeStore Store,
         NavigationExecutionSafetyCoordinator Safety);
 

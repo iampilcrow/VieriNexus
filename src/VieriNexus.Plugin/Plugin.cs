@@ -35,6 +35,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WorldSnapshotObserver worldObserver;
     private readonly ManualMovementSafetyService manualMovementSafety;
     private readonly NavigationExecutionSafetyCoordinator navigationExecutionSafety;
+    private readonly NavigationAuthorityCoordinator navigationAuthority;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -71,13 +72,29 @@ public sealed class Plugin : IDalamudPlugin
             worldStore,
             manualMovementInput,
             manualMovement);
+        navigationAuthority = new NavigationAuthorityCoordinator(
+            resourceLeases,
+            navigationStop,
+            navigationExecutionSafety,
+            () =>
+            {
+                PluginPresence source = dependencyService.FindPlugin("VieriNavPlotter");
+                return new NavigationAuthorityPrerequisites(
+                    navigationMigration.StagedSnapshot is not null,
+                    source.IsLoaded,
+                    dependencyService.RequiredReady,
+                    navigationStop.IsProviderAvailable,
+                    manualMovementSafety.IsReadyForActivation,
+                    navigationExecutionSafety.IsReadyForActivation);
+            });
         var navigationActivation = new NavigationActivationService(
             dependencyService,
             navigationMigration,
             resourceLeases,
             navigationStop,
             manualMovementSafety,
-            navigationExecutionSafety);
+            navigationExecutionSafety,
+            navigationAuthority);
         worldObserver = new WorldSnapshotObserver(ClientState, PlayerState, ObjectTable, Condition, worldStore);
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
@@ -102,6 +119,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        navigationAuthority.ReturnToStaging(DateTimeOffset.UtcNow);
         navigationExecutionSafety.Shutdown(DateTimeOffset.UtcNow);
         PluginInterface.UiBuilder.Draw -= Draw;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
@@ -121,6 +139,7 @@ public sealed class Plugin : IDalamudPlugin
         worldObserver.Update(now);
         navigationExecutionSafety.Update(DateTimeOffset.UtcNow);
         manualMovementSafety.Update(now);
+        navigationAuthority.Update();
 
         if (!ClientState.IsLoggedIn)
         {

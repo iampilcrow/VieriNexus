@@ -67,6 +67,15 @@ public sealed class NavigationExecutionSafetyCoordinator
 
     public bool IsReadyForActivation => Status.IsReadyForActivation;
 
+    public Guid? TrackedLeaseId
+    {
+        get
+        {
+            lock (sync)
+                return currentProcessExecution ? intent?.LeaseId : null;
+        }
+    }
+
     public NavigationExecutionSafetyStatus Update(DateTimeOffset now)
     {
         lock (sync)
@@ -85,6 +94,16 @@ public sealed class NavigationExecutionSafetyCoordinator
             ResourceLeaseSnapshot? expiredNavigation = expired.FirstOrDefault(IsTrackedNavigationLease);
             if (expiredNavigation is not null)
                 return StopExpiredLease(expiredNavigation, now);
+
+            if (currentProcessExecution && intent is not null && !stop.HasTrackedExecution)
+            {
+                currentProcessExecution = false;
+                if (!TrySaveState(NavigationExecutionIntentState.AwaitingExplicitResume, now))
+                    return status;
+                status = AwaitingResume("execution-stopped-externally",
+                    "Tracked navigation stopped outside the execution reconciler; automatic restart is blocked until explicit acknowledgement.");
+                return status;
+            }
 
             if (!currentProcessExecution && intent?.State is
                 NavigationExecutionIntentState.Running or NavigationExecutionIntentState.StopPending)
@@ -194,6 +213,7 @@ public sealed class NavigationExecutionSafetyCoordinator
             }
             else
             {
+                currentProcessExecution = false;
                 status = Recovering("shutdown-stop-unconfirmed",
                     "Plugin shutdown requested Stop, but inactivity is not yet confirmed; reload recovery remains armed.");
             }
