@@ -455,6 +455,11 @@ internal sealed class NexusWindow : Window
 
         ImGui.SetNextItemWidth(Math.Min(420f, ImGui.GetContentRegionAvail().X));
         ImGui.InputTextWithHint("###RouteSearch", "Search name, tags, notes, target, or territory", ref routeSearch, 256);
+        if (navigationLibrary.HasWorkingLibrary &&
+            ImGui.Button("Create route at current position", new Vector2(ButtonWidth("Create route at current position"), 0)))
+        {
+            CreateRouteAtCurrentPosition();
+        }
         NavigationRouteRecordingStatus recordingStatus = navigationRuntime.RecordingStatus;
         if (recordingStatus.IsRecording)
         {

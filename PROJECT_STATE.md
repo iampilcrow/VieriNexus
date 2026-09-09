@@ -2,7 +2,7 @@
 
 Recovery snapshot: 2026-09-08 (America/New_York)  
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.20`
+Current product version: `0.1.0.21`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -23,7 +23,7 @@ The repository is authoritative for what exists today. The recovered conversatio
 
 `VieriNexus` is the permanent product and Dalamud internal name for the planned unified Vieri FFXIV suite. It is intended to replace the separately installed Vieri plugins with one coherent, modular Dalamud package. It is not intended to be a launcher for separate plugins, a collection of embedded predecessor windows, or one giant controller.
 
-The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, explicitly creates a separate Nexus-owned working library, records and edits personal routes, previews saved and generated paths, and performs guarded local or delegated cross-zone travel after manual source unload and explicit session authority. Version 0.1.0.20 also captures exact route targets without implicit approval and lets VieriAutoDuty consume an enabled Nexus vendor override through a fail-closed versioned contract with transition fallbacks. It does not yet replace VieriNavPlotter completely or enable other gameplay modules.
+The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, explicitly creates a separate Nexus-owned working library, records and edits personal routes, previews saved and generated paths, and performs guarded local or delegated cross-zone travel after manual source unload and explicit session authority. Version 0.1.0.20 also captures exact route targets without implicit approval and lets VieriAutoDuty consume an enabled Nexus vendor override through a fail-closed versioned contract with transition fallbacks. Version 0.1.0.21 keeps fresh-route creation visible after the first route exists. It does not yet replace VieriNavPlotter completely or enable other gameplay modules.
 
 ### Product vision
 
@@ -192,7 +192,7 @@ Several target concepts already have types or tests but are not general live sub
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — global presentation/setup settings, character-scoped safety settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.20`, assembly/internal root `VieriNexus`.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.21`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -249,7 +249,7 @@ There are 133 automated tests across:
 - `TransactionalMigrationStoreTests.cs`
 - `WorldStateStoreTests.cs`
 
-The 0.1.0.20 source passes all 133 tests plus a zero-warning full plugin build.
+The 0.1.0.21 source passes all 133 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -684,7 +684,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project and live-feed version: `0.1.0.20`, Dalamud API 15.
+- Plugin project version: `0.1.0.21`; the currently published live-feed version remains `0.1.0.20` until the corrective release completes. Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -773,6 +773,8 @@ The 2026-09-09 upstream/provider integration audit is complete. VieriCodex 1.12.
 Version 0.1.0.19 is published from source `cf4313c7495dae56a2556ef5362beba65692f482`. All 27 verified VieriAutoDuty gear-vendor standing points are immutable built-in references; adding one creates a new independent working-library route with its override disabled. Enabling an assignment is explicit and atomically disables a competitor for that exact territory/vendor pair. `VieriNexus.Navigation.V1.ResolveGearVendorOverride` exposes only read-only resolution and fails closed for absent, invalid, or ambiguous assignments. The resolver does not start navigation or dispatch Gear/Duties work. All 122 automated tests and the zero-warning Release build pass. Daily Pilcrow release `1f2e4e52c89b31982a934aa231fc263df8aeaacc` is live in production deployment `dpl_fHUdKtsGDeahepUuJRkDk3XbqN6s`; documentation commit `57b2f65218bf13966c047833fead181723cb8ed7` is live in final deployment `dpl_FCtMirNZWUsb1bC481W7aJSsHJhh`. All 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, production build, public HTTP/ZIP/hash checks, and Discord workflow `34397580461` succeeded. Runtime/source SHA-256: `304C545BD904A05A66309CF03A33E005C556BC023500C3DC985B261D1BEAB6F0` / `8BCD52022F3FDCB3FCE8BF20B02300979304DAE70232041BA5F2A8B41B547404`.
 
 Version 0.1.0.20 is published from source `5b908e91fbded0e912a8f1811d2685aa88d55fae` together with VieriAutoDuty 1.0.0.438 from source `cffd9a021fe4fac1b74188d8e96ee19d41ebba43`. Nexus can bind the current in-game target without implicitly enabling an override, render live generated vnavmesh waypoints only for local or delegated travel started by the current Nexus process, and delegate cross-zone route travel through exact capability-checked VieriAutoDuty endpoints. VieriAutoDuty consumes an exact enabled Nexus vendor override only while Nexus owns navigation authority, then retains VieriNavPlotter and built-in fallbacks. Ordinary Questionable, duty, and unrelated vnavmesh activity is never adopted as Nexus route ownership. All 133 Nexus tests, 328 VieriAutoDuty tests, and the zero-warning Nexus Release build pass; the full VieriAutoDuty build succeeds with its known upstream dependency/nullability warnings and no errors. Daily Pilcrow release `ebd0301dcfc556fd9602b50b65ffce8a8074d454` is live in production deployment `dpl_sEFozsqZhLR3Ktej38Jd8xLJ6axa`; documentation commit `90fe7ed` is live in final production deployment `dpl_8wYp7CAXm1VysukNdWNdgDbdLdw6`. All 205 website tests, typecheck, focused validation for both packages, thirteen-entry inventory guard, production build, public HTTP/ZIP/hash checks, and Discord workflow `34404997766` succeeded. VieriAutoDuty runtime/source SHA-256: `2AC0815ECB5308DF11C16FB829C710CB5DD1F1E7F2933CD0D8875437298495FA` / `E3A6176293CF3CE7EEC4EB8A766F4F9AB18C54586AA4E29CB911D11C24620DA3`. Nexus runtime/source SHA-256: `915522F203EB38976B9E8FE1722278ED6C48867389ADE71E7C611ED80E9C4D7D` / `48C639E3F41977D30E50807FB9577EEBEDE5E3142E434261DCA71A79906B110A`.
+
+The first 0.1.0.20 live acceptance attempt exposed a route-creation discoverability defect: `Create route at current position` was rendered only while the working library contained zero routes, so a user with any existing route could not create another fresh route. The underlying creation service remained available and safe. Version 0.1.0.21 renders the same fresh-route action directly below search for every populated working library without changing route storage, movement, assignments, or provider behavior.
 
 The user then accepted the 0.1.0.19 vendor-template persistence gate in game: after copying a vendor template and enabling `Use as gear vendor override`, disabling and re-enabling Nexus preserved that assignment. No automatic movement was reported. Template copying, explicit assignment, and reload persistence are therefore accepted.
 
@@ -1066,8 +1068,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release:** `0.1.0.20`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.20</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current release candidate:** `0.1.0.21`; production remains `0.1.0.20` until publication completes.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.21</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1170,7 +1172,7 @@ The exact archive naming convention, hosted path, and generation command must be
 
 ### 18.6 Version synchronization
 
-Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.20` in:
+Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.21` in:
 
 `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj`
 
