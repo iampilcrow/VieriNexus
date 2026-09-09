@@ -34,6 +34,8 @@ internal sealed class NexusWindow : Window
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
+    private string routeSearch = string.Empty;
+    private Guid? selectedRouteId;
 
     internal NexusWindow(
         Plugin plugin,
@@ -134,6 +136,7 @@ internal sealed class NexusWindow : Window
         {
             case "Home": DrawHome(); break;
             case "Overview": DrawOverview(); break;
+            case "Routes & Navigation": DrawRoutesAndNavigation(); break;
             case "Dependencies": DrawDependencies(); break;
             case "Migration": DrawMigration(); break;
             case "Settings": DrawSettings(); break;
@@ -334,6 +337,177 @@ internal sealed class NexusWindow : Window
         BeginPanel("CREDENTIAL SAFETY");
         ImGui.TextColored(NexusTheme.Green, "Discord credentials and channel identifiers have not been touched.");
         ImGui.TextWrapped("The Communications migration will copy encrypted values transactionally on the same computer, verify them, and retain the original VieriLink configuration as rollback data. Each user imports only their own local configuration.");
+        EndPanel();
+    }
+
+    private void DrawRoutesAndNavigation()
+    {
+        PageHeading("Routes & Navigation", "Review the verified route data staged for Nexus without changing or running it.");
+
+        NavigationLibrarySnapshot? snapshot = navigationMigration.StagedSnapshot;
+        if (snapshot is null)
+        {
+            BeginPanel("READ-ONLY LIBRARY", 180);
+            NexusTheme.StatusDot(NexusTheme.Muted, "No verified staged library");
+            ImGui.TextWrapped("Import VieriNavPlotter on the Migration page before Nexus can show its staged settings and personal routes here.");
+            TextWrapped(NexusTheme.Muted, "VieriNavPlotter remains unchanged and authoritative.");
+            if (ImGui.Button("Open Migration", new Vector2(ButtonWidth("Open Migration"), 0)))
+            {
+                plugin.Configuration.SelectedPage = "Migration";
+                plugin.Save();
+            }
+            EndPanel();
+            return;
+        }
+
+        NexusTheme.StatusDot(NexusTheme.Green, "Verified staged library available");
+        ImGui.SameLine();
+        ImGui.TextDisabled("Read-only • VieriNavPlotter remains authoritative");
+        ImGui.Spacing();
+
+        if (ImGui.BeginTable("###RouteSummary", 3, ImGuiTableFlags.SizingStretchSame))
+        {
+            ImGui.TableNextColumn();
+            StatusCard("PERSONAL ROUTES", snapshot.Routes.Count.ToString(), "Imported into Nexus staging", NexusTheme.Cyan);
+            ImGui.TableNextColumn();
+            int enabledOverrides = snapshot.Routes.Count(route => route.OverrideEnabled);
+            StatusCard("ENABLED OVERRIDES", enabledOverrides.ToString(), "Visible here; not active in Nexus", NexusTheme.Amber);
+            ImGui.TableNextColumn();
+            StatusCard("SOURCE CONFIG", $"Version {snapshot.SourceConfigurationVersion}", "Verified migration snapshot", NexusTheme.Green);
+            ImGui.EndTable();
+        }
+
+        if (snapshot.Routes.Count == 0)
+        {
+            BeginPanel("PERSONAL ROUTES", 150);
+            ImGui.TextUnformatted("No personal routes have been created yet.");
+            ImGui.TextWrapped("Your recording, display, pane, selection, tolerance, and navigation preferences are still present in the verified staged snapshot.");
+            TextWrapped(NexusTheme.Muted, "Create routes in VieriNavPlotter while it remains the active route owner, then import again to refresh staging.");
+            EndPanel();
+            DrawStagedNavigationSettings(snapshot);
+            return;
+        }
+
+        ImGui.SetNextItemWidth(Math.Min(420f, ImGui.GetContentRegionAvail().X));
+        ImGui.InputTextWithHint("###RouteSearch", "Search name, tags, notes, target, or territory", ref routeSearch, 256);
+        IReadOnlyList<NavigationRouteSnapshot> filtered = NavigationLibraryQuery.Filter(snapshot, routeSearch);
+
+        if (!ImGui.BeginTable("###RouteLibrary", 2,
+                ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp))
+            return;
+
+        ImGui.TableSetupColumn("Routes", ImGuiTableColumnFlags.WidthFixed, Math.Clamp(snapshot.LibraryPaneWidth, 240f, 520f));
+        ImGui.TableSetupColumn("Details", ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableNextColumn();
+        if (ImGui.BeginChild("###RouteList", new Vector2(0, 410), true))
+        {
+            if (filtered.Count == 0)
+            {
+                ImGui.TextDisabled("No routes match this search.");
+            }
+            else
+            {
+                bool selectionVisible = selectedRouteId is { } currentId && filtered.Any(route => route.Id == currentId);
+                if (!selectionVisible)
+                {
+                    Guid? importedSelection = snapshot.SelectedRouteId;
+                    selectedRouteId = filtered.FirstOrDefault(route => route.Id == importedSelection)?.Id ?? filtered[0].Id;
+                }
+
+                foreach (NavigationRouteSnapshot route in filtered)
+                {
+                    bool selected = selectedRouteId == route.Id;
+                    if (ImGui.Selectable($"{route.Name}##route-{route.Id:N}", selected))
+                        selectedRouteId = route.Id;
+                    ImGui.TextDisabled($"Territory {route.TerritoryId} • {route.Points.Count} point(s)");
+                    if (route.OverrideEnabled)
+                        ImGui.TextColored(NexusTheme.Amber, "Override enabled in source settings");
+                    ImGui.Spacing();
+                }
+            }
+        }
+        ImGui.EndChild();
+
+        ImGui.TableNextColumn();
+        NavigationRouteSnapshot? selectedRoute = selectedRouteId is { } id
+            ? filtered.FirstOrDefault(route => route.Id == id)
+            : null;
+        DrawRouteDetails(selectedRoute);
+        ImGui.EndTable();
+
+        ImGui.Spacing();
+        DrawStagedNavigationSettings(snapshot);
+    }
+
+    private static void DrawRouteDetails(NavigationRouteSnapshot? route)
+    {
+        if (ImGui.BeginChild("###RouteDetails", new Vector2(0, 410), true))
+        {
+            if (route is null)
+            {
+                ImGui.TextDisabled("Select a route to review its staged details.");
+            }
+            else
+            {
+                ImGui.TextColored(NexusTheme.Gold, route.Name);
+                ImGui.Separator();
+                ImGui.TextUnformatted($"Territory: {route.TerritoryId}");
+                ImGui.TextUnformatted($"Points: {route.Points.Count}");
+                ImGui.TextUnformatted($"Movement: {(route.UseMesh ? "Mesh" : "Direct")} • {(route.UseFlight ? "Flight allowed" : "Ground only")}");
+                ImGui.TextUnformatted($"Tolerance: {route.Tolerance:0.##} • Final point: {route.LastPointTolerance:0.##}");
+                string binding = route.BindingKind == 1 ? "Gear vendor" : "None";
+                ImGui.TextUnformatted($"Binding: {binding}");
+                if (route.TargetDataId != 0 || !string.IsNullOrWhiteSpace(route.TargetLabel))
+                    ImGui.TextUnformatted($"Target: {route.TargetLabel} ({route.TargetDataId})");
+                if (!string.IsNullOrWhiteSpace(route.Tags))
+                    ImGui.TextWrapped($"Tags: {route.Tags}");
+                if (!string.IsNullOrWhiteSpace(route.Notes))
+                    ImGui.TextWrapped($"Notes: {route.Notes}");
+                ImGui.TextDisabled($"Updated {route.UpdatedAtUtc.ToLocalTime():g}");
+
+                ImGui.Spacing();
+                ImGui.BeginDisabled();
+                ImGui.Button("Show route");
+                ImGui.SameLine();
+                ImGui.Button("Travel to start");
+                ImGui.SameLine();
+                ImGui.Button("Play route");
+                ImGui.EndDisabled();
+                TextWrapped(NexusTheme.Muted, "Drawing, travel, and playback stay disabled until the navigation activation and ownership gate is proven.");
+
+                ImGui.Spacing();
+                NexusTheme.SectionTitle("Staged points");
+                if (ImGui.BeginTable("###RoutePoints", 4,
+                        ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchSame))
+                {
+                    ImGui.TableSetupColumn("#");
+                    ImGui.TableSetupColumn("X");
+                    ImGui.TableSetupColumn("Y");
+                    ImGui.TableSetupColumn("Z");
+                    ImGui.TableHeadersRow();
+                    for (int index = 0; index < route.Points.Count; index++)
+                    {
+                        NavigationRoutePoint point = route.Points[index];
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn(); ImGui.TextUnformatted((index + 1).ToString());
+                        ImGui.TableNextColumn(); ImGui.TextUnformatted($"{point.X:0.###}");
+                        ImGui.TableNextColumn(); ImGui.TextUnformatted($"{point.Y:0.###}");
+                        ImGui.TableNextColumn(); ImGui.TextUnformatted($"{point.Z:0.###}");
+                    }
+                    ImGui.EndTable();
+                }
+            }
+        }
+        ImGui.EndChild();
+    }
+
+    private static void DrawStagedNavigationSettings(NavigationLibrarySnapshot snapshot)
+    {
+        BeginPanel("STAGED SETTINGS", 150);
+        ImGui.TextUnformatted($"Recording interval: {snapshot.RecordingIntervalSeconds:0.##} seconds");
+        ImGui.TextUnformatted($"Minimum point distance: {snapshot.MinimumPointDistance:0.##}");
+        ImGui.TextUnformatted($"World preview: {(snapshot.ShowWorldPreview ? "Shown" : "Hidden")} • Point numbers: {(snapshot.ShowPointNumbers ? "Shown" : "Hidden")}");
+        ImGui.TextUnformatted($"Live navigation path: {(snapshot.ShowLiveNavigationPath ? "Shown" : "Hidden")}");
         EndPanel();
     }
 

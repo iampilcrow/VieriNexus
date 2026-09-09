@@ -57,7 +57,7 @@ public sealed class Plugin : IDalamudPlugin
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 
-        ipc = new NexusIpcProvider(PluginInterface, dependencyService, worldStore);
+        ipc = new NexusIpcProvider(PluginInterface, dependencyService, navigationMigration, worldStore);
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {

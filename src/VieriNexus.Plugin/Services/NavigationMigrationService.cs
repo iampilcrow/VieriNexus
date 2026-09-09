@@ -6,7 +6,8 @@ internal sealed record NavigationMigrationStatus(
     bool SourceFound,
     NavigationMigrationPreview? Preview,
     string Message,
-    MigrationReceipt? LastReceipt);
+    MigrationReceipt? LastReceipt,
+    NavigationLibrarySnapshot? StagedSnapshot);
 
 internal sealed class NavigationMigrationService
 {
@@ -20,6 +21,7 @@ internal sealed class NavigationMigrationService
     private NavigationMigrationPreview? cachedPreview;
     private string message = "Review the source before importing.";
     private MigrationReceipt? lastReceipt;
+    private NavigationLibrarySnapshot? stagedSnapshot;
 
     internal NavigationMigrationService(
         LegacyConfigurationInventory inventory,
@@ -32,13 +34,16 @@ internal sealed class NavigationMigrationService
             Recover(receiptId);
     }
 
+    internal NavigationLibrarySnapshot? StagedSnapshot => Volatile.Read(ref stagedSnapshot);
+
     internal NavigationMigrationStatus Status()
     {
         string? sourcePath = FindSourcePath();
         if (sourcePath is null)
             return new(false, null,
                 lastReceipt is null ? "No VieriNavPlotter configuration was found on this computer." : message,
-                lastReceipt);
+                lastReceipt,
+                StagedSnapshot);
 
         DateTime writeTime = File.GetLastWriteTimeUtc(sourcePath);
         if (!string.Equals(cachedSourcePath, sourcePath, StringComparison.OrdinalIgnoreCase) ||
@@ -57,7 +62,7 @@ internal sealed class NavigationMigrationService
             }
         }
 
-        return new(true, cachedPreview, message, lastReceipt);
+        return new(true, cachedPreview, message, lastReceipt, StagedSnapshot);
     }
 
     internal MigrationWriteResult Import()
@@ -76,6 +81,7 @@ internal sealed class NavigationMigrationService
         if (result.Success)
         {
             lastReceipt = result.Receipt;
+            Volatile.Write(ref stagedSnapshot, status.Preview.Snapshot);
         }
         return SetMessage(result);
     }
@@ -87,6 +93,7 @@ internal sealed class NavigationMigrationService
         if (result.Success)
         {
             lastReceipt = null;
+            Volatile.Write(ref stagedSnapshot, null);
         }
         return SetMessage(result);
     }
@@ -101,6 +108,7 @@ internal sealed class NavigationMigrationService
         if (result.Success)
         {
             lastReceipt = result.Receipt;
+            Volatile.Write(ref stagedSnapshot, result.Snapshot);
         }
     }
 

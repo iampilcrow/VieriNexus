@@ -12,12 +12,15 @@ Routes & Navigation is the first transactional migration slice. Its Migration ca
 
 Staged migration status survives a Nexus reload: the saved receipt, target path, target hash, schema, and staged payload are verified before the import message and rollback action are restored.
 
+The Routes page now presents that verified staged snapshot as a read-only library. It shows imported preferences and, when present, searchable route metadata, movement settings, assignments, tolerances, and ordered points. Versioned Nexus navigation IPC provides read-only status/list/detail access with compatibility-shaped JSON, while execution, override resolution, route drawing, travel, and playback remain disabled.
+
 ## Current safety guarantees
 
 - Existing Vieri configurations are discovered read-only and left in place.
 - Discord credentials and channel/message IDs are not read, decrypted, logged, or rewritten.
 - The Communications discovery card checks only whether VieriLink configuration exists; it does not open that file.
 - Route imports preserve disabled overrides as disabled and never activate navigation automatically.
+- Route-library browsing and IPC read only the verified staged snapshot; they do not query or change the live VieriNavPlotter configuration.
 - No migration-source plugin is disabled automatically.
 - No gameplay automation is started by the foundation build.
 - The Nexus window waits until a targetable character is fully in the world.
