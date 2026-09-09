@@ -528,8 +528,10 @@ internal sealed class NexusWindow : Window
         NavigationActivationBlocker[] displayedBlockers = assessment.Blockers
             .Where(blocker => blocker.Code != "source-plugin-loaded")
             .ToArray();
+        int readinessLines = (assessment.IsStopAvailable ? 1 : 0) +
+                             (assessment.IsManualOverrideAvailable ? 1 : 0);
         float height = MathF.Ceiling(
-            (ImGui.GetTextLineHeightWithSpacing() * ((displayedBlockers.Length * 2f) + 5f)) +
+            (ImGui.GetTextLineHeightWithSpacing() * ((displayedBlockers.Length * 2f) + 4f + readinessLines)) +
             (ImGui.GetStyle().WindowPadding.Y * 2f) + 12f);
         BeginPanel("ACTIVATION SAFETY", height);
         NexusTheme.StatusDot(assessment.CanActivate ? NexusTheme.Green : NexusTheme.Amber,
@@ -545,6 +547,9 @@ internal sealed class NexusWindow : Window
         if (assessment.IsStopAvailable)
             TextWrapped(NexusTheme.Green,
                 "• Verified Stop is connected; ownership releases only after movement is confirmed inactive.");
+        if (assessment.IsManualOverrideAvailable)
+            TextWrapped(NexusTheme.Green,
+                "• Manual movement yielding is connected; player movement input always takes priority.");
         foreach (NavigationActivationBlocker blocker in displayedBlockers)
             TextWrapped(NexusTheme.Muted, $"• {blocker.Message}");
         EndPanel();

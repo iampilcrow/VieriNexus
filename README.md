@@ -18,6 +18,8 @@ An activation-safety assessment now makes the coexistence boundary explicit. It 
 
 The first execution-safety primitive is now connected behind that assessment. Nexus has an idempotent, provider-neutral Stop coordinator and a vnavmesh adapter: a tracked execution keeps its Navigation/Movement lease when Stop is unavailable, fails, cannot be confirmed, or movement remains active, and releases ownership only after vnavmesh explicitly reports that the path is no longer running. There is still no route executor, activation action, or public Stop command in this build.
 
+Manual-movement yielding is now connected as the next fail-closed primitive. Nexus observes FFXIV's own configured movement actions, covering remapped keyboard controls, mouse steering, gamepad movement, jump, and autorun. Physical player input blocks a new movement start; if a future tracked execution is active, takeover latches verified Stop and cannot silently auto-resume after the input ends. The existing character setting must remain enabled for navigation activation readiness.
+
 ## Current safety guarantees
 
 - Existing Vieri configurations are discovered read-only and left in place.
@@ -27,6 +29,7 @@ The first execution-safety primitive is now connected behind that assessment. Ne
 - Route-library browsing and IPC read only the verified staged snapshot; they do not query or change the live VieriNavPlotter configuration.
 - A loaded VieriNavPlotter is reported as the current route owner and blocks Nexus activation; there is no activation action in the current build.
 - Stop completion requires a separate inactive-path confirmation; sending a Stop request alone never releases navigation ownership.
+- Player movement input takes priority, blocks a new Nexus movement start through its quiet period, and requires an explicit resume decision after interrupting tracked navigation.
 - No migration-source plugin is disabled automatically.
 - No gameplay automation is started by the foundation build.
 - The Nexus window waits until a targetable character is fully in the world.

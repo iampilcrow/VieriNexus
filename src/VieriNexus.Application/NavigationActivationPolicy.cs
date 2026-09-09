@@ -37,6 +37,7 @@ public sealed record NavigationActivationAssessment(
     bool IsSourcePluginLoaded,
     bool IsSourcePluginAuthoritative,
     bool IsStopAvailable,
+    bool IsManualOverrideAvailable,
     IReadOnlyList<NavigationActivationBlocker> Blockers);
 
 public static class NavigationActivationPolicy
@@ -59,7 +60,7 @@ public static class NavigationActivationPolicy
         AddIf(!inputs.StopAvailable, "stop-required",
             "A verified Stop path must exist before route execution can activate.", blockers);
         AddIf(!inputs.ManualOverrideAvailable, "manual-override-required",
-            "Manual movement detection and safe yielding must be implemented first.", blockers);
+            "Manual movement detection and safe yielding must be available and enabled.", blockers);
         AddIf(!inputs.ReloadReconciliationAvailable, "reload-reconciliation-required",
             "Reload reconciliation must recover intent without replaying unsafe movement.", blockers);
         AddIf(!inputs.ExplicitActivationApproved, "explicit-approval-required",
@@ -75,6 +76,7 @@ public static class NavigationActivationPolicy
             inputs.SourcePluginLoaded,
             sourceAuthoritative,
             inputs.StopAvailable,
+            inputs.ManualOverrideAvailable,
             blockers);
     }
 

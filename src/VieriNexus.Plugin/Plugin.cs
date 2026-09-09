@@ -33,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly DependencyService dependencyService;
     private readonly GameplayReadyGate gameplayReadyGate = new();
     private readonly WorldSnapshotObserver worldObserver;
+    private readonly ManualMovementSafetyService manualMovementSafety;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -53,11 +54,19 @@ public sealed class Plugin : IDalamudPlugin
         var resourceLeases = new ResourceLeaseManager();
         var navigationStopProvider = new VnavmeshNavigationStopProvider(PluginInterface, dependencyService);
         var navigationStop = new NavigationStopCoordinator(navigationStopProvider, TimeSpan.FromSeconds(15));
+        var manualMovementInput = new GameManualMovementInputSource();
+        var manualMovement = new ManualMovementSafetyCoordinator(navigationStop);
+        manualMovementSafety = new ManualMovementSafetyService(
+            Configuration,
+            worldStore,
+            manualMovementInput,
+            manualMovement);
         var navigationActivation = new NavigationActivationService(
             dependencyService,
             navigationMigration,
             resourceLeases,
-            navigationStop);
+            navigationStop,
+            manualMovementSafety);
         worldObserver = new WorldSnapshotObserver(ClientState, PlayerState, ObjectTable, Condition, worldStore);
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
@@ -98,6 +107,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         var now = Environment.TickCount64;
         worldObserver.Update(now);
+        manualMovementSafety.Update(now);
 
         if (!ClientState.IsLoggedIn)
         {
