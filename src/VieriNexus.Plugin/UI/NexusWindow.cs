@@ -49,6 +49,7 @@ internal sealed class NexusWindow : Window
     private int selectedRoutePoint = -1;
     private Guid? pendingDeleteRouteId;
     private Guid? pendingClearRouteId;
+    private int selectedBuiltInRoute;
 
     internal NexusWindow(
         Plugin plugin,
@@ -404,11 +405,14 @@ internal sealed class NexusWindow : Window
                 navigationLibrary.HasWorkingLibrary ? "Nexus working library" : "Imported into Nexus staging", NexusTheme.Cyan);
             ImGui.TableNextColumn();
             int enabledOverrides = snapshot.Routes.Count(route => route.OverrideEnabled);
-            StatusCard("ENABLED OVERRIDES", enabledOverrides.ToString(), "Visible here; not active in Nexus", NexusTheme.Amber);
+            StatusCard("ENABLED OVERRIDES", enabledOverrides.ToString(),
+                "Target resolution ready", NexusTheme.Amber);
             ImGui.TableNextColumn();
             StatusCard("SOURCE CONFIG", $"Version {snapshot.SourceConfigurationVersion}", "Verified migration snapshot", NexusTheme.Green);
             ImGui.EndTable();
         }
+
+        DrawBuiltInVendorTemplates();
 
         if (snapshot.Routes.Count == 0)
         {
@@ -496,7 +500,7 @@ internal sealed class NexusWindow : Window
                 if (navigationRuntime.IsRecording(route.Id))
                     ImGui.TextColored(NexusTheme.Green, "● Timed recording active");
                 if (route.OverrideEnabled)
-                    ImGui.TextColored(NexusTheme.Amber, "Override enabled in source settings");
+                    ImGui.TextColored(NexusTheme.Amber, "Nexus gear-vendor override enabled");
                 ImGui.Spacing();
             }
         }
@@ -564,6 +568,13 @@ internal sealed class NexusWindow : Window
             ImGui.TextUnformatted($"Binding: {binding}");
             if (route.TargetDataId != 0 || !string.IsNullOrWhiteSpace(route.TargetLabel))
                 ImGui.TextUnformatted($"Target: {route.TargetLabel} ({route.TargetDataId})");
+            if (navigationLibrary.HasWorkingLibrary && route.BindingKind == 1 && route.TargetDataId != 0)
+            {
+                bool enabled = route.OverrideEnabled;
+                if (ImGui.Checkbox("Use as gear vendor override", ref enabled))
+                    routeOperationMessage = navigationLibrary.SetOverride(route.Id, enabled).Message;
+                TextWrapped(NexusTheme.Muted, "Only one route can be enabled for this exact territory and vendor target.");
+            }
             if (navigationLibrary.HasWorkingLibrary)
             {
                 ImGui.SetNextItemWidth(-1);
@@ -838,6 +849,54 @@ internal sealed class NexusWindow : Window
         // Popups must be drawn in the same ImGui ID scope as the buttons that open them.
         DrawDeleteRouteConfirmation();
         DrawClearPointsConfirmation();
+    }
+
+    private void DrawBuiltInVendorTemplates()
+    {
+        IReadOnlyList<NavigationRouteSnapshot> routes = NavigationBuiltInRouteCatalog.Routes;
+        selectedBuiltInRoute = Math.Clamp(selectedBuiltInRoute, 0, routes.Count - 1);
+        NavigationRouteSnapshot selected = routes[selectedBuiltInRoute];
+
+        float height = MathF.Ceiling(
+            (ImGui.GetTextLineHeightWithSpacing() * 9f) +
+            (ImGui.GetStyle().WindowPadding.Y * 2f) + 8f);
+        BeginPanel("BUILT-IN VENDOR TEMPLATES", height);
+        ImGui.TextWrapped("Verified VieriAutoDuty standing points are available as immutable templates. Add one to the personal library before editing or enabling its target override.");
+        ImGui.SetNextItemWidth(Math.Min(520f, ImGui.GetContentRegionAvail().X));
+        if (ImGui.BeginCombo("##BuiltInVendorTemplate", selected.Name))
+        {
+            for (int index = 0; index < routes.Count; index++)
+            {
+                NavigationRouteSnapshot route = routes[index];
+                bool active = index == selectedBuiltInRoute;
+                if (ImGui.Selectable($"{route.Name}##built-in-{route.TargetDataId}", active))
+                    selectedBuiltInRoute = index;
+                if (active)
+                    ImGui.SetItemDefaultFocus();
+            }
+            ImGui.EndCombo();
+        }
+        selected = routes[selectedBuiltInRoute];
+        ImGui.TextDisabled($"Territory {selected.TerritoryId} • target {selected.TargetDataId} • {selected.Points.Count} verified point(s)");
+        if (!navigationLibrary.HasWorkingLibrary)
+            ImGui.BeginDisabled();
+        if (ImGui.Button("Add template to personal routes"))
+        {
+            NavigationLibraryWriteResult result = navigationLibrary.AddBuiltInTemplate(selected);
+            routeOperationMessage = result.Message;
+            if (result.Success)
+            {
+                selectedRouteId = result.Snapshot?.SelectedRouteId;
+                selectedRoutePoint = -1;
+                editingRouteId = null;
+            }
+        }
+        if (!navigationLibrary.HasWorkingLibrary)
+            ImGui.EndDisabled();
+        TextWrapped(NexusTheme.Muted, navigationLibrary.HasWorkingLibrary
+            ? "Added routes start with the override disabled."
+            : "Create the Nexus working library first.");
+        EndPanel();
     }
 
     private void DrawNavigationWorkingLibrary()

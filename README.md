@@ -16,6 +16,8 @@ The Routes page keeps that verified staging snapshot immutable and can explicitl
 
 Timed recording is observation-only: it neither requires nor acquires navigation authority and cannot move the character. It avoids duplicating an already-nearby final point, persists each accepted capture atomically, refreshes an active preview, and stops if the route disappears, the character becomes unavailable, the territory changes, the plugin unloads, or the character logs out. Route JSON imports accept both the versioned Nexus shape and the compatible legacy VieriNavPlotter shape, regenerate identity, bound untrusted data, and always disable automation assignment pending review.
 
+The route library also exposes all 27 verified VieriAutoDuty gear-vendor standing-point templates as immutable references. Adding a template creates an independent editable personal copy with its automation override disabled. The user may explicitly enable one route for an exact territory/vendor pair; Nexus disables any competing route for that same pair atomically, and a read-only Nexus IPC resolver fails closed on absent, invalid, or ambiguous assignments. No gear-shopping consumer is dispatched by this resolver yet.
+
 Recording interval, minimum point spacing, and preview preferences are rendered above the route-library/editor split whenever a working library exists. The route list and editor grow naturally with their content and use the Routes page's single outer scrollbar, avoiding nested-scroll discovery and clipping at supported window sizes and interface scales. Clear-points and delete-route actions open confirmation dialogs in the same UI scope as their buttons before changing the working library.
 
 The activation-safety assessment makes the coexistence boundary explicit. It detects the installed/loaded source owner, working-library readiness, required-provider readiness, Navigation/Movement lease conflicts, and the mandatory Stop, manual-override, reload-reconciliation, and explicit-approval gates. VieriNavPlotter must be unloaded manually before Nexus authority can be approved; approval starts no route automatically.
@@ -38,6 +40,7 @@ If execution is stopped by manual takeover, explicit Stop, reload recovery, sour
 - Discord credentials and channel/message IDs are not read, decrypted, logged, or rewritten.
 - The Communications discovery card checks only whether VieriLink configuration exists; it does not open that file.
 - Route imports preserve disabled overrides as disabled and never activate navigation automatically.
+- Built-in vendor templates remain immutable, personal copies begin disabled, and exact-target override resolution never starts movement.
 - Migration staging remains immutable. Nexus edits only its separate working library, and read-only IPC reports the active working copy when present.
 - A loaded VieriNavPlotter is reported as the current route owner and blocks Nexus approval. Nexus never disables or enables it automatically.
 - Stop completion requires a separate inactive-path confirmation; sending a Stop request alone never releases navigation ownership.

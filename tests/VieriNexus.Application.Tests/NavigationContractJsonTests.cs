@@ -41,4 +41,18 @@ public sealed class NavigationContractJsonTests
     {
         Assert.Equal("[]", NavigationContractJson.SerializeRouteList([]));
     }
+
+    [Fact]
+    public void OverrideResolutionPayloadKeepsFailureCodeAndOptionalRoute()
+    {
+        NavigationRouteResolutionDto resolution = new(
+            false, "route-override-not-found", "No enabled route.", null);
+
+        using JsonDocument document = JsonDocument.Parse(
+            NavigationContractJson.SerializeRouteResolution(resolution));
+
+        Assert.False(document.RootElement.GetProperty("Success").GetBoolean());
+        Assert.Equal("route-override-not-found", document.RootElement.GetProperty("Code").GetString());
+        Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("Route").ValueKind);
+    }
 }

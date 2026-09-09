@@ -35,13 +35,14 @@
 - Route migration requirements preserve searchable names, stable IDs, notes, tags, ordered points, territory, playback settings, and explicit assignments without enabling disabled overrides.
 - VieriNavPlotter's visible built-in baseline includes all 27 current AutoDuty gear-vendor destinations and distinguishes Domitien's authored multi-point approach from destination-only navmesh behavior.
 - Route migration now explicitly preserves the review and execution controls: persistent in-world Show Route previews, Travel to Start/Destination, complete point-by-point Play Route, cross-zone AutoDuty travel ownership, and a working Stop Playback path.
+- All 27 verified VieriAutoDuty gear-vendor standing-point routes are now compiled into an immutable Nexus catalog and can be copied into the personal working library without touching the source. Copies receive a new identity, remain editable, and start with automation disabled. An explicit checkbox enables exactly one route per territory/vendor target, atomically disables a competing assignment, and a read-only `VieriNexus.Navigation.V1.ResolveGearVendorOverride` contract fails closed for missing, invalid, or ambiguous routes. This resolution layer does not dispatch Gear shopping or movement yet.
 - Navigation parity now includes the complete live vnavmesh waypoint chain, scoped strictly to NavPlotter-owned playback/travel and explicitly authorized gear-shopping movement so ordinary Goto and dungeon paths remain hidden. It also retains a resizable route-library pane, exact copyable player coordinates, and Domitien's direct approach from `Territory 133 | X 164.4264 | Y 15.5000 | Z -75.7035` to the measured standing point `X 157.5930 | Y 15.7000 | Z -69.3316` with a stable 0.75-yalm arrival radius.
 - Explicit Discord credential preservation notice and migration boundary.
 - Global and content-ID/world-scoped character configuration.
 - Immutable, revisioned world snapshots with unknown-state handling.
 - Rejected duplicate/older world revisions leave the accepted snapshot and change event untouched, including under competing publishers.
 - Atomic resource lease manager with implied ownership for navigation, combat, retainer, and market work. Nexus route execution now owns and heartbeats the Navigation/Movement bundle for the duration of its provider path.
-- Versioned public status, dependency, and read-only navigation IPC contracts. The Nexus navigation list/detail calls use tested compatibility-shaped JSON without claiming the legacy `VieriNavPlotter.*` names; activation status is separately queryable, and no run or override-resolution call is registered.
+- Versioned public status, dependency, and read-only navigation IPC contracts. The Nexus navigation list/detail and exact gear-vendor override-resolution calls use tested compatibility-shaped JSON without claiming the legacy `VieriNavPlotter.*` names; activation status is separately queryable, and no public run call is registered.
 - Upstream source lock and update workflow.
 - Initial automated tests for ownership atomicity and world-state sequencing.
 - Provider-neutral solo-duty combat policy requiring a fresh rotation-automation handoff on duty entry while forbidding Nexus from rewriting hard targets or competing with the encounter provider for movement.
@@ -55,7 +56,7 @@
 
 ## Intentionally not enabled yet
 
-- Cross-zone AutoDuty route dispatch, built-in vendor templates, live generated-waypoint rendering, current-target binding, and automation override resolution remain in the NavPlotter parity backlog. Same-zone personal route authoring, recording, editing, exchange, preview, and playback are functional.
+- Cross-zone Gear/Duties dispatch, live generated-waypoint rendering, and current-target capture remain in the NavPlotter parity backlog. Same-zone personal route authoring, recording, editing, exchange, preview, playback, built-in vendor template copying, and exact-target override resolution are functional.
 - No Discord credential, channel, or message ID has been read or changed.
 - No existing Vieri plugin has been disabled, uninstalled, or modified.
 - No duty/progression/combat/HUD/market/communications automation has been enabled. Only explicit guarded same-zone route movement is live.
@@ -64,4 +65,4 @@
 
 ## Next implementation gate
 
-The user fully accepted the 0.1.0.15 working slice in game: route creation, point creation, preview, Travel to Start, ordered playback, button Stop, manual-movement takeover, stopped-intent acknowledgement, return to staging, and manual VieriNavPlotter re-enable all worked. Live testing of the expanded authoring slice confirmed the flow through the destructive actions, then exposed two related UI-scope defects: Clear all points and Delete route could not open their confirmations, and the editor introduced a second scrollbar. Version 0.1.0.18 keeps both confirmations with their buttons and lets the route split grow under the page's single scrollbar. Validate those two confirmations and then finish timed-recording shutdown, clipboard compatibility, and persistence checks. Cross-zone and the remaining provider-integration parity stay disabled until these non-moving authoring tools are proven. Communications still requires same-Windows-account encrypted-value round-trip tests before its configuration may be opened.
+The user fully accepted the original guarded route execution flow and then confirmed every 0.1.0.18 destructive confirmation/cancellation path plus the single-scroll layout. Version 0.1.0.19 moves the next substantial parity slice together: 27 immutable vendor templates, safe personal copying, explicit exact-target enablement, one-winner enforcement, and read-only fail-closed resolution. Validate that one copied template is independent, remains disabled until approved, persists across reload, and resolves without starting movement. Cross-zone Gear/Duties dispatch and live generated-waypoint rendering remain disabled until their ownership adapters are migrated. Communications still requires same-Windows-account encrypted-value round-trip tests before its configuration may be opened.

@@ -13,6 +13,7 @@ internal sealed class NexusIpcProvider : IDisposable
     private readonly ICallGateProvider<NavigationLibraryStatusDto> navigationStatusProvider;
     private readonly ICallGateProvider<string> navigationListProvider;
     private readonly ICallGateProvider<string, string?> navigationGetProvider;
+    private readonly ICallGateProvider<uint, uint, string> navigationResolveVendorProvider;
     private readonly ICallGateProvider<NavigationActivationStatusDto> navigationActivationProvider;
     private readonly DependencyService dependencies;
     private readonly NavigationLibraryService navigation;
@@ -36,6 +37,7 @@ internal sealed class NexusIpcProvider : IDisposable
         navigationStatusProvider = pluginInterface.GetIpcProvider<NavigationLibraryStatusDto>(NexusIpc.GetNavigationStatus);
         navigationListProvider = pluginInterface.GetIpcProvider<string>(NexusIpc.ListNavigationRoutes);
         navigationGetProvider = pluginInterface.GetIpcProvider<string, string?>(NexusIpc.GetNavigationRoute);
+        navigationResolveVendorProvider = pluginInterface.GetIpcProvider<uint, uint, string>(NexusIpc.ResolveGearVendorOverride);
         navigationActivationProvider = pluginInterface.GetIpcProvider<NavigationActivationStatusDto>(NexusIpc.GetNavigationActivationStatus);
         statusProvider.RegisterFunc(GetStatus);
         dependencyProvider.RegisterFunc(GetDependencies);
@@ -43,6 +45,7 @@ internal sealed class NexusIpcProvider : IDisposable
         navigationStatusProvider.RegisterFunc(GetNavigationStatus);
         navigationListProvider.RegisterFunc(ListNavigationRoutes);
         navigationGetProvider.RegisterFunc(GetNavigationRoute);
+        navigationResolveVendorProvider.RegisterFunc(ResolveGearVendorOverride);
         navigationActivationProvider.RegisterFunc(GetNavigationActivationStatus);
     }
 
@@ -114,7 +117,21 @@ internal sealed class NexusIpcProvider : IDisposable
         if (route is null)
             return null;
 
-        return NavigationContractJson.SerializeRoute(new NavigationRouteDto(
+        return NavigationContractJson.SerializeRoute(ToDto(route));
+    }
+
+    private string ResolveGearVendorOverride(uint territoryId, uint targetDataId)
+    {
+        NavigationRouteOverrideResolution result = NavigationRouteOverrideResolver.ResolveGearVendor(
+            navigation.Current, territoryId, targetDataId);
+        return NavigationContractJson.SerializeRouteResolution(new NavigationRouteResolutionDto(
+            result.Success,
+            result.Code,
+            result.Message,
+            result.Route is null ? null : ToDto(result.Route)));
+    }
+
+    private static NavigationRouteDto ToDto(NavigationRouteSnapshot route) => new(
             route.Id,
             route.Name,
             route.TerritoryId,
@@ -129,8 +146,7 @@ internal sealed class NexusIpcProvider : IDisposable
             route.TargetDataId,
             route.TargetLabel,
             route.OverrideEnabled,
-            route.UpdatedAtUtc));
-    }
+            route.UpdatedAtUtc);
 
     private NavigationActivationStatusDto GetNavigationActivationStatus()
     {
@@ -150,6 +166,7 @@ internal sealed class NexusIpcProvider : IDisposable
     public void Dispose()
     {
         navigationActivationProvider.UnregisterFunc();
+        navigationResolveVendorProvider.UnregisterFunc();
         navigationGetProvider.UnregisterFunc();
         navigationListProvider.UnregisterFunc();
         navigationStatusProvider.UnregisterFunc();

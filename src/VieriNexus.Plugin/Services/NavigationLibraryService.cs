@@ -255,6 +255,41 @@ internal sealed class NavigationLibraryService
         }, "route-duplicated", $"Created {copy.Name} with automation assignment disabled.");
     }
 
+    internal NavigationLibraryWriteResult AddBuiltInTemplate(NavigationRouteSnapshot template)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        NavigationLibrarySnapshot? current = Volatile.Read(ref working);
+        if (current is null)
+            return Result(false, "working-library-required", "Create the Nexus working library first.");
+        if (template.BindingKind != 1 || template.TargetDataId == 0 || template.Points.Count == 0)
+            return Result(false, "built-in-template-invalid", "The selected built-in vendor template is not valid.");
+
+        NavigationRouteSnapshot copy = template with
+        {
+            Id = Guid.NewGuid(),
+            Name = UniqueName(current, template.Name),
+            Points = template.Points.ToArray(),
+            OverrideEnabled = false,
+            UpdatedAtUtc = DateTime.UtcNow,
+        };
+        return Save(current with
+        {
+            Routes = current.Routes.Append(copy).ToArray(),
+            SelectedRouteId = copy.Id,
+        }, "built-in-template-added",
+            $"Added {copy.Name} to the personal library. Its gear-vendor override remains disabled until explicitly approved.");
+    }
+
+    internal NavigationLibraryWriteResult SetOverride(Guid routeId, bool enabled)
+    {
+        NavigationLibrarySnapshot? current = Volatile.Read(ref working);
+        NavigationRouteOverrideUpdate update = NavigationRouteOverrideResolver.SetExclusive(
+            current, routeId, enabled, DateTime.UtcNow);
+        return !update.Success || update.Library is null
+            ? Result(false, update.Code, update.Message)
+            : Save(update.Library, update.Code, update.Message);
+    }
+
     internal string ExportRoute(Guid routeId)
     {
         NavigationRouteSnapshot? route = Volatile.Read(ref working)?.Routes.FirstOrDefault(item => item.Id == routeId);

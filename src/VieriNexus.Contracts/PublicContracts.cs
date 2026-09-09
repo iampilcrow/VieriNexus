@@ -10,6 +10,7 @@ public static class NexusIpc
     public const string GetNavigationStatus = "VieriNexus.Navigation.V1.GetStatus";
     public const string ListNavigationRoutes = "VieriNexus.Navigation.V1.ListRoutes";
     public const string GetNavigationRoute = "VieriNexus.Navigation.V1.GetRoute";
+    public const string ResolveGearVendorOverride = "VieriNexus.Navigation.V1.ResolveGearVendorOverride";
     public const string GetNavigationActivationStatus = "VieriNexus.Navigation.V1.GetActivationStatus";
 }
 
@@ -85,6 +86,12 @@ public sealed record NavigationRouteDto(
     bool OverrideEnabled,
     DateTime UpdatedAtUtc);
 
+public sealed record NavigationRouteResolutionDto(
+    bool Success,
+    string Code,
+    string Message,
+    NavigationRouteDto? Route);
+
 public sealed record NavigationActivationBlockerDto(string Code, string Message);
 
 public sealed record NavigationActivationStatusDto(
@@ -104,4 +111,7 @@ public static class NavigationContractJson
 
     public static string SerializeRoute(NavigationRouteDto route) =>
         System.Text.Json.JsonSerializer.Serialize(route);
+
+    public static string SerializeRouteResolution(NavigationRouteResolutionDto resolution) =>
+        System.Text.Json.JsonSerializer.Serialize(resolution);
 }
