@@ -13,9 +13,16 @@ public sealed class WorldStateStore
     public void Publish(WorldSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        var previous = Interlocked.Exchange(ref current, snapshot);
-        if (snapshot.Revision <= previous.Revision && previous != WorldSnapshot.Empty)
-            throw new InvalidOperationException("World snapshot revisions must increase monotonically.");
+
+        while (true)
+        {
+            WorldSnapshot previous = Volatile.Read(ref current);
+            if (snapshot.Revision <= previous.Revision && !ReferenceEquals(previous, WorldSnapshot.Empty))
+                throw new InvalidOperationException("World snapshot revisions must increase monotonically.");
+            if (ReferenceEquals(Interlocked.CompareExchange(ref current, snapshot, previous), previous))
+                break;
+        }
+
         Changed?.Invoke(snapshot);
     }
 }

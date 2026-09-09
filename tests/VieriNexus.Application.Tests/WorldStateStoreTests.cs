@@ -9,9 +9,14 @@ public sealed class WorldStateStoreTests
     public void RejectsNonIncreasingRevision()
     {
         var store = new WorldStateStore();
-        store.Publish(Snapshot(1));
+        WorldSnapshot accepted = Snapshot(1);
+        store.Publish(accepted);
+        var changes = 0;
+        store.Changed += _ => changes++;
 
         Assert.Throws<InvalidOperationException>(() => store.Publish(Snapshot(1)));
+        Assert.Same(accepted, store.Current);
+        Assert.Equal(0, changes);
     }
 
     [Fact]

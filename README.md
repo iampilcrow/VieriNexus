@@ -10,6 +10,8 @@ The foundation build intentionally does not replace live automation. It provides
 
 Routes & Navigation is the first transactional migration slice. Its Migration card previews every VieriNavPlotter setting, creates a timestamped backup, writes a staged Nexus-owned route library atomically, records hashes and a rollback receipt, and can restore the prior Nexus state. Importing does not activate Nexus navigation or disable VieriNavPlotter.
 
+Staged migration status survives a Nexus reload: the saved receipt, target path, target hash, schema, and staged payload are verified before the import message and rollback action are restored.
+
 ## Current safety guarantees
 
 - Existing Vieri configurations are discovered read-only and left in place.

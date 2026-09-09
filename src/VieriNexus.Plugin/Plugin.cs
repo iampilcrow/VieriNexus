@@ -43,7 +43,11 @@ public sealed class Plugin : IDalamudPlugin
 
         dependencyService = new DependencyService(PluginInterface);
         var legacyInventory = new LegacyConfigurationInventory(PluginInterface);
-        var navigationMigration = new NavigationMigrationService(legacyInventory, PluginInterface.GetPluginConfigDirectory());
+        LegacyImportState navigationImport = Configuration.ForLegacyImport("navplotter");
+        var navigationMigration = new NavigationMigrationService(
+            legacyInventory,
+            PluginInterface.GetPluginConfigDirectory(),
+            navigationImport.Imported ? navigationImport.ReceiptId : null);
         var moduleRegistry = BuiltInModuleCatalog.Create();
         var worldStore = new WorldStateStore();
         worldObserver = new WorldSnapshotObserver(ClientState, PlayerState, ObjectTable, Condition, worldStore);

@@ -10,6 +10,44 @@ public sealed class TransactionalMigrationStore
     public static string ReceiptPath(string receiptRoot, Guid receiptId) =>
         Path.Combine(receiptRoot, $"{receiptId:N}.json");
 
+    public StagedNavigationReadResult ReadStagedNavigationState(
+        string receiptPath,
+        string expectedSourceId,
+        string expectedNexusTargetPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(receiptPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedSourceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedNexusTargetPath);
+
+        if (!File.Exists(receiptPath))
+            return new(false, "The saved migration receipt could not be found. Import again to create a new verified receipt.");
+
+        try
+        {
+            MigrationReceipt? receipt = JsonSerializer.Deserialize<MigrationReceipt>(File.ReadAllText(receiptPath), Options);
+            if (receipt is null || receipt.SchemaVersion != 1)
+                return new(false, "The saved migration receipt could not be read.");
+            if (!string.Equals(receipt.SourceId, expectedSourceId, StringComparison.OrdinalIgnoreCase) ||
+                !PathsEqual(receipt.NexusTargetPath, expectedNexusTargetPath))
+                return new(false, "The saved migration receipt does not belong to this staged route library.");
+            if (!File.Exists(expectedNexusTargetPath))
+                return new(false, "The staged Nexus route library no longer exists. Import again to recreate it safely.");
+            if (!string.Equals(HashFile(expectedNexusTargetPath), receipt.NexusTargetSha256, StringComparison.OrdinalIgnoreCase))
+                return new(false, "The staged Nexus route library changed after import, so its saved receipt was not trusted.");
+
+            NavigationLibrarySnapshot? snapshot = JsonSerializer.Deserialize<NavigationLibrarySnapshot>(
+                File.ReadAllText(expectedNexusTargetPath), Options);
+            if (snapshot is null || snapshot.SchemaVersion != 1)
+                return new(false, "The staged Nexus route library could not be read.");
+
+            return new(true, ImportSuccessMessage(snapshot.Routes.Count), receipt, snapshot);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
+        {
+            return new(false, "The staged migration state is temporarily unavailable; no source file was changed.");
+        }
+    }
+
     public MigrationWriteResult Apply(
         string sourceId,
         string sourcePath,
@@ -61,10 +99,7 @@ public sealed class TransactionalMigrationStore
                 HashFile(sourcePath),
                 HashFile(nexusTargetPath));
             AtomicWrite(receiptPath, JsonSerializer.SerializeToUtf8Bytes(receipt, Options));
-            string routeSummary = snapshot.Routes.Count == 1
-                ? "1 personal route"
-                : $"{snapshot.Routes.Count} personal routes";
-            return new(true, $"Imported settings and {routeSummary} into staged Nexus storage.", receipt);
+            return new(true, ImportSuccessMessage(snapshot.Routes.Count), receipt);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -121,6 +156,15 @@ public sealed class TransactionalMigrationStore
         using FileStream stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream));
     }
+
+    private static string ImportSuccessMessage(int routeCount)
+    {
+        string routeSummary = routeCount == 1 ? "1 personal route" : $"{routeCount} personal routes";
+        return $"Imported settings and {routeSummary} into staged Nexus storage.";
+    }
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
 
     private static void TryRestoreTarget(string targetPath, bool targetExisted, string? previousTargetBackupPath)
     {

@@ -83,6 +83,51 @@ public sealed class TransactionalMigrationStoreTests : IDisposable
         Assert.Equal("Imported settings and 0 personal routes into staged Nexus storage.", result.Message);
     }
 
+    [Fact]
+    public void SavedReceiptReloadsAndVerifiesStagedState()
+    {
+        Directory.CreateDirectory(root);
+        string source = Path.Combine(root, "VieriNavPlotter.json");
+        File.WriteAllText(source, "{\"Version\":1,\"Routes\":[]}");
+        string target = Path.Combine(root, "nexus", "routes.v1.json");
+        string receipts = Path.Combine(root, "receipts");
+        TransactionalMigrationStore writer = new();
+        MigrationWriteResult applied = writer.Apply(
+            "navplotter", source, target, Path.Combine(root, "backups"), receipts, Snapshot("Reloaded"));
+
+        TransactionalMigrationStore reloadedStore = new();
+        StagedNavigationReadResult reloaded = reloadedStore.ReadStagedNavigationState(
+            TransactionalMigrationStore.ReceiptPath(receipts, applied.Receipt!.Id), "navplotter", target);
+
+        Assert.True(reloaded.Success);
+        Assert.Equal(applied.Receipt.Id, reloaded.Receipt!.Id);
+        Assert.Equal("Reloaded", Assert.Single(reloaded.Snapshot!.Routes).Name);
+        Assert.Equal("Imported settings and 1 personal route into staged Nexus storage.", reloaded.Message);
+        Assert.Equal("{\"Version\":1,\"Routes\":[]}", File.ReadAllText(source));
+    }
+
+    [Fact]
+    public void SavedReceiptIsRejectedWhenStagedStateChanged()
+    {
+        Directory.CreateDirectory(root);
+        string source = Path.Combine(root, "VieriNavPlotter.json");
+        File.WriteAllText(source, "{\"Version\":1,\"Routes\":[]}");
+        string target = Path.Combine(root, "nexus", "routes.v1.json");
+        string receipts = Path.Combine(root, "receipts");
+        TransactionalMigrationStore store = new();
+        MigrationWriteResult applied = store.Apply(
+            "navplotter", source, target, Path.Combine(root, "backups"), receipts, Snapshot("Imported"));
+        File.WriteAllText(target, "changed after import");
+
+        StagedNavigationReadResult reloaded = store.ReadStagedNavigationState(
+            TransactionalMigrationStore.ReceiptPath(receipts, applied.Receipt!.Id), "navplotter", target);
+
+        Assert.False(reloaded.Success);
+        Assert.Null(reloaded.Receipt);
+        Assert.Equal("changed after import", File.ReadAllText(target));
+        Assert.Equal("{\"Version\":1,\"Routes\":[]}", File.ReadAllText(source));
+    }
+
     public void Dispose()
     {
         if (!Directory.Exists(root))

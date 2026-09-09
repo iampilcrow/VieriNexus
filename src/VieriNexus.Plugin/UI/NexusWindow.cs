@@ -344,6 +344,7 @@ internal sealed class NexusWindow : Window
         NavigationMigrationStatus status = navigationMigration.Status();
         LegacyImportState state = plugin.Configuration.ForLegacyImport("navplotter");
         string operationMessage = status.Message;
+        bool staged = status.LastReceipt is not null;
         BeginPanel("ROUTES & NAVIGATION", 320f * Math.Max(1f, plugin.Configuration.UiScale));
         NexusTheme.StatusDot(status.SourceFound ? NexusTheme.Green : NexusTheme.Muted,
             status.SourceFound ? "Configuration located" : "Not found on this computer");
@@ -379,6 +380,7 @@ internal sealed class NexusWindow : Window
             operationMessage = result.Message;
             if (result.Success && result.Receipt is { } receipt)
             {
+                staged = true;
                 state.Reviewed = true;
                 state.Imported = true;
                 state.SourceVersion = status.Preview!.Snapshot!.SourceConfigurationVersion.ToString();
@@ -393,16 +395,17 @@ internal sealed class NexusWindow : Window
         if (!canImport)
             ImGui.EndDisabled();
 
-        if (state.Imported && state.ReceiptId is { } receiptId)
+        if (staged && status.LastReceipt is { } savedReceipt)
         {
             if (availableButtonWidth >= importButtonWidth + ImGui.GetStyle().ItemSpacing.X + rollbackButtonWidth)
                 ImGui.SameLine();
             if (ImGui.Button(rollbackLabel, new Vector2(rollbackButtonWidth, 0)))
             {
-                MigrationWriteResult result = navigationMigration.Rollback(receiptId);
+                MigrationWriteResult result = navigationMigration.Rollback(savedReceipt.Id);
                 operationMessage = result.Message;
                 if (result.Success)
                 {
+                    staged = false;
                     state.Imported = false;
                     state.ImportedAt = null;
                     state.ReceiptId = null;
@@ -414,8 +417,8 @@ internal sealed class NexusWindow : Window
             }
         }
 
-        TextWrapped(state.Imported ? NexusTheme.Green : NexusTheme.Muted, operationMessage);
-        if (state.Imported)
+        TextWrapped(staged ? NexusTheme.Green : NexusTheme.Muted, operationMessage);
+        if (staged)
             TextWrapped(NexusTheme.Muted,
                 "Staged only • standalone VieriNavPlotter remains authoritative • no duplicate route execution");
         EndPanel();

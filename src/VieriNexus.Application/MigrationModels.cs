@@ -61,3 +61,9 @@ public sealed record MigrationReceipt(
     string NexusTargetSha256);
 
 public sealed record MigrationWriteResult(bool Success, string Message, MigrationReceipt? Receipt = null);
+
+public sealed record StagedNavigationReadResult(
+    bool Success,
+    string Message,
+    MigrationReceipt? Receipt = null,
+    NavigationLibrarySnapshot? Snapshot = null);

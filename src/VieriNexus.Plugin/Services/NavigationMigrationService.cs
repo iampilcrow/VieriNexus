@@ -21,17 +21,24 @@ internal sealed class NavigationMigrationService
     private string message = "Review the source before importing.";
     private MigrationReceipt? lastReceipt;
 
-    internal NavigationMigrationService(LegacyConfigurationInventory inventory, string pluginConfigDirectory)
+    internal NavigationMigrationService(
+        LegacyConfigurationInventory inventory,
+        string pluginConfigDirectory,
+        Guid? persistedReceiptId)
     {
         this.inventory = inventory;
         dataRoot = Path.Combine(pluginConfigDirectory, "NexusData");
+        if (persistedReceiptId is { } receiptId)
+            Recover(receiptId);
     }
 
     internal NavigationMigrationStatus Status()
     {
         string? sourcePath = FindSourcePath();
         if (sourcePath is null)
-            return new(false, null, "No VieriNavPlotter configuration was found on this computer.", lastReceipt);
+            return new(false, null,
+                lastReceipt is null ? "No VieriNavPlotter configuration was found on this computer." : message,
+                lastReceipt);
 
         DateTime writeTime = File.GetLastWriteTimeUtc(sourcePath);
         if (!string.Equals(cachedSourcePath, sourcePath, StringComparison.OrdinalIgnoreCase) ||
@@ -67,7 +74,9 @@ internal sealed class NavigationMigrationService
             Path.Combine(dataRoot, "receipts"),
             status.Preview.Snapshot);
         if (result.Success)
+        {
             lastReceipt = result.Receipt;
+        }
         return SetMessage(result);
     }
 
@@ -76,8 +85,23 @@ internal sealed class NavigationMigrationService
         MigrationWriteResult result = store.Rollback(TransactionalMigrationStore.ReceiptPath(
             Path.Combine(dataRoot, "receipts"), receiptId));
         if (result.Success)
+        {
             lastReceipt = null;
+        }
         return SetMessage(result);
+    }
+
+    private void Recover(Guid receiptId)
+    {
+        StagedNavigationReadResult result = store.ReadStagedNavigationState(
+            TransactionalMigrationStore.ReceiptPath(Path.Combine(dataRoot, "receipts"), receiptId),
+            SourceId,
+            Path.Combine(dataRoot, "routes.v1.json"));
+        message = result.Message;
+        if (result.Success)
+        {
+            lastReceipt = result.Receipt;
+        }
     }
 
     private MigrationWriteResult SetMessage(MigrationWriteResult result)

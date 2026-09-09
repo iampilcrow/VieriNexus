@@ -12,6 +12,7 @@
 - Read-only discovery of all nine predecessor configuration sources, including VieriNavPlotter.
 - Transactional Routes & Navigation importer with full setting/route mapping, validation preview, timestamped source backup, atomic Nexus-owned staging, SHA-256 receipt, newer-data rollback guard, and restoration of the prior Nexus state. Import never changes the standalone source or activates duplicate navigation.
 - The Migration card sizes action buttons from their rendered labels, stacks them when the available width is too small, wraps status/detail text, and scales its panel height with the configured UI scale. A zero-personal-route import explicitly confirms that settings were still imported.
+- A saved navigation receipt is reloaded and verified against its source ID, exact Nexus target path, target SHA-256, schema, and staged payload after Nexus is disabled/re-enabled. The exact staged message and rollback availability are reconstructed without opening or changing VieriNavPlotter.
 - Communications discovery is existence-only: VieriLink's encrypted token, channel IDs, status message ID, and command cursor are not opened, decrypted, logged, copied, or rewritten by the current build.
 - Route migration requirements preserve searchable names, stable IDs, notes, tags, ordered points, territory, playback settings, and explicit assignments without enabling disabled overrides.
 - VieriNavPlotter's visible built-in baseline includes all 27 current AutoDuty gear-vendor destinations and distinguishes Domitien's authored multi-point approach from destination-only navmesh behavior.
@@ -20,6 +21,7 @@
 - Explicit Discord credential preservation notice and migration boundary.
 - Global and content-ID/world-scoped character configuration.
 - Immutable, revisioned world snapshots with unknown-state handling.
+- Rejected duplicate/older world revisions leave the accepted snapshot and change event untouched, including under competing publishers.
 - Atomic resource lease manager with implied ownership for navigation, combat, retainer, and market work.
 - Versioned public status and dependency IPC contracts.
 - Upstream source lock and update workflow.
@@ -44,4 +46,4 @@
 
 ## Next implementation gate
 
-Dalamud installation and a zero-personal-route Routes & Navigation staging import are now confirmed in game. Exercise **Rollback staged import**, confirm the staged success/rollback text remains fully visible, reload Nexus, and verify the source VieriNavPlotter configuration remains unchanged. Then embed the read-only route library and compatibility IPC behind an explicit activation gate. Build the remaining transactional importers one source at a time; Communications requires same-Windows-account encrypted-value round-trip tests before its configuration may be opened. The first authoritative gameplay behavior must not ship until resource ownership, pause/stop/manual override, reload reconciliation, and rollback are exercised against an existing workflow.
+Dalamud installation/update, responsive text, a zero-personal-route staging import, window reopen, on-disk persistence, and source/backup hash integrity are confirmed. Update to 0.1.0.5, disable/re-enable Nexus, and confirm the exact staged message and rollback action return; then exercise rollback, import again, and repeat the reload check. After that, embed the read-only route library and compatibility IPC while leaving execution inactive. Build the remaining transactional importers one source at a time; Communications requires same-Windows-account encrypted-value round-trip tests before its configuration may be opened. The first authoritative gameplay behavior must not ship until resource ownership, pause/stop/manual override, reload reconciliation, and rollback are exercised against an existing workflow.
