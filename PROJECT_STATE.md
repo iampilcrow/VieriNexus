@@ -2,7 +2,7 @@
 
 Recovery snapshot: 2026-09-08 (America/New_York)  
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.14` release candidate
+Current product version: `0.1.0.14`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -203,14 +203,21 @@ Several target concepts already have types or tests but are not live subsystems.
 
 ### `tests/VieriNexus.Application.Tests`
 
-There are 43 `[Fact]` tests across:
+There are 82 `[Fact]` tests across:
 
 - `DependencyCatalogTests.cs`
 - `NavigationRouteMigrationImporterTests.cs`
 - `NavigationStopCoordinatorTests.cs`
 - `ManualMovementSafetyCoordinatorTests.cs`
 - `NavigationActivationPolicyTests.cs`
+- `NavigationAuthorityCoordinatorTests.cs`
 - `NavigationContractJsonTests.cs`
+- `NavigationDiagnosticsMonitorTests.cs`
+- `NavigationExecutionIntentStoreTests.cs`
+- `NavigationExecutionSafetyCoordinatorTests.cs`
+- `NavigationLibraryQueryTests.cs`
+- `NavigationRecoveryCoordinatorTests.cs`
+- `NavigationSafetySimulatorTests.cs`
 - `ResourceLeaseManagerTests.cs`
 - `SoloDutyCombatPolicyTests.cs`
 - `TransactionalMigrationStoreTests.cs`
@@ -643,12 +650,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `b12f2f3 Add navigation safety diagnostics`.
+- Current released implementation commit: `723ef16 Add no-replay recovery acknowledgement`.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project release-candidate version: `0.1.0.14`, Dalamud API 15. The live feed remains 0.1.0.13 until publication completes.
+- Plugin project and live-feed version: `0.1.0.14`, Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -670,7 +677,7 @@ These are migration requirements, not current Nexus features:
 - `3900673` — released 0.1.0.11 with a minimal atomic execution-intent journal, no-replay reload/shutdown reconciliation, exactly-once lease-expiry observation, and an every-draw Navigation/Movement watchdog without enabling execution.
 - `dc9242f` — released 0.1.0.12 with reversible session-only navigation-authority approval, atomic resource probing, source/safety conflict revocation, and a guarded future execution-entry boundary without enabling route execution.
 - `b12f2f3` — released 0.1.0.13 with live navigation provider health, a bounded transition audit, shared provider snapshots, and an isolated five-scenario non-moving safety simulation.
-- Current 0.1.0.14 candidate — adds explicit stopped-intent acknowledgement after confirmed safety conditions and expands the isolated simulator with provider-loss/retry coverage.
+- `723ef16` — released 0.1.0.14 with explicit stopped-intent acknowledgement after confirmed safety conditions and an isolated sixth provider-loss/retry simulation scenario.
 
 ### Last completed work
 
@@ -714,7 +721,7 @@ The user asked production to continue without a separate 0.1.0.11 screenshot. Ve
 
 Version 0.1.0.13 implements the next non-moving observability slice. Six live navigation provider/safety observations appear in Provider Health, feed the shared world snapshot, and create a bounded session audit only when state/code changes. The explicit simulation uses isolated memory-only state and a provider with no movement operation to exercise five production safety transitions without touching the live lease manager or journal. All 77 tests and the zero-warning Release build pass. Source commit `b12f2f3`; Daily Pilcrow release commit `730d3fc`; production deployment `dpl_2ANyPZSoLMN2bHHejHRRoNLLgEH1`; live runtime/source archives and Discord workflow `34344736882` are verified. The user confirmed the simulation passes 5/5 while VieriCodex is actively moving the character through a duty, with no movement interruption.
 
-Version 0.1.0.14 now adds the explicit stopped-intent acknowledgement/reset gate and provider-loss retry evidence without enabling execution. The conditional panel cannot clear a checkpoint until Stop is confirmed, ownership is released, and manual input is quiet; its action cannot resume/replay movement or approve authority. The isolated simulator now covers six scenarios, adding provider unavailability followed by automatic Stop retry and no-replay recovery. All 82 tests and the zero-warning Release build pass before packaging.
+Version 0.1.0.14 adds the explicit stopped-intent acknowledgement/reset gate and provider-loss retry evidence without enabling execution. The conditional panel cannot clear a checkpoint until Stop is confirmed, ownership is released, and manual input is quiet; its action cannot resume/replay movement or approve authority. The isolated simulator now covers six scenarios, adding provider unavailability followed by automatic Stop retry and no-replay recovery. All 82 tests and the zero-warning Release build pass. Source commit `723ef16`; Daily Pilcrow release commit `7a74a9d`; production deployment `dpl_2wWdfsvANQyPyJh4WavnPqUCzo49`; live runtime/source archives and Discord workflow `34348284685` are verified.
 
 ### Current workstream
 
@@ -724,7 +731,7 @@ The user subsequently confirmed that VieriNexus installs and updates through Dal
 
 The explicit next gate is:
 
-1. Publish and update to Nexus 0.1.0.14 through Dalamud.
+1. Update to Nexus 0.1.0.14 through Dalamud.
 2. Run the isolated non-moving safety simulation and confirm all six scenarios pass without character movement or live authority changes.
 3. Treat the Stopped Intent Checkpoint as conditional; it should not appear during normal staging and cannot be meaningfully forced until a real future Nexus execution can create a stopped intent.
 4. Validate a real non-empty personal route with a disabled override and the five read-only navigation IPC calls.
@@ -1000,8 +1007,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release:** `0.1.0.13`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains release candidate `<Version>0.1.0.14</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current release:** `0.1.0.14`.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.14</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1316,6 +1323,8 @@ Verification evidence for 0.1.0.11: Nexus source commit `3900673` and Daily Pilc
 Verification evidence for 0.1.0.12: Nexus source commit `dc9242f` and Daily Pilcrow release commit `8b92bc4` are on their respective `main` branches. All 71 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_9jYWQzsMA38HwqHPPhJygzqvsusU` is Ready. Daily Pilcrow documentation commit `de27c5f` is also pushed and its final production deployment `dpl_753aGdDBr7ShesHXZiMZ3jumEdjg` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.12 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `4F5724B41CC6AC0FC9CCAB26C4C7082F5A6F27903703B15084D7FDDE56D7239C` / `8E75159464F2CD70CD5D255604609063D12B53A476A798C04FACA248E427707B`. GitHub Actions Discord run `34342268338` completed successfully. The user confirmed the Dalamud update, all three green safety guarantees, disabled approval while VieriNavPlotter is loaded, manual-unload enablement, and the no-movement session-authority handoff in game.
 
 Verification evidence for 0.1.0.13: Nexus source commit `b12f2f3` and Daily Pilcrow release commit `730d3fc` are on their respective `main` branches. All 77 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_2ANyPZSoLMN2bHHejHRRoNLLgEH1` is Ready. Daily Pilcrow documentation commit `8fb2e27` is also pushed and its final production deployment `dpl_97gcBViWrmsNihGpPTJpSRTe4KJx` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.13 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `E4B4A80325C3151BC91436002559CFC789FDFBFD80895D384B9BF051181A34F8` / `5E16F62059975DF172C6A3556C9486D40771EB4BF704051FDE1BE2C7CA9845A8`. GitHub Actions Discord run `34344736882` completed successfully. The user confirmed the Provider Health/Safety Audit display and isolated 5/5 simulation in game while VieriCodex actively moved through a duty; movement was never interrupted.
+
+Verification evidence for 0.1.0.14: Nexus source commit `723ef16` and Daily Pilcrow release commit `7a74a9d` are on their respective `main` branches. All 82 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_2wWdfsvANQyPyJh4WavnPqUCzo49` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.14 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `C33EC28759C4EF0FBBA857EB9E2239D0B3F2D561C3E4E028536A71C0AB4FA457` / `C4CB1B7BC85C46EAA2CE37C6F8A66D3F0EAF811781C50F8E62829BEE115884EC`. GitHub Actions Discord run `34348284685` completed successfully. The new conditional stopped-intent checkpoint and isolated sixth provider-loss/retry scenario remain pending user-side in-game verification; no route playback is enabled.
 
 ### 18.16 Release report format
 
