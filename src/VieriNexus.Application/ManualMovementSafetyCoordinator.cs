@@ -41,6 +41,15 @@ public sealed class ManualMovementSafetyCoordinator(NavigationStopCoordinator st
         }
     }
 
+    public bool CanAcknowledgeResume(long now, TimeSpan quietPeriod)
+    {
+        if (quietPeriod < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(quietPeriod));
+
+        lock (sync)
+            return manualYieldLatched && !stop.HasTrackedExecution && QuietPeriodElapsed(now, quietPeriod);
+    }
+
     public ManualMovementSafetyResult Update(
         long now,
         bool protectionEnabled,
@@ -143,7 +152,7 @@ public sealed class ManualMovementSafetyCoordinator(NavigationStopCoordinator st
 
         lock (sync)
         {
-            if (!manualYieldLatched || stop.HasTrackedExecution || !QuietPeriodElapsed(now, quietPeriod))
+            if (!CanAcknowledgeResume(now, quietPeriod))
                 return false;
 
             manualYieldLatched = false;

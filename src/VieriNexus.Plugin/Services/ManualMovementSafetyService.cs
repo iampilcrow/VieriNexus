@@ -24,6 +24,8 @@ internal sealed class ManualMovementSafetyService(
 
     internal bool IsReadyForActivation => observationHealthy && Settings().Enabled;
 
+    internal TimeSpan QuietPeriod => Settings().QuietPeriod;
+
     internal void Update(long now)
     {
         (bool enabled, TimeSpan quietPeriod) = Settings();

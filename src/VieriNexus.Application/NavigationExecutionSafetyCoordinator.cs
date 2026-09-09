@@ -67,6 +67,9 @@ public sealed class NavigationExecutionSafetyCoordinator
 
     public bool IsReadyForActivation => Status.IsReadyForActivation;
 
+    public bool CanAcknowledgeInterruptedIntent =>
+        Status.State == NavigationExecutionSafetyState.AwaitingExplicitResume;
+
     public Guid? TrackedLeaseId
     {
         get

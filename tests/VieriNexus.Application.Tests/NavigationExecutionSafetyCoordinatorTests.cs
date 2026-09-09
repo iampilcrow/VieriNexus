@@ -63,6 +63,23 @@ public sealed class NavigationExecutionSafetyCoordinatorTests
     }
 
     [Fact]
+    public void ReloadRecoveryRetriesAfterProviderReturnsWithoutReplay()
+    {
+        var setup = Setup(Intent(NavigationExecutionIntentState.StopPending));
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        setup.Provider.Available = false;
+
+        NavigationExecutionSafetyStatus unavailable = setup.Safety.Update(now);
+        setup.Provider.Available = true;
+        NavigationExecutionSafetyStatus recovered = setup.Safety.Update(now.AddSeconds(1));
+
+        Assert.Equal(NavigationExecutionSafetyState.RecoveringReload, unavailable.State);
+        Assert.Equal(NavigationExecutionSafetyState.AwaitingExplicitResume, recovered.State);
+        Assert.Equal(1, setup.Provider.StopRequests);
+        Assert.Equal(NavigationExecutionIntentState.AwaitingExplicitResume, setup.Store.Current!.State);
+    }
+
+    [Fact]
     public void InvalidJournalBlocksReadiness()
     {
         var setup = Setup();

@@ -10,11 +10,12 @@ public sealed class NavigationSafetySimulatorTests
         NavigationSimulationReport report = new NavigationSafetySimulator().Run(DateTimeOffset.UtcNow);
 
         Assert.True(report.Passed);
-        Assert.Equal(5, report.PassedCount);
-        Assert.Equal(5, report.Scenarios.Count);
+        Assert.Equal(6, report.PassedCount);
+        Assert.Equal(6, report.Scenarios.Count);
         Assert.All(report.Scenarios, scenario => Assert.True(scenario.Passed, scenario.Detail));
         Assert.Contains(report.Scenarios, scenario => scenario.Name.Contains("Manual movement"));
         Assert.Contains(report.Scenarios, scenario => scenario.Name.Contains("reload"));
+        Assert.Contains(report.Scenarios, scenario => scenario.Name.Contains("Provider loss"));
         Assert.Contains(report.Scenarios, scenario => scenario.Name.Contains("Source-owner"));
         Assert.Contains(report.Scenarios, scenario => scenario.Name.Contains("Lease-expiry"));
     }

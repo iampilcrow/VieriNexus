@@ -33,6 +33,7 @@ internal sealed class NexusWindow : Window
     private readonly NavigationMigrationService navigationMigration;
     private readonly NavigationActivationService navigationActivation;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
+    private readonly NavigationRecoveryService navigationRecovery;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
@@ -46,6 +47,7 @@ internal sealed class NexusWindow : Window
         NavigationMigrationService navigationMigration,
         NavigationActivationService navigationActivation,
         NavigationDiagnosticsService navigationDiagnostics,
+        NavigationRecoveryService navigationRecovery,
         ModuleRegistry modules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
@@ -57,6 +59,7 @@ internal sealed class NexusWindow : Window
         this.navigationMigration = navigationMigration;
         this.navigationActivation = navigationActivation;
         this.navigationDiagnostics = navigationDiagnostics;
+        this.navigationRecovery = navigationRecovery;
         this.modules = modules;
         this.world = world;
         this.logo = logo;
@@ -364,6 +367,7 @@ internal sealed class NexusWindow : Window
             }
             EndPanel();
             DrawNavigationActivationSafety();
+            DrawNavigationRecovery();
             DrawNavigationDiagnostics();
             return;
         }
@@ -394,6 +398,7 @@ internal sealed class NexusWindow : Window
             EndPanel();
             DrawStagedNavigationSettings(snapshot);
             DrawNavigationActivationSafety();
+            DrawNavigationRecovery();
             DrawNavigationDiagnostics();
             return;
         }
@@ -448,6 +453,7 @@ internal sealed class NexusWindow : Window
         ImGui.Spacing();
         DrawStagedNavigationSettings(snapshot);
         DrawNavigationActivationSafety();
+        DrawNavigationRecovery();
         DrawNavigationDiagnostics();
     }
 
@@ -666,6 +672,33 @@ internal sealed class NexusWindow : Window
                     $"{(scenario.Passed ? "✓" : "!")} {scenario.Name}: {scenario.Detail}");
             }
         }
+        EndPanel();
+    }
+
+    private void DrawNavigationRecovery()
+    {
+        NavigationRecoveryStatus recovery = navigationRecovery.Current;
+        if (!recovery.IsRequired)
+            return;
+
+        float height = MathF.Ceiling(
+            (ImGui.GetTextLineHeightWithSpacing() * 9f) +
+            (ImGui.GetStyle().WindowPadding.Y * 2f) + 16f);
+        BeginPanel("STOPPED INTENT CHECKPOINT", height);
+        NexusTheme.StatusDot(recovery.CanAcknowledge ? NexusTheme.Amber : NexusTheme.Red,
+            recovery.CanAcknowledge ? "Ready for explicit acknowledgement" : "Waiting for safe acknowledgement");
+        TextWrapped(NexusTheme.Muted, recovery.Message);
+        TextWrapped(NexusTheme.Muted,
+            "Acknowledgement only clears the stopped checkpoint. It cannot resume or replay movement and does not approve Nexus authority.");
+        if (!recovery.CanAcknowledge)
+            ImGui.BeginDisabled();
+        if (ImGui.Button("Acknowledge stopped intent (no replay)", new Vector2(-1, 0)) &&
+            recovery.CanAcknowledge)
+        {
+            navigationRecovery.Acknowledge(Environment.TickCount64);
+        }
+        if (!recovery.CanAcknowledge)
+            ImGui.EndDisabled();
         EndPanel();
     }
 

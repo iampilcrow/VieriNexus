@@ -29,6 +29,7 @@ public sealed class NavigationSafetySimulator
             RunScenario("Guarded start and verified Stop", () => StartAndStop(now)),
             RunScenario("Manual movement takeover", () => ManualTakeover(now)),
             RunScenario("No-replay reload recovery", () => ReloadRecovery(now)),
+            RunScenario("Provider loss and retry", () => ProviderLossRetry(now)),
             RunScenario("Source-owner return", () => SourceReturn(now)),
             RunScenario("Lease-expiry watchdog", () => LeaseExpiry(now)),
         ];
@@ -100,6 +101,30 @@ public sealed class NavigationSafetySimulator
         Require(setup.Provider.StopRequests == 1, "source return did not request verified Stop");
         Require(setup.Leases.Snapshot().Count == 0, "source return did not release the stopped lease");
         return "Source reappearance revoked Nexus authority and completed verified Stop.";
+    }
+
+    private static string ProviderLossRetry(DateTimeOffset now)
+    {
+        SimulationSetup first = Create(now);
+        Arm(first, now, TimeSpan.FromMinutes(1));
+
+        var reloadedProvider = new SimulationStopProvider { Available = false };
+        var reloadedLeases = new ResourceLeaseManager(() => now.AddSeconds(1));
+        var reloadedStop = new NavigationStopCoordinator(reloadedProvider, TimeSpan.FromMinutes(1));
+        var reloadedSafety = new NavigationExecutionSafetyCoordinator(
+            reloadedLeases,
+            reloadedStop,
+            reloadedProvider,
+            first.Store);
+        NavigationExecutionSafetyStatus unavailable = reloadedSafety.Update(now.AddSeconds(1));
+        reloadedProvider.Available = true;
+        NavigationExecutionSafetyStatus recovered = reloadedSafety.Update(now.AddSeconds(2));
+        Require(unavailable.State == NavigationExecutionSafetyState.RecoveringReload,
+            "provider loss did not remain fail-closed");
+        Require(reloadedProvider.StopRequests == 1, "provider recovery did not request Stop exactly once");
+        Require(recovered.State == NavigationExecutionSafetyState.AwaitingExplicitResume,
+            "provider recovery did not reach the stopped checkpoint");
+        return "Provider loss stayed blocked, then retried Stop and recovered without replay.";
     }
 
     private static string LeaseExpiry(DateTimeOffset now)
@@ -204,7 +229,9 @@ public sealed class NavigationSafetySimulator
     {
         internal int StopRequests { get; private set; }
 
-        public bool IsAvailable => true;
+        internal bool Available { get; set; } = true;
+
+        public bool IsAvailable => Available;
 
         public void RequestStop() => StopRequests++;
 

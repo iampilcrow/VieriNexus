@@ -37,6 +37,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NavigationExecutionSafetyCoordinator navigationExecutionSafety;
     private readonly NavigationAuthorityCoordinator navigationAuthority;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
+    private readonly NavigationRecoveryService navigationRecovery;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -73,6 +74,12 @@ public sealed class Plugin : IDalamudPlugin
             worldStore,
             manualMovementInput,
             manualMovement);
+        navigationRecovery = new NavigationRecoveryService(
+            new NavigationRecoveryCoordinator(
+                navigationExecutionSafety,
+                manualMovement,
+                navigationStop),
+            manualMovementSafety);
         navigationAuthority = new NavigationAuthorityCoordinator(
             resourceLeases,
             navigationStop,
@@ -116,7 +123,7 @@ public sealed class Plugin : IDalamudPlugin
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
-        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, navigationActivation, navigationDiagnostics, moduleRegistry, worldStore, logo);
+        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, navigationActivation, navigationDiagnostics, navigationRecovery, moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 
         ipc = new NexusIpcProvider(PluginInterface, dependencyService, navigationMigration, navigationActivation, worldStore);
@@ -157,6 +164,7 @@ public sealed class Plugin : IDalamudPlugin
         navigationExecutionSafety.Update(DateTimeOffset.UtcNow);
         manualMovementSafety.Update(now);
         navigationAuthority.Update();
+        navigationRecovery.Update(now);
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
 
         if (!ClientState.IsLoggedIn)
