@@ -666,12 +666,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `f5c6f91 Add guarded Nexus route authoring and playback`.
+- Current released implementation commit: `983948e Add Nexus route recording and editing parity`.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project and live-feed version: `0.1.0.15`, Dalamud API 15.
+- Plugin project and live-feed version: `0.1.0.16`, Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -695,6 +695,7 @@ These are migration requirements, not current Nexus features:
 - `b12f2f3` — released 0.1.0.13 with live navigation provider health, a bounded transition audit, shared provider snapshots, and an isolated five-scenario non-moving safety simulation.
 - `723ef16` — released 0.1.0.14 with explicit stopped-intent acknowledgement after confirmed safety conditions and an isolated sixth provider-loss/retry simulation scenario.
 - `f5c6f91` — released 0.1.0.15 as the first live Routes & Navigation vertical slice with a separate Nexus working library, manual authoring, static world preview, guarded same-zone travel/playback/Stop, and non-interrupting yield when another plugin replaces the vnavmesh path.
+- `983948e` — released 0.1.0.16 with observation-only timed recording, capture/display preferences, detailed point editing, confirmation-protected clearing, duplication, compatible bounded route exchange, and automatic preview refresh.
 
 ### Last completed work
 
@@ -743,6 +744,8 @@ Version 0.1.0.14 adds the explicit stopped-intent acknowledgement/reset gate and
 The user confirmed the 0.1.0.14 isolated simulation passes 6/6. Version 0.1.0.15 then changes cadence from micro safety releases to a working vertical slice. Verified staging remains immutable while an explicitly created Nexus working library becomes editable and recoverable. Manual route construction, metadata/movement editing, world preview, guarded same-zone Travel to Start/Play Route, UI/command Stop, per-frame lease heartbeat, natural completion, and shared-vnavmesh path ownership detection are connected. Another provider replacing the path causes observation-only Nexus yield without a Stop call. All 96 tests and the zero-warning Release build pass. Source commit `f5c6f91`; Daily Pilcrow release commit `2e5957a`; release deployment `dpl_AzHaXQoGRPjHFTcAXXgwxa5TH6z7`; documentation commit `f7dc587`; final production deployment `dpl_gCLKGwZ3T4FzgWVqgvyw834NUEFQ`; live runtime/source archives and Discord workflow `34353177958` are verified.
 
 The user then accepted the complete 0.1.0.15 live flow: creating points, seeing the route, traveling to its start, ordered playback, stopping by button and manual movement, acknowledging the stopped-intent checkpoint, returning authority to staging, and manually re-enabling VieriNavPlotter all worked. No movement auto-resumed. Version 0.1.0.16 is the next larger slice: non-moving timed recording, persisted capture/display preferences, detailed point replacement/reordering/removal, confirmed clear, route duplication, safe versioned clipboard exchange, compatible legacy NavPlotter JSON import, and automatic preview refresh. Recording stops on territory change, unavailable character/route, logout, or unload and never acquires movement authority.
+
+Version 0.1.0.16 is published from source `983948e`. All 109 Nexus tests and the zero-warning Release build pass. Daily Pilcrow release `8998162` is live in production deployment `dpl_GPTtNam5WBAjNbmN2X1jJTTLMLCv`; the 13-entry inventory guard passes, runtime/source archives return HTTP 200 as valid ZIPs with exact SHA-256 matches, and Discord workflow `34357630865` succeeded. Runtime/source SHA-256: `B954249F32925544D452794373854900686F44197C3D3A49F4858CC2C5D9EC0B` / `6BE381534DDE51D77F1942B6E5163CF7859CD8E3C932D7D57F7D0526FC19AB5D`.
 
 ### Current workstream
 
@@ -1030,7 +1033,7 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release:** `0.1.0.15`.
+- **Current release:** `0.1.0.16`.
 - **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.16</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
@@ -1350,6 +1353,8 @@ Verification evidence for 0.1.0.13: Nexus source commit `b12f2f3` and Daily Pilc
 Verification evidence for 0.1.0.14: Nexus source commit `723ef16` and Daily Pilcrow release commit `7a74a9d` are on their respective `main` branches. All 82 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_2wWdfsvANQyPyJh4WavnPqUCzo49` is Ready. Daily Pilcrow documentation commit `1421810` is also pushed and its final production deployment `dpl_3p3i4TWqaX1fZqH1xWgcbLDfGydr` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.14 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `C33EC28759C4EF0FBBA857EB9E2239D0B3F2D561C3E4E028536A71C0AB4FA457` / `C4CB1B7BC85C46EAA2CE37C6F8A66D3F0EAF811781C50F8E62829BEE115884EC`. GitHub Actions Discord run `34348284685` completed successfully. The user confirmed the isolated safety simulator passes 6/6 in game. The conditional stopped-intent checkpoint remains unforced because no route playback is enabled.
 
 Verification evidence for 0.1.0.15: Nexus source commit `f5c6f91` and Daily Pilcrow release commit `2e5957a` are on their respective `main` branches. All 96 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_AzHaXQoGRPjHFTcAXXgwxa5TH6z7` is Ready. Daily Pilcrow documentation commit `f7dc587` is also pushed and its final production deployment `dpl_gCLKGwZ3T4FzgWVqgvyw834NUEFQ` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.15 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `F46FB370C26594B086E954B9BEB4D914C860580DBA6526B61425F8DE42A96216` / `3010FE1FA211698AAE6DF865CF301A46B9619038F831C957D9AEE59523D81AB8`. GitHub Actions Discord run `34353177958` completed successfully. The user confirmed working-library/point creation, preview, guarded Travel to Start and ordered playback, button Stop, manual takeover, stopped-intent acknowledgement, staging return, and manual VieriNavPlotter re-enable. The shared-provider replacement branch remains locked by automated no-global-Stop regression coverage rather than a forced live conflict test.
+
+Verification evidence for 0.1.0.16: Nexus source commit `983948e` and Daily Pilcrow release commit `8998162` are on their respective `main` branches. All 109 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_GPTtNam5WBAjNbmN2X1jJTTLMLCv` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.16 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `B954249F32925544D452794373854900686F44197C3D3A49F4858CC2C5D9EC0B` / `6BE381534DDE51D77F1942B6E5163CF7859CD8E3C932D7D57F7D0526FC19AB5D`. GitHub Actions Discord run `34357630865` completed successfully. Dalamud update and the timed-recording/detailed-editing/clipboard acceptance flow remain user-side in-game verification.
 
 ### 18.16 Release report format
 
