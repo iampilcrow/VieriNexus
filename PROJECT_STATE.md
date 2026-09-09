@@ -241,7 +241,7 @@ There are 122 automated tests across:
 - `TransactionalMigrationStoreTests.cs`
 - `WorldStateStoreTests.cs`
 
-The current 0.1.0.19 release candidate passes all 122 tests plus a zero-warning full plugin build.
+The published 0.1.0.19 source passes all 122 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -671,12 +671,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `c879c3f Fix Nexus route confirmations and scrolling`.
+- Current released implementation commit: `cf4313c Add Nexus vendor route assignment foundation`.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.19` release candidate; live-feed version remains `0.1.0.18` until publication; Dalamud API 15.
+- Plugin project and live-feed version: `0.1.0.19`, Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -703,7 +703,7 @@ These are migration requirements, not current Nexus features:
 - `983948e` — released 0.1.0.16 with observation-only timed recording, capture/display preferences, detailed point editing, confirmation-protected clearing, duplication, compatible bounded route exchange, and automatic preview refresh.
 - `448bea1` — released 0.1.0.17 with recording/display controls moved above the fixed route editor after the first 0.1.0.16 screenshot exposed nested-scroll discoverability.
 - `c879c3f` — released 0.1.0.18 with working Clear all points/Delete route confirmations and one naturally sized Routes-page scrollbar instead of fixed nested route scroll regions.
-- `0.1.0.19 release candidate` — adds the complete 27-route verified vendor-template catalog, safe personal copies, explicit exact-target assignments, atomic one-winner enforcement, and read-only fail-closed assignment resolution without enabling Gear dispatch.
+- `cf4313c` — released 0.1.0.19 with the complete 27-route verified vendor-template catalog, safe personal copies, explicit exact-target assignments, atomic one-winner enforcement, and read-only fail-closed assignment resolution without enabling Gear dispatch.
 
 ### Last completed work
 
@@ -761,7 +761,7 @@ Version 0.1.0.18 is published from source `c879c3f`. All 109 Nexus tests and the
 
 The 2026-09-09 upstream/provider integration audit is complete. VieriCodex 1.12.2.80 integrates Questionable 15.756.0.1 from source `5c03483bccd2551257b61c45dcf9a5d53fbab844`; all 8,899 Questionable tests, one generator test, and 4,327 route-validator tests pass. Daily Pilcrow release `3d8da3b` is live in deployment `dpl_HLj1vJB27jSBPrQMEDQj9XnsDGRv`; documentation commit `095dae2` is live in final deployment `dpl_6ATv41dbDiAMea11RTcmsYdQh8V1`. Runtime/source SHA-256: `EBD76DDBB936D7F328F256E327C526B238FE463D4A413AB4BB6ACE67943C7A1B` / `A14344CF754528700766168AF142E4542677A306D19679D5D5D29E57C98B1B85`. Focused public HTTP/ZIP/hash verification and Discord workflow `34394318939` succeeded. Boss Mod 7.5.6.0 and Lifestream 2.5.4.21 retain every public contract used by current Vieri consumers, so unaffected plugins were intentionally not rebuilt.
 
-The next substantial Nexus slice is implemented in the 0.1.0.19 release candidate. All 27 verified VieriAutoDuty gear-vendor standing points are immutable built-in references; adding one creates a new independent working-library route with its override disabled. Enabling an assignment is explicit and atomically disables a competitor for that exact territory/vendor pair. `VieriNexus.Navigation.V1.ResolveGearVendorOverride` exposes only read-only resolution and fails closed for absent, invalid, or ambiguous assignments. The resolver does not start navigation or dispatch Gear/Duties work. All 122 automated tests and the zero-warning Release build pass before packaging.
+Version 0.1.0.19 is published from source `cf4313c7495dae56a2556ef5362beba65692f482`. All 27 verified VieriAutoDuty gear-vendor standing points are immutable built-in references; adding one creates a new independent working-library route with its override disabled. Enabling an assignment is explicit and atomically disables a competitor for that exact territory/vendor pair. `VieriNexus.Navigation.V1.ResolveGearVendorOverride` exposes only read-only resolution and fails closed for absent, invalid, or ambiguous assignments. The resolver does not start navigation or dispatch Gear/Duties work. All 122 automated tests and the zero-warning Release build pass. Daily Pilcrow release `1f2e4e52c89b31982a934aa231fc263df8aeaacc` is live in production deployment `dpl_fHUdKtsGDeahepUuJRkDk3XbqN6s`; all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, production build, public HTTP/ZIP/hash checks, and Discord workflow `34397580461` succeeded. Runtime/source SHA-256: `304C545BD904A05A66309CF03A33E005C556BC023500C3DC985B261D1BEAB6F0` / `8BCD52022F3FDCB3FCE8BF20B02300979304DAE70232041BA5F2A8B41B547404`.
 
 ### Current workstream
 
@@ -1051,7 +1051,7 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release candidate:** `0.1.0.19`; the live feed remains `0.1.0.18` until the candidate completes the production release gate.
+- **Current release:** `0.1.0.19`.
 - **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.19</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
@@ -1377,6 +1377,8 @@ Verification evidence for 0.1.0.16: Nexus source commit `983948e` and Daily Pilc
 Verification evidence for 0.1.0.17: Nexus source commit `448bea1` and Daily Pilcrow release commit `8483657` are on their respective `main` branches. All 109 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_87vVMtwQEz7qov5DqkG1tmEZjKFN` is Ready. Daily Pilcrow documentation commit `af88ddf` is also pushed and its final production deployment `dpl_DJvrUFqZeosXwHLwm1x1mAiBdUot` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.17 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `D0526057B0EF4DF26DD27A8E02A08C3B95A3D5D04986D1662B9463152AA989A8` / `D5996AC9EFDB4DE0127BA913D290147129073756E612DF86F1F771417D462E2D`. GitHub Actions Discord run `34376408900` completed successfully. Dalamud update, immediate control visibility, and the timed-recording/detailed-editing/clipboard acceptance flow remain user-side in-game verification.
 
 Verification evidence for 0.1.0.18: Nexus source commit `c879c3f` and Daily Pilcrow release commit `82dcb03` are on their respective `main` branches. All 109 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_556SjcJWe7PoLTZQaNARqtmajPxp` is Ready. Daily Pilcrow documentation commit `8be2946` is also pushed and its final production deployment `dpl_EqtxtEeurK3Xx9VYzvptYigNbS7V` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.18 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `8313883E3311EACDB142CC8223317F2B0375029AD378DA67BC5EF7F51E7F38E8` / `50897328612B253C4A2D63DF6DC8177AB9185A217E6918C9086F4232326CE08B`. GitHub Actions Discord run `34378647358` completed successfully. The user confirmed the Dalamud update, both destructive confirmations and cancellation paths, and the single-scroll Routes layout.
+
+Verification evidence for 0.1.0.19: Nexus source commit `cf4313c7495dae56a2556ef5362beba65692f482` and Daily Pilcrow release commit `1f2e4e52c89b31982a934aa231fc263df8aeaacc` are on their respective `main` branches. All 122 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_fHUdKtsGDeahepUuJRkDk3XbqN6s` is Ready on the canonical aliases. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.19 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `304C545BD904A05A66309CF03A33E005C556BC023500C3DC985B261D1BEAB6F0` / `8BCD52022F3FDCB3FCE8BF20B02300979304DAE70232041BA5F2A8B41B547404`. GitHub Actions Discord run `34397580461` completed successfully. Dalamud update and the built-in template copy/assignment/persistence batch remain user-side in-game verification.
 
 ### 18.16 Release report format
 
