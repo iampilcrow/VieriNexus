@@ -2,7 +2,7 @@
 
 Recovery snapshot: 2026-09-08 (America/New_York)  
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.16`
+Current product version: `0.1.0.17`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -378,7 +378,7 @@ The Migration page has **Create backup and import to staging** and, after a succ
 
 The Migration card sizes both actions from their rendered labels, keeps them on one row only when they fit, wraps long preview/operation/safety text, and scales its panel height with the configured UI scale. Successful zero-route imports explicitly say that settings and zero personal routes were imported, avoiding the false impression that no migration work occurred.
 
-The Routes page preserves the verified staged snapshot recovered from the saved receipt or produced by import as immutable evidence. An explicit action creates a separate Nexus-owned working library in `NexusData/navigation-library.v1.json`; each atomic replacement retains `.previous`. With zero routes, the user can create one at the live character position or import compatible route JSON. With routes present the page supports search and persisted selection; editable names/tags/notes/movement settings; timed observation-only recording with configurable interval and spacing; add/replace/reorder/remove/undo/reverse points; duplicate; bounded Nexus/legacy NavPlotter JSON exchange; confirmed point clearing and route deletion; ordered-point inspection; automatically refreshed current-territory world preview; Travel to Start; ordered Play Route; and Stop. Imports receive a new identity and cannot enable automation assignment. These operations never write the staged file or live VieriNavPlotter source.
+The Routes page preserves the verified staged snapshot recovered from the saved receipt or produced by import as immutable evidence. An explicit action creates a separate Nexus-owned working library in `NexusData/navigation-library.v1.json`; each atomic replacement retains `.previous`. With zero routes, the user can create one at the live character position or import compatible route JSON. With routes present the page supports search and persisted selection; editable names/tags/notes/movement settings; timed observation-only recording with configurable interval and spacing; add/replace/reorder/remove/undo/reverse points; duplicate; bounded Nexus/legacy NavPlotter JSON exchange; confirmed point clearing and route deletion; ordered-point inspection; automatically refreshed current-territory world preview; Travel to Start; ordered Play Route; and Stop. Recording/display controls render above the fixed-height library/editor split, preventing the nested-scroll discovery failure seen in the first 0.1.0.16 screenshot. Imports receive a new identity and cannot enable automation assignment. These operations never write the staged file or live VieriNavPlotter source.
 
 `NavigationActivationPolicy` is a pure fail-closed assessment covering verified staging, installed/loaded source ownership, required dependencies, ownership-service connection, Navigation/Movement lease conflict, verified Stop, manual override, reload reconciliation/watchdog readiness, explicit user approval, and current Nexus execution state. `NavigationActivationService` reports Stop ready only while the vnavmesh adapter is loaded, manual yielding ready only while FFXIV input observation is available and the current character protection setting is enabled, and reload readiness only after the durable journal and active watchdog have completed their first safe observation.
 
@@ -671,7 +671,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project and live-feed version: `0.1.0.16`, Dalamud API 15.
+- Plugin project version: `0.1.0.17`, Dalamud API 15; live-feed publication is the current task.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -743,7 +743,7 @@ Version 0.1.0.14 adds the explicit stopped-intent acknowledgement/reset gate and
 
 The user confirmed the 0.1.0.14 isolated simulation passes 6/6. Version 0.1.0.15 then changes cadence from micro safety releases to a working vertical slice. Verified staging remains immutable while an explicitly created Nexus working library becomes editable and recoverable. Manual route construction, metadata/movement editing, world preview, guarded same-zone Travel to Start/Play Route, UI/command Stop, per-frame lease heartbeat, natural completion, and shared-vnavmesh path ownership detection are connected. Another provider replacing the path causes observation-only Nexus yield without a Stop call. All 96 tests and the zero-warning Release build pass. Source commit `f5c6f91`; Daily Pilcrow release commit `2e5957a`; release deployment `dpl_AzHaXQoGRPjHFTcAXXgwxa5TH6z7`; documentation commit `f7dc587`; final production deployment `dpl_gCLKGwZ3T4FzgWVqgvyw834NUEFQ`; live runtime/source archives and Discord workflow `34353177958` are verified.
 
-The user then accepted the complete 0.1.0.15 live flow: creating points, seeing the route, traveling to its start, ordered playback, stopping by button and manual movement, acknowledging the stopped-intent checkpoint, returning authority to staging, and manually re-enabling VieriNavPlotter all worked. No movement auto-resumed. Version 0.1.0.16 is the next larger slice: non-moving timed recording, persisted capture/display preferences, detailed point replacement/reordering/removal, confirmed clear, route duplication, safe versioned clipboard exchange, compatible legacy NavPlotter JSON import, and automatic preview refresh. Recording stops on territory change, unavailable character/route, logout, or unload and never acquires movement authority.
+The user then accepted the complete 0.1.0.15 live flow: creating points, seeing the route, traveling to its start, ordered playback, stopping by button and manual movement, acknowledging the stopped-intent checkpoint, returning authority to staging, and manually re-enabling VieriNavPlotter all worked. No movement auto-resumed. Version 0.1.0.16 added non-moving timed recording, persisted capture/display preferences, detailed point replacement/reordering/removal, confirmed clear, route duplication, safe versioned clipboard exchange, compatible legacy NavPlotter JSON import, and automatic preview refresh. Recording stops on territory change, unavailable character/route, logout, or unload and never acquires movement authority. The user's first 0.1.0.16 screenshot confirmed the prior two-point route, preview, timed-recording action, point list, duplicate/import/export/clear actions, and exposed that the interval/spacing panel was effectively hidden below the 650-pixel inner route editor behind an outer scroll region. Version 0.1.0.17 moves that panel above the route split so the controls are immediately visible.
 
 Version 0.1.0.16 is published from source `983948e`. All 109 Nexus tests and the zero-warning Release build pass. Daily Pilcrow release `8998162` is live in production deployment `dpl_GPTtNam5WBAjNbmN2X1jJTTLMLCv`; documentation commit `26c2351` is live in final deployment `dpl_AmoKc2NpssgjHUUhr2pCRdS7pZgh`. The 13-entry inventory guard passes, runtime/source archives return HTTP 200 as valid ZIPs with exact SHA-256 matches, and Discord workflow `34357630865` succeeded. Runtime/source SHA-256: `B954249F32925544D452794373854900686F44197C3D3A49F4858CC2C5D9EC0B` / `6BE381534DDE51D77F1942B6E5163CF7859CD8E3C932D7D57F7D0526FC19AB5D`.
 
@@ -756,7 +756,7 @@ The user subsequently confirmed that VieriNexus installs and updates through Dal
 The explicit next gate is:
 
 1. **CONFIRMED IN GAME ON 0.1.0.15:** working-library creation, points, preview, Travel to Start, ordered playback, button Stop, manual takeover, no-replay acknowledgement, return to staging, and manual source re-enable all passed.
-2. Update to 0.1.0.16 and verify timed recording captures movement at the configured cadence without duplicating nearby samples or taking navigation authority.
+2. Update to 0.1.0.17, confirm capture interval/minimum spacing appear above the route editor without clipping, and verify timed recording captures movement at the configured cadence without duplicating nearby samples or taking navigation authority.
 3. Verify selecting a point then replacing it with the current position, moving it up/down, and removing it immediately updates the saved route and active preview.
 4. Verify duplicate receives a distinct name and disabled assignment; copy/import receives a new identity and disabled assignment; clear points requires confirmation.
 5. Verify recording stops when changing territory or disabling Nexus and does not resume automatically after reload.
@@ -1033,8 +1033,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release:** `0.1.0.16`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.16</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current release:** `0.1.0.16`; version `0.1.0.17` is the current publication candidate.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.17</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1137,7 +1137,7 @@ The exact archive naming convention, hosted path, and generation command must be
 
 ### 18.6 Version synchronization
 
-Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.16` in:
+Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.17` in:
 
 `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj`
 

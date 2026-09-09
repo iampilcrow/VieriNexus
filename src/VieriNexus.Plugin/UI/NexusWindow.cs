@@ -447,6 +447,8 @@ internal sealed class NexusWindow : Window
             return;
         }
 
+        DrawStagedNavigationSettings(snapshot);
+
         ImGui.SetNextItemWidth(Math.Min(420f, ImGui.GetContentRegionAvail().X));
         ImGui.InputTextWithHint("###RouteSearch", "Search name, tags, notes, target, or territory", ref routeSearch, 256);
         NavigationRouteRecordingStatus recordingStatus = navigationRuntime.RecordingStatus;
@@ -510,8 +512,6 @@ internal sealed class NexusWindow : Window
         DrawRouteDetails(selectedRoute, snapshot.ShowPointNumbers);
         ImGui.EndTable();
 
-        ImGui.Spacing();
-        DrawStagedNavigationSettings(snapshot);
         DrawNavigationActivationSafety();
         DrawNavigationRecovery();
         DrawNavigationDiagnostics();
