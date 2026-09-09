@@ -666,12 +666,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `448bea1 Expose Nexus route recording controls`.
+- Current released implementation commit: `c879c3f Fix Nexus route confirmations and scrolling`.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.18`, Dalamud API 15; live-feed publication is the active release task.
+- Plugin project and live-feed version: `0.1.0.18`, Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -697,7 +697,7 @@ These are migration requirements, not current Nexus features:
 - `f5c6f91` — released 0.1.0.15 as the first live Routes & Navigation vertical slice with a separate Nexus working library, manual authoring, static world preview, guarded same-zone travel/playback/Stop, and non-interrupting yield when another plugin replaces the vnavmesh path.
 - `983948e` — released 0.1.0.16 with observation-only timed recording, capture/display preferences, detailed point editing, confirmation-protected clearing, duplication, compatible bounded route exchange, and automatic preview refresh.
 - `448bea1` — released 0.1.0.17 with recording/display controls moved above the fixed route editor after the first 0.1.0.16 screenshot exposed nested-scroll discoverability.
-- 0.1.0.18 removes the fixed inner route-list/editor scroll regions and repairs Clear all points/Delete route modal scope; exact release commit is recorded after publication.
+- `c879c3f` — released 0.1.0.18 with working Clear all points/Delete route confirmations and one naturally sized Routes-page scrollbar instead of fixed nested route scroll regions.
 
 ### Last completed work
 
@@ -750,6 +750,8 @@ The user then accepted the complete 0.1.0.15 live flow: creating points, seeing 
 Version 0.1.0.16 is published from source `983948e`. All 109 Nexus tests and the zero-warning Release build pass. Daily Pilcrow release `8998162` is live in production deployment `dpl_GPTtNam5WBAjNbmN2X1jJTTLMLCv`; documentation commit `26c2351` is live in final deployment `dpl_AmoKc2NpssgjHUUhr2pCRdS7pZgh`. The 13-entry inventory guard passes, runtime/source archives return HTTP 200 as valid ZIPs with exact SHA-256 matches, and Discord workflow `34357630865` succeeded. Runtime/source SHA-256: `B954249F32925544D452794373854900686F44197C3D3A49F4858CC2C5D9EC0B` / `6BE381534DDE51D77F1942B6E5163CF7859CD8E3C932D7D57F7D0526FC19AB5D`.
 
 Version 0.1.0.17 is published from source `448bea1`. All 109 Nexus tests and the zero-warning Release build pass. Daily Pilcrow release `8483657` is live in production deployment `dpl_87vVMtwQEz7qov5DqkG1tmEZjKFN`; documentation commit `af88ddf` is live in final deployment `dpl_DJvrUFqZeosXwHLwm1x1mAiBdUot`. The 13-entry inventory guard passes, both public archives return HTTP 200 as valid ZIPs with exact SHA-256 matches, and Discord workflow `34376408900` succeeded. Runtime/source SHA-256: `D0526057B0EF4DF26DD27A8E02A08C3B95A3D5D04986D1662B9463152AA989A8` / `D5996AC9EFDB4DE0127BA913D290147129073756E612DF86F1F771417D462E2D`.
+
+Version 0.1.0.18 is published from source `c879c3f`. All 109 Nexus tests and the zero-warning Release build pass. Daily Pilcrow release `82dcb03` is live in production deployment `dpl_556SjcJWe7PoLTZQaNARqtmajPxp`. The 13-entry inventory guard passes, both public archives return HTTP 200 as valid ZIPs with exact SHA-256 matches, and Discord workflow `34378647358` succeeded. Runtime/source SHA-256: `8313883E3311EACDB142CC8223317F2B0375029AD378DA67BC5EF7F51E7F38E8` / `50897328612B253C4A2D63DF6DC8177AB9185A217E6918C9086F4232326CE08B`. Final Daily Pilcrow documentation commit/deployment are recorded after their deployment completes.
 
 ### Current workstream
 
@@ -1037,7 +1039,7 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release task:** `0.1.0.18`.
+- **Current release:** `0.1.0.18`.
 - **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.18</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
@@ -1361,6 +1363,8 @@ Verification evidence for 0.1.0.15: Nexus source commit `f5c6f91` and Daily Pilc
 Verification evidence for 0.1.0.16: Nexus source commit `983948e` and Daily Pilcrow release commit `8998162` are on their respective `main` branches. All 109 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_GPTtNam5WBAjNbmN2X1jJTTLMLCv` is Ready. Daily Pilcrow documentation commit `26c2351` is also pushed and its final production deployment `dpl_AmoKc2NpssgjHUUhr2pCRdS7pZgh` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.16 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `B954249F32925544D452794373854900686F44197C3D3A49F4858CC2C5D9EC0B` / `6BE381534DDE51D77F1942B6E5163CF7859CD8E3C932D7D57F7D0526FC19AB5D`. GitHub Actions Discord run `34357630865` completed successfully. Dalamud update and the timed-recording/detailed-editing/clipboard acceptance flow remain user-side in-game verification.
 
 Verification evidence for 0.1.0.17: Nexus source commit `448bea1` and Daily Pilcrow release commit `8483657` are on their respective `main` branches. All 109 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_87vVMtwQEz7qov5DqkG1tmEZjKFN` is Ready. Daily Pilcrow documentation commit `af88ddf` is also pushed and its final production deployment `dpl_DJvrUFqZeosXwHLwm1x1mAiBdUot` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.17 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `D0526057B0EF4DF26DD27A8E02A08C3B95A3D5D04986D1662B9463152AA989A8` / `D5996AC9EFDB4DE0127BA913D290147129073756E612DF86F1F771417D462E2D`. GitHub Actions Discord run `34376408900` completed successfully. Dalamud update, immediate control visibility, and the timed-recording/detailed-editing/clipboard acceptance flow remain user-side in-game verification.
+
+Verification evidence for 0.1.0.18: Nexus source commit `c879c3f` and Daily Pilcrow release commit `82dcb03` are on their respective `main` branches. All 109 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Vercel release deployment `dpl_556SjcJWe7PoLTZQaNARqtmajPxp` is Ready. The focused live validator confirms the feed contains exactly one VieriNexus 0.1.0.18 entry and that runtime/source downloads return HTTP 200 as valid ZIPs with exact SHA-256 matches `8313883E3311EACDB142CC8223317F2B0375029AD378DA67BC5EF7F51E7F38E8` / `50897328612B253C4A2D63DF6DC8177AB9185A217E6918C9086F4232326CE08B`. GitHub Actions Discord run `34378647358` completed successfully. Dalamud update, both destructive confirmations, and the single-scroll Routes layout remain the focused user-side in-game checks; the final Daily Pilcrow documentation deployment is recorded separately after it becomes Ready.
 
 ### 18.16 Release report format
 
