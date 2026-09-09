@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAtUtc": "2026-09-08T04:04:35.5566050Z",
+  "capturedAtUtc": "2026-09-09T00:06:19.5458251Z",
   "migrationSources": [
     {
       "name": "VieriAutoDuty",
@@ -26,9 +26,9 @@
     {
       "name": "VieriCodex",
       "repository": "https://github.com/iampilcrow/VieriCodex.git",
-      "commit": "e31ffd82fadcfba5c6cf1439c3788ff7b669e61d",
+      "commit": "d6df49a0feb87a764159aac0c906474597a33cf7",
       "upstreamRepository": "https://github.com/PunishXIV/Questionable.git",
-      "upstreamCommit": "15c3d707f053d122be5b010857f5c9b3d2beef35"
+      "upstreamCommit": "254e8e4f7e1ba1a5db6af7f57a4fd85a27051d3c"
     },
     {
       "name": "VieriDeck",
@@ -40,9 +40,9 @@
     {
       "name": "VieriDelvUI",
       "repository": "https://github.com/iampilcrow/VieriDelvUI.git",
-      "commit": "49ecc77638bd6466ff134eb28ffb10e3c78b527c",
+      "commit": "1062765e33fd9d1e1fb386adb4043cd4cb4f9b0a",
       "upstreamRepository": "https://github.com/DelvUI/DelvUI.git",
-      "upstreamCommit": "edc6ec52620ddf3feaa28115e69329a09b865f4a"
+      "upstreamCommit": "7aab2e31ef767fa6ae3b7a5667baf979552a3670"
     },
     {
       "name": "VieriLink",
