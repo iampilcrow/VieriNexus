@@ -51,7 +51,13 @@ public sealed class Plugin : IDalamudPlugin
         var moduleRegistry = BuiltInModuleCatalog.Create();
         var worldStore = new WorldStateStore();
         var resourceLeases = new ResourceLeaseManager();
-        var navigationActivation = new NavigationActivationService(dependencyService, navigationMigration, resourceLeases);
+        var navigationStopProvider = new VnavmeshNavigationStopProvider(PluginInterface, dependencyService);
+        var navigationStop = new NavigationStopCoordinator(navigationStopProvider, TimeSpan.FromSeconds(15));
+        var navigationActivation = new NavigationActivationService(
+            dependencyService,
+            navigationMigration,
+            resourceLeases,
+            navigationStop);
         worldObserver = new WorldSnapshotObserver(ClientState, PlayerState, ObjectTable, Condition, worldStore);
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");

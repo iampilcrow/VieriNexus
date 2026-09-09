@@ -36,6 +36,7 @@ public sealed record NavigationActivationAssessment(
     bool IsSourcePluginInstalled,
     bool IsSourcePluginLoaded,
     bool IsSourcePluginAuthoritative,
+    bool IsStopAvailable,
     IReadOnlyList<NavigationActivationBlocker> Blockers);
 
 public static class NavigationActivationPolicy
@@ -73,6 +74,7 @@ public static class NavigationActivationPolicy
             inputs.SourcePluginInstalled,
             inputs.SourcePluginLoaded,
             sourceAuthoritative,
+            inputs.StopAvailable,
             blockers);
     }
 

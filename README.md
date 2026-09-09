@@ -16,6 +16,8 @@ The Routes page now presents that verified staged snapshot as a read-only librar
 
 An activation-safety assessment now makes the coexistence boundary explicit. It detects the installed/loaded source owner, required-provider readiness, Navigation/Movement lease conflicts, and the mandatory Stop, manual-override, reload-reconciliation, and explicit-approval gates. Nexus cannot activate navigation while any gate is blocked, and this release intentionally leaves the execution primitives unavailable.
 
+The first execution-safety primitive is now connected behind that assessment. Nexus has an idempotent, provider-neutral Stop coordinator and a vnavmesh adapter: a tracked execution keeps its Navigation/Movement lease when Stop is unavailable, fails, cannot be confirmed, or movement remains active, and releases ownership only after vnavmesh explicitly reports that the path is no longer running. There is still no route executor, activation action, or public Stop command in this build.
+
 ## Current safety guarantees
 
 - Existing Vieri configurations are discovered read-only and left in place.
@@ -24,6 +26,7 @@ An activation-safety assessment now makes the coexistence boundary explicit. It 
 - Route imports preserve disabled overrides as disabled and never activate navigation automatically.
 - Route-library browsing and IPC read only the verified staged snapshot; they do not query or change the live VieriNavPlotter configuration.
 - A loaded VieriNavPlotter is reported as the current route owner and blocks Nexus activation; there is no activation action in the current build.
+- Stop completion requires a separate inactive-path confirmation; sending a Stop request alone never releases navigation ownership.
 - No migration-source plugin is disabled automatically.
 - No gameplay automation is started by the foundation build.
 - The Nexus window waits until a targetable character is fully in the world.

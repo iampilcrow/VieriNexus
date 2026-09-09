@@ -6,7 +6,8 @@ namespace VieriNexus.Services;
 internal sealed class NavigationActivationService(
     DependencyService dependencies,
     NavigationMigrationService migration,
-    ResourceLeaseManager leases)
+    ResourceLeaseManager leases,
+    NavigationStopCoordinator stop)
 {
     internal NavigationActivationAssessment Assess()
     {
@@ -22,7 +23,7 @@ internal sealed class NavigationActivationService(
             dependencies.RequiredReady,
             ResourceOwnershipConnected: true,
             HasNavigationOrMovementLeaseConflict: leaseConflict,
-            StopAvailable: false,
+            StopAvailable: stop.IsProviderAvailable,
             ManualOverrideAvailable: false,
             ReloadReconciliationAvailable: false,
             ExplicitActivationApproved: false,

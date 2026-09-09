@@ -525,8 +525,11 @@ internal sealed class NexusWindow : Window
     private void DrawNavigationActivationSafety()
     {
         NavigationActivationAssessment assessment = navigationActivation.Assess();
+        NavigationActivationBlocker[] displayedBlockers = assessment.Blockers
+            .Where(blocker => blocker.Code != "source-plugin-loaded")
+            .ToArray();
         float height = MathF.Ceiling(
-            (ImGui.GetTextLineHeightWithSpacing() * ((assessment.Blockers.Count * 2f) + 4f)) +
+            (ImGui.GetTextLineHeightWithSpacing() * ((displayedBlockers.Length * 2f) + 5f)) +
             (ImGui.GetStyle().WindowPadding.Y * 2f) + 12f);
         BeginPanel("ACTIVATION SAFETY", height);
         NexusTheme.StatusDot(assessment.CanActivate ? NexusTheme.Green : NexusTheme.Amber,
@@ -539,7 +542,10 @@ internal sealed class NexusWindow : Window
                 ? "VieriNavPlotter is installed but not loaded; Nexus execution remains disabled."
                 : "VieriNavPlotter is not installed; Nexus execution remains disabled.";
         TextWrapped(NexusTheme.Muted, sourceState);
-        foreach (NavigationActivationBlocker blocker in assessment.Blockers)
+        if (assessment.IsStopAvailable)
+            TextWrapped(NexusTheme.Green,
+                "• Verified Stop is connected; ownership releases only after movement is confirmed inactive.");
+        foreach (NavigationActivationBlocker blocker in displayedBlockers)
             TextWrapped(NexusTheme.Muted, $"• {blocker.Message}");
         EndPanel();
     }
