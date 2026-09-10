@@ -34,6 +34,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
     private DateTimeOffset startedAt;
     private DateTimeOffset phaseStartedAt;
     private bool observedMovement;
+    private int authoredPointIndex;
     private uint rootTerritoryId;
     private string? aethernetDestination;
     private SuiteRouteProviderObservation observation = Idle();
@@ -80,6 +81,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         startedAt = DateTimeOffset.UtcNow;
         phaseStartedAt = startedAt;
         observedMovement = false;
+        authoredPointIndex = 0;
         rootTerritoryId = 0;
         aethernetDestination = null;
 
@@ -200,21 +202,27 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
                     if (active is true)
                     {
                         observedMovement = true;
-                        bool? owned = navigation.IsDestinationOwned(request!.Points[^1]);
+                        bool? owned = navigation.IsDestinationOwned(request!.Points[authoredPointIndex]);
                         if (owned is false)
                             return Fail("nexus-route-path-replaced",
                                 "Another plugin replaced the Nexus path. Nexus yielded without stopping that plugin.", stopOwnedMovement: false);
                     }
                     else if (active is false && (observedMovement || now - phaseStartedAt >= MovementStartGrace))
                     {
-                        string routeName = request!.TravelOnly ? "Travel to start completed." : "Route playback completed.";
-                        observation = new SuiteRouteProviderObservation(
-                            SuiteRouteProviderState.Completed,
-                            "nexus-route-completed",
-                            routeName,
-                            false);
-                        phase = TravelPhase.Idle;
-                        request = null;
+                        authoredPointIndex++;
+                        if (authoredPointIndex < request!.Points.Count)
+                            StartAuthoredLeg(now);
+                        else
+                        {
+                            string routeName = request.TravelOnly ? "Travel to start completed." : "Route playback completed.";
+                            observation = new SuiteRouteProviderObservation(
+                                SuiteRouteProviderState.Completed,
+                                "nexus-route-completed",
+                                routeName,
+                                false);
+                            phase = TravelPhase.Idle;
+                            request = null;
+                        }
                     }
                     break;
             }
@@ -237,15 +245,30 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         if (!navigation.IsReady)
             throw new InvalidOperationException("vnavmesh is not ready in the route territory.");
 
-        navigation.Start(request.Points, request.UseFlight, request.Tolerance);
-        observedMovement = false;
+        authoredPointIndex = 0;
+        StartAuthoredLeg(now);
         SetRunning(TravelPhase.MovingAuthoredPath,
             "nexus-route-playing",
             request.TravelOnly
-                ? "Nexus is traveling to the route start through vnavmesh."
-                : $"Nexus is playing all {request.Points.Count} authored route points through vnavmesh.",
+                ? "Nexus is pathfinding to the route start through vnavmesh."
+                : $"Nexus is pathfinding through all {request.Points.Count} authored route points with vnavmesh.",
             visualizationActive: true,
             now);
+    }
+
+    private void StartAuthoredLeg(DateTimeOffset now)
+    {
+        if (request is null || authoredPointIndex < 0 || authoredPointIndex >= request.Points.Count)
+            throw new InvalidOperationException("No authored Nexus route point is available.");
+
+        NavigationAuthoredLeg leg = NavigationAuthoredLegPolicy.Create(request, authoredPointIndex);
+        if (leg.RequiresPathfinding)
+            navigation.StartPathfinding(leg.Destination, leg.UseFlight, leg.Tolerance);
+        else
+            navigation.Start([leg.Destination], leg.UseFlight, leg.Tolerance);
+
+        observedMovement = false;
+        phaseStartedAt = now;
     }
 
     private bool TryResolveTeleport(uint territoryId, out TeleportDestination destination)
@@ -358,6 +381,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         rootTerritoryId = 0;
         aethernetDestination = null;
         observedMovement = false;
+        authoredPointIndex = 0;
         observation = Idle();
     }
 

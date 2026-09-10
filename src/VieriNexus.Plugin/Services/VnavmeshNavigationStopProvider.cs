@@ -12,8 +12,13 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
     private readonly ICallGateSubscriber<bool> isRunning;
     private readonly ICallGateSubscriber<bool> isReady;
     private readonly ICallGateSubscriber<List<Vector3>, bool, object> moveTo;
+    private readonly ICallGateSubscriber<Vector3, Vector3, bool, CancellationToken, Task<List<Vector3>>> pathfind;
     private readonly ICallGateSubscriber<float, object> setTolerance;
     private readonly ICallGateSubscriber<List<Vector3>> listWaypoints;
+    private CancellationTokenSource? pathfindCancellation;
+    private Task<List<Vector3>>? pathfindTask;
+    private NavigationRoutePoint? pathfindDestination;
+    private bool pathfindUseFlight;
 
     internal VnavmeshNavigationStopProvider(
         IDalamudPluginInterface pluginInterface,
@@ -24,6 +29,8 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
         isRunning = pluginInterface.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning");
         isReady = pluginInterface.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady");
         moveTo = pluginInterface.GetIpcSubscriber<List<Vector3>, bool, object>("vnavmesh.Path.MoveTo");
+        pathfind = pluginInterface.GetIpcSubscriber<Vector3, Vector3, bool, CancellationToken, Task<List<Vector3>>>(
+            "vnavmesh.Nav.PathfindCancelable");
         setTolerance = pluginInterface.GetIpcSubscriber<float, object>("vnavmesh.Path.SetTolerance");
         listWaypoints = pluginInterface.GetIpcSubscriber<List<Vector3>>("vnavmesh.Path.ListWaypoints");
     }
@@ -46,12 +53,46 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
         moveTo.InvokeAction(points.Select(point => new Vector3(point.X, point.Y, point.Z)).ToList(), useFlight);
     }
 
-    public void RequestStop() => stop.InvokeAction();
+    internal void StartPathfinding(
+        NavigationRoutePoint destination,
+        bool useFlight,
+        float tolerance)
+    {
+        if (!float.IsFinite(destination.X) || !float.IsFinite(destination.Y) || !float.IsFinite(destination.Z))
+            throw new ArgumentException("The route destination must be finite.", nameof(destination));
+        if (pathfindTask is not null)
+            throw new InvalidOperationException("A Nexus vnavmesh path calculation is already running.");
+        if (Plugin.ObjectTable.LocalPlayer is not { } player)
+            throw new InvalidOperationException("FFXIV is not logged into a character.");
 
-    public bool? IsMovementActive() => isRunning.InvokeFunc();
+        setTolerance.InvokeAction(Math.Clamp(tolerance, 0.1f, 20f));
+        pathfindCancellation = new CancellationTokenSource();
+        pathfindDestination = destination;
+        pathfindUseFlight = useFlight;
+        pathfindTask = pathfind.InvokeFunc(
+            player.Position,
+            new Vector3(destination.X, destination.Y, destination.Z),
+            useFlight,
+            pathfindCancellation.Token);
+    }
+
+    public void RequestStop()
+    {
+        CancelPendingPathfind();
+        stop.InvokeAction();
+    }
+
+    public bool? IsMovementActive()
+    {
+        PumpPendingPathfind();
+        return pathfindTask is not null || isRunning.InvokeFunc();
+    }
 
     public bool? IsDestinationOwned(NavigationRoutePoint expectedDestination)
     {
+        PumpPendingPathfind();
+        if (pathfindTask is not null)
+            return pathfindDestination is { } pending && Distance(pending, expectedDestination) <= 1.5f;
         if (!isRunning.InvokeFunc())
             return null;
         List<Vector3> points = listWaypoints.InvokeFunc();
@@ -79,4 +120,49 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
             return [];
         }
     }
+
+    private void PumpPendingPathfind()
+    {
+        if (pathfindTask is not { IsCompleted: true } completed)
+            return;
+
+        CancellationTokenSource? cancellation = pathfindCancellation;
+        pathfindTask = null;
+        pathfindCancellation = null;
+        pathfindDestination = null;
+        try
+        {
+            List<Vector3> points = completed.GetAwaiter().GetResult();
+            if (points.Count == 0)
+                throw new InvalidOperationException("vnavmesh could not find a navigable path to the route point.");
+            moveTo.InvokeAction(points, pathfindUseFlight);
+        }
+        finally
+        {
+            cancellation?.Dispose();
+        }
+    }
+
+    private void CancelPendingPathfind()
+    {
+        CancellationTokenSource? cancellation = pathfindCancellation;
+        pathfindTask = null;
+        pathfindCancellation = null;
+        pathfindDestination = null;
+        if (cancellation is null)
+            return;
+        try
+        {
+            cancellation.Cancel();
+        }
+        finally
+        {
+            cancellation.Dispose();
+        }
+    }
+
+    private static float Distance(NavigationRoutePoint left, NavigationRoutePoint right) =>
+        Vector3.Distance(
+            new Vector3(left.X, left.Y, left.Z),
+            new Vector3(right.X, right.Y, right.Z));
 }
