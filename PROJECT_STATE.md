@@ -214,7 +214,7 @@ Several target concepts already have types or tests but are not general live sub
 - `Services/NavigationRoutePreviewService.cs` — persistent current-territory world drawing for explicitly selected Nexus route plans.
 - `Services/NavigationLivePathService.cs` — generated vnavmesh waypoint overlay gated to current-process Nexus local or delegated suite ownership.
 - `Services/NexusRouteTravelProvider.cs` — Nexus-owned complete route-trip state machine. It calls stock Lifestream only for teleport, Aethernet, and exact Grand Company inn shortcuts, waits through transitions/readiness, then calls vnavmesh for the authored path; it owns route status, visualization authorization, timeout/failure reporting, and Stop. It has no AutoDuty route dependency.
-- `Services/ProgressionProviderService.cs` — read-only VieriCodex, stock Questionable, VieriAutoDuty, and stock AutoDuty presence plus IPC-contract probe. It invokes no provider operation, distinguishes stock/transition flavor, and rejects simultaneous ready quest providers.
+- `Services/ProgressionProviderService.cs` — VieriCodex, stock Questionable, VieriAutoDuty, and stock AutoDuty presence plus IPC-contract probe. Questing remains observation-only. The duty edge exposes one exact bounded `Run`, status/path observations, and `Stop`; it resets provider leveling mode through either direct `SetLevelingMode` or stock `SetConfig`, distinguishes stock/transition flavor, and rejects simultaneous ready quest providers.
 - `Services/NavigationRouteRuntimeService.cs` — plugin-facing planning, static/live preview, consistent same/cross-zone suite dispatch with guarded local fallback, immediate Stop/restart, and per-frame runtime composition.
 - `Services/NavigationRouteRecordingService.cs` — live position observation and atomic capture persistence around the provider-neutral recording coordinator.
 - `Services/NexusIpcProvider.cs` — registered read-only status, dependency, and Nexus-namespaced navigation IPC.
@@ -338,15 +338,15 @@ The route execution and recovery monitors run each plugin draw even when the Nex
 
 `NavigationExecutionSafetyCoordinator` connects durable movement intent, reload/shutdown reconciliation, active lease expiry, normal completion, and superseded-provider yield. Before provider movement, `BeginExecution` atomically saves schema/execution/route/lease identity and state, then registers the lease with verified Stop; it deliberately persists no instruction pointer. Reload Running/StopPending intent can only request Stop, confirm inactivity, and enter `AwaitingExplicitResume`. It cannot replay movement. Missing-provider, rejected-Stop, active/unknown movement, corrupt-journal, and unwritable-journal outcomes remain fail-closed. `Superseded` records independently verified replacement by another provider without calling global Stop.
 
-The safety coordinator sweeps lease expiry every plugin draw, including while the UI is closed. A missed tracked Navigation/Movement heartbeat persists StopPending, invokes the same verified Stop coordinator, and stays blocked until inactive confirmation. Plugin disposal also arms StopPending before requesting Stop. The current build never creates such an execution; the implementation and disk journal are testable readiness foundations only.
+The safety coordinator sweeps lease expiry every plugin draw, including while the UI is closed. A missed tracked Navigation/Movement heartbeat persists StopPending, invokes the same verified Stop coordinator, and stays blocked until inactive confirmation. Plugin disposal also arms StopPending before requesting Stop. Routes now use this live execution boundary. The bounded Progression duty lane has its own durable goal/task store and reconciliation because it owns a broader resource bundle and provider lifecycle.
 
-### 4.6 Goal/task/failure contracts and first Progression planner — IMPLEMENTED, EXECUTION LOCKED
+### 4.6 Goal/task/failure contracts and first bounded Progression duty executor — IMPLEMENTED
 
 `NexusGoal` is a versioned, character-scoped desired-state record with constraints, priority, lifecycle, plan revision, and status detail. `NexusTask` is a bounded unit with capability, selected provider, required resources, lifecycle, payload, and structured failure. Stable string-backed kinds/capabilities/providers avoid a global enum that every module must edit.
 
-`ReachJobLevelPlanner` is the first concrete desired-state planner. It validates current character/job/level, target level, a hard non-negative gil reserve, at least one allowed leveling method, and compatible provider availability. It can propose Nexus-owned gear readiness, supported quest work, exactly one bounded duty, and post-activity level verification/replanning. An unavailable optional lane is a warning when another allowed lane is ready; no ready provider or an ambiguous double-provider state blocks the draft. The plan explicitly reports that execution is not connected.
+`ReachJobLevelPlanner` is the first concrete desired-state planner. It validates current character/job/level, target level, a hard non-negative gil reserve, at least one allowed leveling method, and compatible provider availability. It can propose Nexus-owned gear readiness, supported quest work, exactly one bounded duty, and post-activity level verification/replanning. An unavailable optional lane is a warning when another allowed lane is ready; no ready provider or an ambiguous double-provider state blocks the draft. Only the bounded duty lane is connected to execution.
 
-The current character's draft persists through configuration schema 3. There is still no general goal repository, task graph executor, reconciler, activity history, or resumable Progression execution. Existing VieriCodex and VieriAutoDuty operations are not invoked by the planner.
+The current character's draft persists through configuration schema 3. `ProgressionExecutionCoordinator` and `FileProgressionGoalStore` durably own one character-scoped Reach Job Level desired state, plan revision, bounded task history, active task, Last Run flag, provider-start checkpoint, duty-entry checkpoint, and matching game duty-completion checkpoint. Nexus selects one eligible unlocked duty, atomically acquires its full resource bundle, disables the provider's internal leveling scheduler, calls only stock-compatible bounded AutoDuty IPC, verifies completion and return to the world, then replans. Stop, Last Run, provider loss, job change, reload, and unload are reconciled without replaying stale work. There is still no general cross-module goal repository/task graph executor, and quest and gear steps remain planning-only.
 
 ### 4.7 Solo-duty combat handoff policy — IMPLEMENTED AS POLICY/TESTS ONLY
 
@@ -514,7 +514,7 @@ Home, Control Center, Progression, Routes, Dependencies, Migration, and Settings
 
 - **Home** — permanent large logo hero plus current Routes, Progression, and provider-boundary status cards. This replaced the rejected standalone splash popup.
 - **Control Center** — current route/progression state, dependency/character cards, neutral module grid, and explicit safety state. It is informational only.
-- **Progression** — character-scoped current-job target level, job-quest/Hunting Log/side-quest/duty allowances, hard gil reserve, stock/transition provider-contract status, conflict detection, and a bounded plan preview. It saves only the draft and starts no provider work.
+- **Progression** — character-scoped current-job target level, job-quest/Hunting Log/side-quest/duty allowances, hard gil reserve, stock/transition provider-contract status, conflict detection, a bounded plan preview, and durable Start/Stop/Last Run/resume controls for exactly one duty at a time. Quest and gear plan steps remain non-executable.
 - **Dependencies** — required/recommended catalog, health, version, purpose, installer/manage buttons, and first-run Continue gate.
 - **Migration** — read-only predecessor discovery, the live Routes & Navigation preview/import/rollback card, and credential-safety notice.
 - **Routes** — compact saved-route search/create, one-click Play/Travel/Show, grouped recording and point editing, and collapsed automation, display, vendor, advanced-action, and troubleshooting sections under one page scrollbar.
@@ -565,7 +565,7 @@ Current limitations: SQLite, schema migrators beyond initialization normalizatio
 
 ### Current runtime reality
 
-Routes & Navigation is the first live Nexus automation module. It owns its working route library, authoring, preview, explicit Play/Travel/Stop, Navigation/Movement leases, route intent, complete-trip state, Lifestream transfer/inn handoff, and authored vnavmesh playback. It no longer uses VieriAutoDuty route IPC. Duties, combat, questing, gear/inventory mutation, retainers, market work, Discord work, HUD replacement, and remote commands remain with standalone products/providers.
+Routes & Navigation is the first live Nexus automation module. It owns its working route library, authoring, preview, explicit Play/Travel/Stop, Navigation/Movement leases, route intent, complete-trip state, Lifestream transfer/inn handoff, and authored vnavmesh playback. It no longer uses VieriAutoDuty route IPC. Progression now owns a durable Reach Job Level goal and exactly one bounded AutoDuty duty run at a time. Combat, quest execution, gear/inventory mutation, retainers, market work, Discord work, HUD replacement, and remote commands remain with standalone products/providers.
 
 The current code also provides reusable contracts/primitives for desired-state goals/tasks/failures/resources, atomic in-memory leases, basic world snapshots, preserved solo-duty combat policy, and transactional migration.
 
@@ -687,7 +687,7 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `8c3829e Make Nexus route stopping explicit only`.
+- Current released implementation commit: `dcc0235b01db2ea142cfa1e65cc5ab257ba47842 Fix progression layout and AutoDuty compatibility`.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
@@ -1089,8 +1089,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current production release:** `0.1.0.30`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.30</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current production release:** `0.1.0.31`.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.31</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1439,6 +1439,8 @@ Verification evidence for 0.1.0.28: Nexus source `7593defc07a5926614dae8eb97f113
 Verification evidence for 0.1.0.29: Nexus source `b2be70b9c3c2c65e21b64311a2d21e2545bcdc26`, Daily Pilcrow release `866b86e58b242d61a22849182ee4e131fb3ccbb0`, and Daily Pilcrow verification docs `bba7b30c9cdb254323def0d0ea7f67286333463c` are pushed. All 160 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, whole-feed inventory guard, and production website build pass. Release deployment `dpl_H7mw3uLPmakKAzDvSBxbmJ5FJScm` and final documentation deployment `dpl_5R5k1m7qakF2y3ABB6AXLLdq7C98` are Ready on the canonical aliases. The live feed advertises VieriNexus 0.1.0.29; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `FF12B5F1DA20E6EA6BE3574E43F8F2A3639A8F9ECB135BA7D39C4DD7072C3F8A` / `394A843C941D7AEB9293425D94236A12A6BCFF4A3CB8FA74E148E87B9A0C0B05`. GitHub Actions Discord run `34478706443` completed successfully. Territory-aware flight selection corrects the logged Limsa `Nav volume was not built` failure and retries unavailable outdoor flight paths once on the ground; the focused Faezghim route remains the user-side acceptance gate.
 
 Verification evidence for 0.1.0.30: Nexus source `efb69b7d5fe6ed9b14abed3e9c61748240096894`, Daily Pilcrow release `e39d6096d1091c841f90764949fbc47b68adec9d`, and Daily Pilcrow verification docs `289f805a1c036f5517b7947ed5007c18b3d20b9c` are pushed. All 174 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_6mE5rkZd79vBHtDQZf4NrMFjrrto` and final documentation deployment `dpl_BiUg3FMLvF1R3CwrTxBsRbopyMrX` are Ready on the canonical aliases. The live feed advertises VieriNexus 0.1.0.30; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `C6A085E58A370102A1A3FB4A2BA1BD7A669C955B1E4E599D93BB98CFF4B9A9AF` / `76B1786639869ED7B6060012D467ED98A01358B4CF78DCDE9955F849D613AFCE`. GitHub Actions Discord run `34488407059` completed successfully. The focused user-side gate is one bounded duty with Last Run armed, followed by Resume and explicit Stop; no long leveling session or Routes retest is required.
+
+Verification evidence for 0.1.0.31: Nexus source `dcc0235b01db2ea142cfa1e65cc5ab257ba47842`, Daily Pilcrow release `ca9c74b10bd464be72127298b753d0f4b935d102`, and Daily Pilcrow verification docs `99de5a7cbaf4524d39ffabca95adad42d67da104` are pushed. All 174 Nexus tests, the zero-warning Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_CjxJnVm5XVEkDb7eQe1mvMmcPhBB` and final documentation deployment `dpl_D7Qn5aRAMUpaPTvd3RRe319Q3vaq` are Ready on the canonical aliases. The live feed advertises VieriNexus 0.1.0.31; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `AF2771D14E53C2F16DCD88B79362FDE8E2DDC36B2A77736F0CBEAAB1AC85303A` / `1F347B790FAB6F5490D9BF2E0E5B32D2790AC034D18F66A18E284FB78A9092C5`. GitHub Actions Discord run `34491064025` completed successfully. The focused user-side gate is visual/provider-only: every Progression card and Start button must be fully visible, and VieriAutoDuty 1.0.0.440 must report Ready; no duty run is required.
 
 ### 18.16 Release report format
 
