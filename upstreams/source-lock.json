@@ -5,7 +5,7 @@
     {
       "name": "VieriAutoDuty",
       "repository": "https://github.com/iampilcrow/VieriAutoDuty.git",
-      "commit": "a5e1e757e35bd77191a647add7124210cdf86122",
+      "commit": "d0c422cdf668817fd59c77c11e5303a040d283db",
       "upstreamRepository": "https://github.com/erdelf/AutoDuty.git",
       "upstreamCommit": "2b0943ed113da76f3ce9df0df2f302151f828292"
     },

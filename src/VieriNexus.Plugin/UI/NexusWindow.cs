@@ -19,6 +19,7 @@ internal sealed class NexusWindow : Window
         ("OVERVIEW", "Progression", "Progression"),
         ("OVERVIEW", "Queue", "Queue"),
         ("MODULES", "Combat", "Combat"),
+        ("MODULES", "Gear & Inventory", "Gear"),
         ("MODULES", "Routes & Navigation", "Routes"),
         ("MODULES", "Market", "Market"),
         ("MODULES", "Custom UI", "Custom UI"),
@@ -38,6 +39,7 @@ internal sealed class NexusWindow : Window
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
+    private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
@@ -53,6 +55,9 @@ internal sealed class NexusWindow : Window
     private Guid? pendingClearRouteId;
     private int selectedBuiltInRoute;
     private string progressionMessage = string.Empty;
+    private GearUpgradePreview? gearUpgradePreview;
+    private readonly HashSet<int> selectedGearUpgradeSlots = [];
+    private string gearShoppingMessage = string.Empty;
 
     internal NexusWindow(
         Plugin plugin,
@@ -65,6 +70,7 @@ internal sealed class NexusWindow : Window
         NavigationRouteRuntimeService navigationRuntime,
         ProgressionProviderService progressionProviders,
         ProgressionRuntimeService progressionRuntime,
+        GearShoppingRuntimeService gearShoppingRuntime,
         ModuleRegistry modules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
@@ -80,6 +86,7 @@ internal sealed class NexusWindow : Window
         this.navigationRuntime = navigationRuntime;
         this.progressionProviders = progressionProviders;
         this.progressionRuntime = progressionRuntime;
+        this.gearShoppingRuntime = gearShoppingRuntime;
         this.modules = modules;
         this.world = world;
         this.logo = logo;
@@ -166,6 +173,7 @@ internal sealed class NexusWindow : Window
             case "Home": DrawHome(); break;
             case "Overview": DrawOverview(); break;
             case "Progression": DrawProgression(); break;
+            case "Gear & Inventory": DrawGearAndInventory(); break;
             case "Routes & Navigation": DrawRoutesAndNavigation(); break;
             case "Dependencies": DrawDependencies(); break;
             case "Migration": DrawMigration(); break;
@@ -213,9 +221,9 @@ internal sealed class NexusWindow : Window
             ImGui.TableNextColumn();
             StatusCard("ROUTES", "Live", "Author, travel, play, and stop", NexusTheme.Green);
             ImGui.TableNextColumn();
-            StatusCard("PROGRESSION", "Duty lane live", "One verified run at a time", NexusTheme.Green);
+            StatusCard("GEAR", "Approval live", "Preview exact upgrades before shopping", NexusTheme.Green);
             ImGui.TableNextColumn();
-            StatusCard("PROVIDERS", "Observed", "Vieri and stock contracts separated", NexusTheme.Amber);
+            StatusCard("PROGRESSION", "Duty lane live", "One verified run at a time", NexusTheme.Green);
             ImGui.EndTable();
         }
     }
@@ -251,11 +259,12 @@ internal sealed class NexusWindow : Window
             ImGui.TableNextColumn();
             BeginPanel("CURRENT ACTIVITY");
             NexusTheme.StatusDot(NexusTheme.Green, "Nexus foundation running");
-            ImGui.TextWrapped("Routes are live. Progression can own a durable level goal and run one eligible duty at a time with verification before replanning.");
+            ImGui.TextWrapped("Routes are live. Gear & Inventory owns exact shopping approval. Progression owns a durable level goal and one verified duty at a time.");
             EndPanel();
             ImGui.TableNextColumn();
             BeginPanel("SAFETY STATE");
             ImGui.TextUnformatted("Route control: Explicit Stop");
+            ImGui.TextUnformatted("Gear shopping: Exact single-use approval");
             ImGui.TextUnformatted("Progression execution: Bounded duty lane");
             ImGui.TextUnformatted("Provider selection: Capability checked");
             ImGui.TextColored(NexusTheme.Green, "Nexus owns goal scheduling; the current duty provider owns only its bounded run.");
@@ -1354,6 +1363,212 @@ internal sealed class NexusWindow : Window
         EndPanel();
     }
 
+    private void DrawGearAndInventory()
+    {
+        PageHeading("Gear & Inventory", "Review exact upgrades before Nexus allows any purchase.");
+
+        CharacterSnapshot? character = world.Current.Character.Value;
+        if (character is null || !character.Key.IsKnown)
+        {
+            BeginAutoPanel("SHOP FOR UPGRADES");
+            NexusTheme.StatusDot(NexusTheme.Muted, "Waiting for the current character");
+            EndAutoPanel();
+            return;
+        }
+
+        CharacterConfiguration characterConfiguration = plugin.Configuration.ForCharacter(character.Key.ToString());
+        ProgressionCharacterMetrics metrics = progressionProviders.CharacterMetrics();
+        ProgressionGearProviderObservation observation = progressionProviders.ObserveGearReadiness();
+        ManualGearShoppingStatus shoppingStatus = gearShoppingRuntime.Status;
+        bool ownedBusy = shoppingStatus.IsActive;
+        bool busy = ownedBusy || observation.IsBusy == true;
+
+        BeginAutoPanel("SHOP FOR UPGRADES");
+        NexusTheme.StatusDot(
+            busy ? NexusTheme.Cyan : progressionProviders.IsGearShoppingPreviewReady ? NexusTheme.Green : NexusTheme.Amber,
+            busy
+                ? "Shopping and equipment verification are running"
+                : progressionProviders.IsGearShoppingPreviewReady
+                    ? $"Ready • {metrics.Gil:N0} gil • item level {metrics.ItemLevel}"
+                    : "The temporary live gear-scanning adapter is unavailable");
+        TextWrapped(NexusTheme.Muted,
+            "Nexus owns the displayed selection, exact item approval, maximum prices, and protected gil floor. VieriAutoDuty temporarily supplies live catalog, vendor-window, and equip mechanics only.");
+        if (!shoppingStatus.IsActive && shoppingStatus.State is not ManualGearShoppingState.Idle)
+            TextWrapped(shoppingStatus.State == ManualGearShoppingState.Completed ? NexusTheme.Green : NexusTheme.Red,
+                shoppingStatus.Message);
+
+        int reserve = characterConfiguration.Progression.MinimumGilReserve;
+        if (ImGui.InputInt("Minimum gil to keep", ref reserve, 10_000, 100_000))
+        {
+            characterConfiguration.Progression.MinimumGilReserve = Math.Clamp(reserve, 0, 999_999_999);
+            plugin.Save();
+        }
+
+        if (busy)
+        {
+            TextWrapped(NexusTheme.Cyan, ownedBusy ? shoppingStatus.Message : observation.Detail);
+            if (ownedBusy && ImGui.Button("Stop shopping"))
+            {
+                gearShoppingMessage = gearShoppingRuntime.Stop().Message;
+            }
+        }
+        else
+        {
+            if (!progressionProviders.IsGearShoppingPreviewReady)
+                ImGui.BeginDisabled();
+            if (ImGui.Button(gearUpgradePreview is null ? "Check for upgrades" : "Refresh upgrades"))
+            {
+                if (progressionProviders.TryGetGearUpgradePreview(out GearUpgradePreview? preview, out string message))
+                {
+                    gearUpgradePreview = preview;
+                    selectedGearUpgradeSlots.Clear();
+                    if (preview is not null)
+                    {
+                        foreach (GearUpgradeSlot slot in preview.Slots)
+                        {
+                            if (slot.Recommended && !slot.ActiveExperienceBonus && slot.Replacement is not null)
+                                selectedGearUpgradeSlots.Add(slot.SlotKey);
+                        }
+                    }
+                }
+                gearShoppingMessage = message;
+            }
+            if (!progressionProviders.IsGearShoppingPreviewReady)
+                ImGui.EndDisabled();
+        }
+
+        if (!string.IsNullOrWhiteSpace(gearShoppingMessage))
+            TextWrapped(gearShoppingMessage.Contains("could not", StringComparison.OrdinalIgnoreCase) ||
+                        gearShoppingMessage.Contains("unavailable", StringComparison.OrdinalIgnoreCase)
+                ? NexusTheme.Red
+                : NexusTheme.Cyan, gearShoppingMessage);
+        EndAutoPanel();
+
+        if (gearUpgradePreview is not { } currentPreview)
+            return;
+
+        BeginAutoPanel("UPGRADE PLAN");
+        ImGui.TextUnformatted($"{currentPreview.Job} level {currentPreview.Level} • vendor band {currentPreview.VendorLevel}");
+        if (!string.IsNullOrWhiteSpace(currentPreview.UnavailableReason))
+        {
+            TextWrapped(NexusTheme.Amber, currentPreview.UnavailableReason);
+            EndAutoPanel();
+            return;
+        }
+
+        if (ImGui.Button("Recommended"))
+        {
+            selectedGearUpgradeSlots.Clear();
+            foreach (GearUpgradeSlot slot in currentPreview.Slots)
+            {
+                if (slot.Recommended && !slot.ActiveExperienceBonus && slot.Replacement is not null)
+                    selectedGearUpgradeSlots.Add(slot.SlotKey);
+            }
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Select all upgrades"))
+        {
+            selectedGearUpgradeSlots.Clear();
+            foreach (GearUpgradeSlot slot in currentPreview.Slots)
+            {
+                if (!slot.ActiveExperienceBonus && slot.Replacement is not null)
+                    selectedGearUpgradeSlots.Add(slot.SlotKey);
+            }
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Clear selection"))
+            selectedGearUpgradeSlots.Clear();
+
+        const ImGuiTableFlags tableFlags = ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH |
+                                           ImGuiTableFlags.SizingStretchProp;
+        if (ImGui.BeginTable("###NexusGearUpgradePlan", 4, tableFlags))
+        {
+            ImGui.TableSetupColumn("Slot", ImGuiTableColumnFlags.WidthFixed, 150f);
+            ImGui.TableSetupColumn("Current", ImGuiTableColumnFlags.WidthStretch, 1.2f);
+            ImGui.TableSetupColumn("Approved replacement", ImGuiTableColumnFlags.WidthStretch, 1.6f);
+            ImGui.TableSetupColumn("Cost", ImGuiTableColumnFlags.WidthFixed, 130f);
+            ImGui.TableHeadersRow();
+            foreach (GearUpgradeSlot slot in currentPreview.Slots)
+            {
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                bool selected = selectedGearUpgradeSlots.Contains(slot.SlotKey);
+                bool selectable = !slot.ActiveExperienceBonus && slot.Replacement is not null && !busy;
+                if (!selectable)
+                    ImGui.BeginDisabled();
+                if (ImGui.Checkbox($"{slot.Name}###gear-slot-{slot.SlotKey}", ref selected))
+                {
+                    if (selected)
+                        selectedGearUpgradeSlots.Add(slot.SlotKey);
+                    else
+                        selectedGearUpgradeSlots.Remove(slot.SlotKey);
+                }
+                if (!selectable)
+                    ImGui.EndDisabled();
+
+                ImGui.TableNextColumn();
+                ImGui.TextWrapped(slot.CurrentEquipment);
+                if (slot.ActiveExperienceBonus)
+                    TextWrapped(NexusTheme.Amber, "Protected EXP item");
+
+                ImGui.TableNextColumn();
+                if (slot.Replacement is { } replacement)
+                {
+                    TextWrapped(slot.Recommended ? NexusTheme.Green : NexusTheme.Cyan,
+                        $"{replacement.Name} • iLvl {replacement.ItemLevel}");
+                    TextWrapped(NexusTheme.Muted, replacement.Vendor);
+                }
+                else
+                {
+                    ImGui.TextDisabled("No verified upgrade");
+                }
+
+                ImGui.TableNextColumn();
+                if (slot.Replacement is { } priced)
+                {
+                    ImGui.TextUnformatted(priced.Quantity > 0
+                        ? $"{priced.Quantity} × {priced.UnitPrice:N0}"
+                        : "Already owned");
+                }
+                else
+                {
+                    ImGui.TextDisabled("—");
+                }
+            }
+            ImGui.EndTable();
+        }
+
+        GearShoppingApprovalResult approval = GearShoppingApprovalPolicy.Build(
+            currentPreview,
+            selectedGearUpgradeSlots,
+            metrics.Gil,
+            characterConfiguration.Progression.MinimumGilReserve);
+        if (approval.Success)
+            TextWrapped(NexusTheme.Green,
+                $"Selected: {approval.Approval!.Lines.Count} slot(s) • estimated purchase {approval.EstimatedCost:N0} gil • " +
+                $"keep at least {approval.Approval.MinimumGilReserve:N0} gil");
+        else
+            TextWrapped(NexusTheme.Muted, approval.Message);
+
+        if (!approval.Success || busy || !characterConfiguration.AllowAutomation)
+            ImGui.BeginDisabled();
+        if (ImGui.Button("Approve selected upgrades and shop", new Vector2(-1, 0)) && approval.Approval is not null)
+        {
+            ProgressionActionResult result = gearShoppingRuntime.Start(approval.Approval);
+            gearShoppingMessage = result.Message;
+            if (result.Success)
+            {
+                gearUpgradePreview = null;
+                selectedGearUpgradeSlots.Clear();
+            }
+        }
+        if (!approval.Success || busy || !characterConfiguration.AllowAutomation)
+            ImGui.EndDisabled();
+        TextWrapped(NexusTheme.Muted,
+            "Approval is single-use. Any character, job, equipment, item, quantity, or price change requires a fresh preview.");
+        EndAutoPanel();
+    }
+
     private void DrawProgression()
     {
         PageHeading("Progression", "Set a level goal once; Nexus plans the work and delegates only bounded provider tasks.");
@@ -1718,7 +1933,7 @@ internal sealed class NexusWindow : Window
         EndPanel();
         ImGui.Spacing();
         BeginPanel("WHY THIS IS SAFE");
-        ImGui.TextWrapped("Only explicit Routes actions and bounded Progression duty tasks are live. Other automation, retainers, market work, HUD changes, and Discord actions remain inactive.");
+        ImGui.TextWrapped("Explicit Routes, approved gear shopping, and bounded Progression duty tasks are live. Other automation, retainers, market work, HUD changes, and Discord actions remain inactive.");
         EndPanel();
     }
 
@@ -1734,6 +1949,7 @@ internal sealed class NexusWindow : Window
             {
                 "navigation" => (NexusTheme.Green, "Live"),
                 "progression" => (NexusTheme.Green, "Bounded duty execution"),
+                "gear" => (NexusTheme.Green, "Preview and approval live"),
                 _ => (NexusTheme.Amber, "Migration staged"),
             };
             NexusTheme.StatusDot(color, status);

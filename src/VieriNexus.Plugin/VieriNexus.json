@@ -3,7 +3,7 @@
   "Name": "VieriNexus",
   "InternalName": "VieriNexus",
   "Punchline": "Routes, progression, and verified automation under one Nexus.",
-  "Description": "The unified, modular Vieri suite in active development. Routes & Navigation owns streamlined route creation and playback through Lifestream and vnavmesh. Progression owns the level goal, protected gil floor, verified gear-readiness transaction, one-duty-at-a-time execution, Stop, recovery, and replanning while migration providers supply narrow mechanics.",
+  "Description": "The unified, modular Vieri suite in active development. Routes owns streamlined travel and playback; Progression owns verified gear-and-duty plans; and Gear & Inventory provides Nexus-owned exact upgrade preview, approval, spending limits, and transaction control while migration providers supply narrow mechanics.",
   "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,

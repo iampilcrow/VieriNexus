@@ -49,6 +49,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NavigationLibraryService navigationLibrary;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
+    private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -163,6 +164,7 @@ public sealed class Plugin : IDalamudPlugin
             progressionProviders,
             DutyState,
             Log);
+        gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
         worldObserver = new WorldSnapshotObserver(
             ClientState,
             PlayerState,
@@ -177,7 +179,8 @@ public sealed class Plugin : IDalamudPlugin
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration,
             navigationLibrary, navigationActivation, navigationDiagnostics,
-            navigationRuntime, progressionProviders, progressionRuntime, moduleRegistry, worldStore, logo);
+            navigationRuntime, progressionProviders, progressionRuntime, gearShoppingRuntime,
+            moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 
         ipc = new NexusIpcProvider(
@@ -203,6 +206,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        gearShoppingRuntime.Shutdown();
         progressionRuntime.Shutdown();
         navigationRuntime.Shutdown();
         navigationAuthority.ReturnToStaging(DateTimeOffset.UtcNow);
@@ -229,6 +233,8 @@ public sealed class Plugin : IDalamudPlugin
         navigationRuntime.Update(now);
         navigationRecovery.Update(now);
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
+        progressionProviders.UpdateGearAdapter();
+        gearShoppingRuntime.Update();
         progressionRuntime.Update(
             worldStore.Current.Character.Value,
             Condition[ConditionFlag.BoundByDuty] ||

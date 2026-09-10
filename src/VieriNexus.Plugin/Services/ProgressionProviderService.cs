@@ -15,8 +15,14 @@ namespace VieriNexus.Services;
 /// Merely having the expected plugin name is not enough: every required IPC member must be present.
 /// Questing remains observation-only; the duty edge exposes one exact bounded run and Stop.
 /// </summary>
-internal sealed class ProgressionProviderService : IProgressionDutyProvider, IProgressionGearProvider
+internal sealed class ProgressionProviderService : IProgressionDutyProvider, IProgressionGearProvider,
+    IManualGearShoppingProvider
 {
+    private static readonly JsonSerializerOptions GearJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
     private static readonly ProviderId CodexProviderId = new("vieri.provider.codex-compat/v1");
     private static readonly ProviderId QuestionableProviderId = new("vieri.provider.questionable-stock/v1");
     private static readonly ProviderId AutoDutyCompatibilityProviderId = new("vieri.provider.autoduty-compat/v1");
@@ -39,6 +45,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly ICallGateSubscriber<int, string> vieriAutoDutyProgression;
     private readonly ICallGateSubscriber<bool> vieriAutoDutyGearBusy;
     private readonly ICallGateSubscriber<string> vieriAutoDutyStartGear;
+    private readonly ICallGateSubscriber<string> vieriAutoDutyGetGearPreview;
+    private readonly ICallGateSubscriber<string, string> vieriAutoDutyStartApprovedGear;
     private readonly ICallGateSubscriber<string, string, string> vieriAutoDutyCommand;
     private readonly ICallGateSubscriber<object, bool> autoDutyPushConfigOverrides;
     private readonly ICallGateSubscriber<bool> autoDutyPopConfigOverrides;
@@ -70,6 +78,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         vieriAutoDutyProgression = pluginInterface.GetIpcSubscriber<int, string>("AutoDuty.StartProgressionLeveling");
         vieriAutoDutyGearBusy = pluginInterface.GetIpcSubscriber<bool>("AutoDuty.IsGearReadinessBusy");
         vieriAutoDutyStartGear = pluginInterface.GetIpcSubscriber<string>("AutoDuty.StartGearReadiness");
+        vieriAutoDutyGetGearPreview = pluginInterface.GetIpcSubscriber<string>("AutoDuty.GetGearUpgradePreview");
+        vieriAutoDutyStartApprovedGear = pluginInterface.GetIpcSubscriber<string, string>("AutoDuty.StartApprovedGearShopping");
         vieriAutoDutyCommand = pluginInterface.GetIpcSubscriber<string, string, string>("AutoDuty.ExecuteVieriCommand");
         autoDutyPushConfigOverrides = pluginInterface.GetIpcSubscriber<object, bool>("AutoDuty.PushConfigOverrides");
         autoDutyPopConfigOverrides = pluginInterface.GetIpcSubscriber<bool>("AutoDuty.PopConfigOverrides");
@@ -100,9 +110,29 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     bool IProgressionGearProvider.TryStopGearReadiness(out string message) =>
         TryStopGearReadiness(out message);
 
+    ProviderId IManualGearShoppingProvider.Id => AutoDutyCompatibilityProviderId;
+
+    ProgressionGearProviderObservation IManualGearShoppingProvider.Observe() => ObserveGearReadiness();
+
+    bool IManualGearShoppingProvider.TryStart(GearShoppingApproval approval, out string message) =>
+        TryStartApprovedGearShopping(approval, out message);
+
+    bool IManualGearShoppingProvider.TryStop(out string message) => TryStopGearReadiness(out message);
+
     internal bool IsGearReadinessReady => GearContractReady() && IsVieriAutoDutyActive();
 
+    internal bool IsGearShoppingPreviewReady => IsVieriAutoDutyActive() &&
+        vieriAutoDutyGetGearPreview.HasFunction && vieriAutoDutyStartApprovedGear.HasFunction &&
+        vieriAutoDutyGearBusy.HasFunction && autoDutyIsStopped.HasFunction &&
+        autoDutyPushConfigOverrides.HasFunction && autoDutyPopConfigOverrides.HasFunction;
+
     internal ProgressionCharacterMetrics CharacterMetrics() => new(CurrentItemLevel(), CurrentGil());
+
+    internal void UpdateGearAdapter()
+    {
+        if (gearOverridesActive)
+            _ = ObserveGearReadiness();
+    }
 
     internal ProgressionProviderSnapshot Snapshot()
     {
@@ -381,6 +411,91 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             bool restored = TryRestoreGearOverrides();
             message = $"Gear readiness could not start: {ex.Message}" +
                       (restored ? string.Empty : " The prior provider settings could not yet be restored.");
+            return false;
+        }
+    }
+
+    internal bool TryGetGearUpgradePreview(out GearUpgradePreview? preview, out string message)
+    {
+        preview = null;
+        if (!IsGearShoppingPreviewReady)
+        {
+            message = "Update and enable VieriAutoDuty to use the temporary live gear-scanning adapter.";
+            return false;
+        }
+
+        try
+        {
+            preview = JsonSerializer.Deserialize<GearUpgradePreview>(
+                vieriAutoDutyGetGearPreview.InvokeFunc(), GearJsonOptions);
+            if (preview is null || preview.SchemaVersion != GearUpgradePreview.CurrentSchemaVersion)
+            {
+                preview = null;
+                message = "The gear provider returned an unsupported preview. Update both VieriNexus and VieriAutoDuty.";
+                return false;
+            }
+
+            message = preview.UnavailableReason ??
+                      $"Found {preview.Slots.Count(slot => slot.Replacement is not null)} verified upgrade option(s) for {preview.Job}.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            message = $"The gear preview could not be read: {ex.Message}";
+            return false;
+        }
+    }
+
+    internal bool TryStartApprovedGearShopping(GearShoppingApproval approval, out string message)
+    {
+        if (!IsGearShoppingPreviewReady)
+        {
+            message = "The approved-shopping adapter is unavailable.";
+            return false;
+        }
+
+        try
+        {
+            if (vieriAutoDutyGearBusy.InvokeFunc())
+            {
+                message = "Gear shopping is already running.";
+                return false;
+            }
+            if (!autoDutyIsStopped.InvokeFunc())
+            {
+                message = "A duty is already running. Stop it before starting gear shopping.";
+                return false;
+            }
+
+            Dictionary<string, string> overrides = new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AutoBuyGilVendorKeepGil"] = approval.MinimumGilReserve
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture),
+            };
+            if (!autoDutyPushConfigOverrides.InvokeFunc(overrides))
+            {
+                message = "The temporary mechanics adapter rejected the Nexus spending floor; shopping was not started.";
+                return false;
+            }
+            gearOverridesActive = true;
+
+            string request = JsonSerializer.Serialize(approval, GearJsonOptions);
+            string result = vieriAutoDutyStartApprovedGear.InvokeFunc(request);
+            if (!result.StartsWith("Shop For Upgrades started", StringComparison.OrdinalIgnoreCase))
+            {
+                bool restored = TryRestoreGearOverrides();
+                message = restored ? result : $"{result} The provider settings still require restoration.";
+                return false;
+            }
+
+            message = "Nexus approved the exact displayed upgrades and started the temporary vendor/equip mechanics adapter.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            bool restored = TryRestoreGearOverrides();
+            message = $"Approved gear shopping could not start: {ex.Message}" +
+                      (restored ? string.Empty : " The provider settings still require restoration.");
             return false;
         }
     }
