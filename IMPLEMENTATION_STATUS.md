@@ -59,7 +59,7 @@
 
 ## Intentionally not enabled yet
 
-- Routes parity was accepted in game through 0.1.0.25. Version 0.1.0.27 replaced the temporary VieriAutoDuty whole-trip adapter with Nexus-owned Lifestream/vnavmesh composition. Live 0.1.0.27 transfer testing exposed a local-leg regression: a one-point mesh-assisted vendor route was handed to `Path.MoveTo` as a literal straight line. Version 0.1.0.28 calculated a mesh path, but the live Faezghim route then failed because its saved flight permission requested a volume path inside ground-only Limsa (`Nav volume was not built`). Version 0.1.0.29 selects ground pathfinding for non-flight territories and retries a missing flight path once on the ground, while retaining sequencing, final tolerance, and cancellable Stop. Current-target binding, immutable vendor templates, exact-target Gear consumption, ownership-filtered live waypoints, authoring, recording, editing, exchange, and static preview remain present. A focused Faezghim regression check remains before the VieriAutoDuty route bridge is considered fully retired.
+- Routes parity was accepted in game through 0.1.0.25. Version 0.1.0.27 replaced the temporary VieriAutoDuty whole-trip adapter with Nexus-owned Lifestream/vnavmesh composition. Live 0.1.0.27 transfer testing exposed a literal straight-line regression, and 0.1.0.28 exposed a saved-flight-permission failure inside ground-only Limsa. Version 0.1.0.29 selects ground pathfinding for non-flight territories and retries a missing flight path once on the ground, while retaining sequencing, final tolerance, and cancellable Stop. The user confirmed both Grand Company inn and Faezghim playback work correctly on 0.1.0.29; the Nexus-owned route provider and removal of VieriAutoDuty route IPC are live-accepted.
 - No Discord credential, channel, or message ID has been read or changed.
 - No existing Vieri plugin has been disabled, uninstalled, or modified.
 - No duty/progression/combat/HUD/market/communications automation has been enabled. Only explicit Nexus route actions are live.
@@ -68,4 +68,4 @@
 
 ## Next implementation gate
 
-Version 0.1.0.29 corrects the second live Faezghim failure at the exact logged cause without restoring any VieriAutoDuty dependency. After the focused live Faezghim regression, the next gate persists an actual goal/task lifecycle and connects one provider task at a time behind resource ownership, verified completion, Stop, and replanning—never an opaque endless provider loop.
+With the 0.1.0.29 route provider accepted in game, the next gate persists an actual Progression goal/task lifecycle and connects one provider task at a time behind resource ownership, verified completion, Stop, and replanning—never an opaque endless provider loop.
