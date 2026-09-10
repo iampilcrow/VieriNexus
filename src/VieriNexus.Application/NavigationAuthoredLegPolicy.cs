@@ -15,7 +15,8 @@ public static class NavigationAuthoredLegPolicy
 {
     public static NavigationAuthoredLeg Create(
         NavigationSuiteRouteRequest.PlaybackRequest request,
-        int pointIndex)
+        int pointIndex,
+        bool flightSupported)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (pointIndex < 0 || pointIndex >= request.Points.Count)
@@ -24,9 +25,12 @@ public static class NavigationAuthoredLegPolicy
         return new NavigationAuthoredLeg(
             request.Points[pointIndex],
             request.UseMesh,
-            request.UseFlight,
+            request.UseFlight && flightSupported,
             pointIndex == request.Points.Count - 1
                 ? request.LastPointTolerance
                 : request.Tolerance);
     }
+
+    public static bool ShouldRetryPathOnGround(bool attemptedFlight, bool pathFound) =>
+        attemptedFlight && !pathFound;
 }

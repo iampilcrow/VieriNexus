@@ -27,7 +27,7 @@ Nexus Routes calls three fork-only endpoints:
 
 Those endpoints accept the Nexus route payload, perform city/inn/zone travel, run the authored points, expose visualization ownership, and stop the tracked trip. They do not exist in stock AutoDuty. Nexus therefore prefers the fork for every complete route trip when it is loaded, even for a same-territory route.
 
-The live 0.1.0.25 test accepted this temporary bridge in both directions, including ordinary vendor and Grand Company inn travel. Version 0.1.0.27 removes it: Nexus now owns the route-trip state, uses stock Lifestream for teleport/Aethernet/Grand Company inn entry, and uses vnavmesh for the authored path. Live testing found that the first Nexus provider sent mesh-assisted points directly to `Path.MoveTo`, producing a literal line instead of a calculated corridor path. Version 0.1.0.28 corrects that boundary by pathfinding each authored leg before movement and canceling pending calculation on Stop. The three fork-only AutoDuty route endpoints remain absent. A focused live parity check remains required before this retirement step is accepted in game.
+The live 0.1.0.25 test accepted this temporary bridge in both directions, including ordinary vendor and Grand Company inn travel. Version 0.1.0.27 removes it: Nexus now owns the route-trip state, uses stock Lifestream for teleport/Aethernet/Grand Company inn entry, and uses vnavmesh for the authored path. Live testing found that the first Nexus provider sent mesh-assisted points directly to `Path.MoveTo`, producing a literal line instead of a calculated corridor path. Version 0.1.0.28 corrected that boundary but passed Faezghim's saved flight permission into ground-only Limsa, where vnavmesh correctly reported that no flight volume was built. Version 0.1.0.29 suppresses flight in unsupported territories and provides one ground fallback for missing flight paths. The three fork-only AutoDuty route endpoints remain absent. A focused live parity check remains required before this retirement step is accepted in game.
 
 ## Stock IPC capability boundary
 
@@ -53,7 +53,7 @@ Stock AutoDuty is therefore usable now for bounded duty start/stop and path elig
 
 Current anchors include `VieriRouteTravelHelper`, `VieriRoutePlaybackContract`, `NexusNavigationRouteContract`, the Nexus/NavPlotter subscribers, the fork-only route IPC endpoints, special Grand Company inn destinations, and Nexus vendor-override consumption.
 
-Destination: Nexus Routes & Navigation. Implemented in 0.1.0.27 and corrected in 0.1.0.28: the 27 measured vendor templates and exact assignment model live in Nexus, and Nexus owns cross-zone transfer coordination, exact Grand Company inn entry, mesh-path calculation for each authored leg, direct non-mesh playback, visualization state, provider failure reporting, and Stop without calling a fork-only AutoDuty route endpoint. Focused live parity remains the acceptance gate.
+Destination: Nexus Routes & Navigation. Implemented in 0.1.0.27 and corrected through 0.1.0.29: the 27 measured vendor templates and exact assignment model live in Nexus, and Nexus owns cross-zone transfer coordination, exact Grand Company inn entry, territory-aware mesh-path calculation for each authored leg, direct non-mesh playback, visualization state, provider failure reporting, and Stop without calling a fork-only AutoDuty route endpoint. Focused live parity remains the acceptance gate.
 
 ### 2. Vendor travel data and arrival policy
 
@@ -110,7 +110,7 @@ Each receives one of three outcomes before retirement: an exact Nexus mapping, a
 ## Retirement sequence
 
 1. Keep VieriAutoDuty authoritative while migration is incomplete.
-2. **Implemented in 0.1.0.27 and pathfinding-corrected in 0.1.0.28; live acceptance pending:** replace the fork-only Nexus route-trip bridge with Nexus-owned Lifestream/vnavmesh travel composition. Nexus no longer references `TravelVieriRoute`.
+2. **Implemented in 0.1.0.27 and pathfinding/flight-mode corrected through 0.1.0.29; live acceptance pending:** replace the fork-only Nexus route-trip bridge with Nexus-owned Lifestream/vnavmesh travel composition. Nexus no longer references `TravelVieriRoute`.
 3. Build the Progression proof using capability-versioned stock Questionable and stock AutoDuty adapters. Dispatch one bounded provider task at a time.
 4. Move gear-readiness, shopping, equipment, and maintenance policy/UI/state into Nexus with golden configuration and incident fixtures.
 5. Audit the remaining duty-engine tree diff against then-current stock AutoDuty. Upstream generic fixes or prove the stock behavior equivalent; do not copy the full duty engine into Nexus.

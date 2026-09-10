@@ -261,7 +261,10 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         if (request is null || authoredPointIndex < 0 || authoredPointIndex >= request.Points.Count)
             throw new InvalidOperationException("No authored Nexus route point is available.");
 
-        NavigationAuthoredLeg leg = NavigationAuthoredLegPolicy.Create(request, authoredPointIndex);
+        NavigationAuthoredLeg leg = NavigationAuthoredLegPolicy.Create(
+            request,
+            authoredPointIndex,
+            FlightPathSupported(request.TerritoryId));
         if (leg.RequiresPathfinding)
             navigation.StartPathfinding(leg.Destination, leg.UseFlight, leg.Tolerance);
         else
@@ -269,6 +272,13 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
 
         observedMovement = false;
         phaseStartedAt = now;
+    }
+
+    private bool FlightPathSupported(uint territoryId)
+    {
+        TerritoryType? territory = dataManager.GetExcelSheet<TerritoryType>()
+            .GetRowOrDefault(territoryId);
+        return territory?.TerritoryIntendedUse.RowId is 1 or 47 or 49;
     }
 
     private bool TryResolveTeleport(uint territoryId, out TeleportDestination destination)

@@ -66,6 +66,14 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
             throw new InvalidOperationException("FFXIV is not logged into a character.");
 
         setTolerance.InvokeAction(Math.Clamp(tolerance, 0.1f, 20f));
+        BeginPathfind(destination, useFlight);
+    }
+
+    private void BeginPathfind(NavigationRoutePoint destination, bool useFlight)
+    {
+        if (Plugin.ObjectTable.LocalPlayer is not { } player)
+            throw new InvalidOperationException("FFXIV is not logged into a character.");
+
         pathfindCancellation = new CancellationTokenSource();
         pathfindDestination = destination;
         pathfindUseFlight = useFlight;
@@ -127,20 +135,42 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
             return;
 
         CancellationTokenSource? cancellation = pathfindCancellation;
+        NavigationRoutePoint? destination = pathfindDestination;
+        bool attemptedFlight = pathfindUseFlight;
         pathfindTask = null;
         pathfindCancellation = null;
         pathfindDestination = null;
+        List<Vector3>? points = null;
+        Exception? failure = null;
         try
         {
-            List<Vector3> points = completed.GetAwaiter().GetResult();
-            if (points.Count == 0)
-                throw new InvalidOperationException("vnavmesh could not find a navigable path to the route point.");
-            moveTo.InvokeAction(points, pathfindUseFlight);
+            points = completed.GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
         }
         finally
         {
             cancellation?.Dispose();
         }
+
+        bool pathFound = points is { Count: > 0 };
+        if (!pathFound && destination is { } retryDestination &&
+            NavigationAuthoredLegPolicy.ShouldRetryPathOnGround(attemptedFlight, false))
+        {
+            Plugin.Log.Information(
+                "The flight path to an authored Nexus point was unavailable; retrying that leg on the ground.");
+            BeginPathfind(retryDestination, false);
+            return;
+        }
+
+        if (!pathFound)
+            throw new InvalidOperationException(
+                "vnavmesh could not find a navigable path to the route point.",
+                failure);
+
+        moveTo.InvokeAction(points!, attemptedFlight);
     }
 
     private void CancelPendingPathfind()
