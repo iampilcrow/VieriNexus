@@ -2,7 +2,7 @@
 
 Working snapshot: 2026-09-10 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.30`
+Current product version: `0.1.0.31`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -23,7 +23,7 @@ The repository is authoritative for what exists today. The recovered conversatio
 
 `VieriNexus` is the permanent product and Dalamud internal name for the planned unified Vieri FFXIV suite. It is intended to replace the separately installed Vieri plugins with one coherent, modular Dalamud package. It is not intended to be a launcher for separate plugins, a collection of embedded predecessor windows, or one giant controller.
 
-The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, maintains a separate Nexus-owned working library, records and edits personal routes, previews saved/generated paths, and performs guarded local, cross-zone, or Grand Company inn travel. Version 0.1.0.26 added the first Nexus-owned Progression planner. Versions 0.1.0.27-0.1.0.29 removed the route dependency on VieriAutoDuty and completed accepted Nexus-owned Lifestream/vnavmesh travel. Version 0.1.0.30 adds the first durable Progression execution lane: Nexus owns a character-scoped level goal and dispatches one exact, completion-verified AutoDuty run at a time with Last Run, Stop, reload reconciliation, and replanning. Quest and gear execution remain locked; VieriCodex and VieriAutoDuty are explicitly labeled current migration providers, not permanent selections.
+The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, maintains a separate Nexus-owned working library, records and edits personal routes, previews saved/generated paths, and performs guarded local, cross-zone, or Grand Company inn travel. Version 0.1.0.26 added the first Nexus-owned Progression planner. Versions 0.1.0.27-0.1.0.29 removed the route dependency on VieriAutoDuty and completed accepted Nexus-owned Lifestream/vnavmesh travel. Version 0.1.0.30 added the first durable Progression execution lane. The first live screen exposed fixed-height clipping and reported VieriAutoDuty 1.0.0.440 incompatible when its direct leveling-mode action was not visible through the runtime IPC probe. Version 0.1.0.31 makes every Progression panel content-sized and accepts either the direct leveling-mode action or the older stock `SetConfig` reset, while naming any actually missing endpoint. Quest and gear execution remain locked; VieriCodex and VieriAutoDuty are explicitly labeled current migration providers, not permanent selections.
 
 ### Product vision
 
@@ -196,7 +196,7 @@ Several target concepts already have types or tests but are not general live sub
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 3 global presentation/setup settings, character-scoped safety and Progression draft settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.30`, assembly/internal root `VieriNexus`.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.31`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -257,7 +257,7 @@ There are 155 automated tests across:
 - `TransactionalMigrationStoreTests.cs`
 - `WorldStateStoreTests.cs`
 
-The 0.1.0.30 source passes all 174 tests plus a zero-warning full plugin build.
+The 0.1.0.31 source passes all 174 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -692,7 +692,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project/live feed version: `0.1.0.30`. Dalamud API 15.
+- Plugin project/live feed version: `0.1.0.31`. Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -827,6 +827,8 @@ The user then confirmed that 0.1.0.29 route playback worked correctly for both t
 Version 0.1.0.30 implements the first durable Progression executor instead of another preview-only safety step. A character-scoped atomic JSON document with a `.previous` recovery copy owns the Reach Job Level desired state, plan revision, bounded task history, active task, Last Run flag, provider-start checkpoint, duty-entry checkpoint, and matching game duty-completion checkpoint. Nexus selects the highest currently unlocked stable leveling duty that meets current level, item level, provider-path, and content-unlock requirements; acquires the complete DutyQueue/Teleport/UI/Inventory/Targeting/Rotation resource bundle and its implied Movement/Navigation/Combat resources; disables AutoDuty's own leveling scheduler; and calls the stock-compatible `AutoDuty.Run` contract for exactly one loop. It never calls the Vieri-only `StartProgressionLeveling` endless loop.
 
 The bounded task succeeds only after provider start, correct duty entry, Dalamud's matching `DutyCompleted` event, provider shutdown, and return to the normal world. Wipes, abandonment, a wrong completion event, provider loss, job changes, reload, unload, or an unconfirmed Stop cannot count the duty or schedule a replacement. Last Run allows the current verified duty to finish and pauses before another task; normal completion either satisfies the target or replans exactly one next duty from the current permanent level. The simplified Progression UI exposes Start, Stop after this duty, Stop now, and Resume while keeping provider and plan diagnostics collapsed. Quest and gear execution remain planning-only. The focused live acceptance gate is one completed bounded duty with Last Run armed, followed by a resume/Stop check; it does not require a long leveling session.
+
+The first 0.1.0.30 live Progression screen showed that the fixed 320-pixel Reach Job Level child and fixed 150-pixel Start child clipped wrapped text and the Start button; other fixed provider/plan children were exposed to the same defect. It also classified loaded VieriAutoDuty 1.0.0.440 as incompatible because the new contract required the direct `SetLevelingMode` action even though AutoDuty's older stock `SetConfig` can perform the same runtime-only `leveling=None` reset. Version 0.1.0.31 replaces all Progression child panels with content-sized table panels under the one page scrollbar, accepts either reset contract, prefers the direct endpoint when present, and reports the exact missing IPC member if compatibility still fails.
 
 ### Completed versus unfinished
 
@@ -1191,7 +1193,7 @@ The exact archive naming convention, hosted path, and generation command must be
 
 ### 18.6 Version synchronization
 
-Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.30` in:
+Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.31` in:
 
 `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj`
 

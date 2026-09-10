@@ -10,6 +10,7 @@ namespace VieriNexus.UI;
 
 internal sealed class NexusWindow : Window
 {
+    private static readonly Stack<bool> AutoPanelTableStack = new();
     private static readonly (string Group, string Id, string Label)[] Navigation =
     [
         ("OVERVIEW", "Home", "Home"),
@@ -1361,11 +1362,11 @@ internal sealed class NexusWindow : Window
         ProgressionProviderSnapshot providers = progressionProviders.Snapshot();
         if (character is null || !character.Key.IsKnown)
         {
-            BeginPanel("CURRENT JOB", 130f * Math.Max(1f, plugin.Configuration.UiScale));
+            BeginAutoPanel("CURRENT JOB");
             NexusTheme.StatusDot(NexusTheme.Muted, "Waiting for the current character");
             TextWrapped(NexusTheme.Muted,
                 "The progression planner becomes available after the character and permanent job level are known.");
-            EndPanel();
+            EndAutoPanel();
             DrawProgressionProviders(providers);
             return;
         }
@@ -1380,8 +1381,7 @@ internal sealed class NexusWindow : Window
             plugin.Save();
         }
 
-        float scale = Math.Max(1f, plugin.Configuration.UiScale);
-        BeginPanel("REACH JOB LEVEL", 320f * scale);
+        BeginAutoPanel("REACH JOB LEVEL");
         NexusTheme.StatusDot(NexusTheme.Cyan,
             $"{character.Name} • Job {character.ClassJobId} • Level {character.Level}");
         TextWrapped(NexusTheme.Muted,
@@ -1440,7 +1440,7 @@ internal sealed class NexusWindow : Window
         }
         if (!string.IsNullOrWhiteSpace(progressionMessage))
             TextWrapped(NexusTheme.Green, progressionMessage);
-        EndPanel();
+        EndAutoPanel();
 
         ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
             new ReachJobLevelGoalDraft(
@@ -1471,17 +1471,17 @@ internal sealed class NexusWindow : Window
         NexusTheme.SectionTitle("Goal control");
         if (!string.IsNullOrWhiteSpace(progressionRuntime.LoadError))
         {
-            BeginPanel("SAVED GOAL", 110f * Math.Max(1f, plugin.Configuration.UiScale));
+            BeginAutoPanel("SAVED GOAL");
             NexusTheme.StatusDot(NexusTheme.Red, progressionRuntime.LoadError);
             TextWrapped(NexusTheme.Muted, "The saved file was left untouched for diagnosis and recovery.");
-            EndPanel();
+            EndAutoPanel();
             return;
         }
 
         if (state is null || state.Goal.Status is GoalStatus.Satisfied or GoalStatus.Cancelled)
         {
             int eligible = progressionRuntime.EligibleDuties(character.Level).Count;
-            BeginPanel("START", 150f * Math.Max(1f, plugin.Configuration.UiScale));
+            BeginAutoPanel("START");
             bool hasEligibleDuty = plan.IsExecutionConnected && eligible > 0;
             NexusTheme.StatusDot(hasEligibleDuty ? NexusTheme.Green : NexusTheme.Amber,
                 hasEligibleDuty
@@ -1515,13 +1515,12 @@ internal sealed class NexusWindow : Window
             if (state?.Goal.Status is GoalStatus.Satisfied or GoalStatus.Cancelled)
                 TextWrapped(state.Goal.Status == GoalStatus.Satisfied ? NexusTheme.Green : NexusTheme.Muted,
                     state.Goal.StatusDetail ?? state.Goal.Status.ToString());
-            EndPanel();
+            EndAutoPanel();
             return;
         }
 
         NexusTask? activeTask = state.ActiveTask;
-        int lineCount = activeTask is null ? 7 : 11;
-        BeginPanel("ACTIVE GOAL", lineCount * ImGui.GetTextLineHeightWithSpacing() + 72f);
+        BeginAutoPanel("ACTIVE GOAL");
         Vector4 statusColor = state.Goal.Status switch
         {
             GoalStatus.Active => NexusTheme.Green,
@@ -1567,7 +1566,7 @@ internal sealed class NexusWindow : Window
 
         if (!string.IsNullOrWhiteSpace(progressionMessage))
             TextWrapped(NexusTheme.Cyan, progressionMessage);
-        EndPanel();
+        EndAutoPanel();
     }
 
     private void DrawProgressionProviders(ProgressionProviderSnapshot providers)
@@ -1587,7 +1586,7 @@ internal sealed class NexusWindow : Window
 
     private void DrawProgressionProvider(string title, ProgressionProviderSelection selection)
     {
-        BeginPanel(title, 205f * Math.Max(1f, plugin.Configuration.UiScale));
+        BeginAutoPanel(title);
         Vector4 selectionColor = selection.Readiness switch
         {
             ProgressionProviderReadiness.Ready => NexusTheme.Green,
@@ -1613,16 +1612,16 @@ internal sealed class NexusWindow : Window
             string flavor = candidate.Flavor == ProgressionProviderFlavor.Stock ? "target" : "migration";
             TextWrapped(candidateColor,
                 $"• {candidate.DisplayName}: {candidate.Readiness} • {flavor}{version}");
+            if (candidate.Readiness == ProgressionProviderReadiness.Incompatible)
+                TextWrapped(NexusTheme.Muted, $"  {candidate.Detail}");
         }
         TextWrapped(NexusTheme.Muted, selection.Detail);
-        EndPanel();
+        EndAutoPanel();
     }
 
     private void DrawProgressionPlan(ReachJobLevelPlan plan)
     {
-        int estimatedLines = 5 + (plan.Steps.Count * 3) + (plan.Issues.Count * 2);
-        float height = Math.Max(180f, estimatedLines * ImGui.GetTextLineHeightWithSpacing() + 48f);
-        BeginPanel("PLAN PREVIEW", height);
+        BeginAutoPanel("PLAN PREVIEW");
         Vector4 summaryColor = plan.IsSatisfied
             ? NexusTheme.Green
             : plan.IsValid ? NexusTheme.Cyan : NexusTheme.Red;
@@ -1651,7 +1650,7 @@ internal sealed class NexusWindow : Window
                 plan.IsExecutionConnected
                     ? "The duty lane is connected as one verified run at a time. Quest and gear steps remain planning-only until their Nexus policies are migrated."
                     : "Planning is live, but no bounded provider lane is ready to execute.");
-        EndPanel();
+        EndAutoPanel();
     }
 
     private void DrawSettings()
@@ -1768,6 +1767,37 @@ internal sealed class NexusWindow : Window
     {
         ImGui.EndChild();
         ImGui.PopStyleColor();
+        ImGui.Spacing();
+    }
+
+    private static void BeginAutoPanel(string title)
+    {
+        ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(8f, 8f));
+        bool beganTable = ImGui.BeginTable($"###auto-panel-{title}", 1,
+            ImGuiTableFlags.Borders | ImGuiTableFlags.SizingStretchProp);
+        AutoPanelTableStack.Push(beganTable);
+        if (beganTable)
+        {
+            ImGui.TableNextRow();
+            ImGui.TableNextColumn();
+            ImGui.TableSetBgColor(ImGuiTableBgTarget.CellBg,
+                ImGui.ColorConvertFloat4ToU32(NexusTheme.PanelRaised));
+        }
+        else
+        {
+            ImGui.BeginGroup();
+        }
+        ImGui.TextColored(NexusTheme.Gold, title);
+        ImGui.Separator();
+    }
+
+    private static void EndAutoPanel()
+    {
+        if (AutoPanelTableStack.Pop())
+            ImGui.EndTable();
+        else
+            ImGui.EndGroup();
+        ImGui.PopStyleVar();
         ImGui.Spacing();
     }
 

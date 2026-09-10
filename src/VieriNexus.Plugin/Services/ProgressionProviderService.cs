@@ -34,6 +34,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
     private readonly ICallGateSubscriber<uint, int, bool, object> autoDutyRun;
     private readonly ICallGateSubscriber<object> autoDutyStop;
     private readonly ICallGateSubscriber<int, object> autoDutySetLevelingMode;
+    private readonly ICallGateSubscriber<string, object, object> autoDutySetConfig;
     private readonly ICallGateSubscriber<int, string> vieriAutoDutyProgression;
     private long eligibleDutyCacheExpiresAt;
     private int eligibleDutyCacheLevel;
@@ -57,6 +58,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
         autoDutyRun = pluginInterface.GetIpcSubscriber<uint, int, bool, object>("AutoDuty.Run");
         autoDutyStop = pluginInterface.GetIpcSubscriber<object>("AutoDuty.Stop");
         autoDutySetLevelingMode = pluginInterface.GetIpcSubscriber<int, object>("AutoDuty.SetLevelingMode");
+        autoDutySetConfig = pluginInterface.GetIpcSubscriber<string, object, object>("AutoDuty.SetConfig");
         vieriAutoDutyProgression = pluginInterface.GetIpcSubscriber<int, string>("AutoDuty.StartProgressionLeveling");
     }
 
@@ -194,7 +196,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
     internal bool TryStartDuty(uint territoryId, out string message)
     {
         ProgressionProviderSelection selection = Snapshot().Duties;
-        if (!selection.IsReady || !autoDutyRun.HasAction || !autoDutySetLevelingMode.HasAction)
+        bool canResetLeveling = autoDutySetLevelingMode.HasAction || autoDutySetConfig.HasAction;
+        if (!selection.IsReady || !autoDutyRun.HasAction || !canResetLeveling)
         {
             message = selection.Detail;
             return false;
@@ -216,7 +219,10 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
 
             // Nexus selects one exact bounded duty. Disable AutoDuty's own leveling scheduler so
             // AutoDuty.Run cannot substitute a different duty or continue an internal loop.
-            autoDutySetLevelingMode.InvokeAction(0);
+            if (autoDutySetLevelingMode.HasAction)
+                autoDutySetLevelingMode.InvokeAction(0);
+            else
+                autoDutySetConfig.InvokeAction("leveling", "None");
             autoDutyRun.InvokeAction(territoryId, 1, false);
             message = $"Nexus asked {selection.Selected!.DisplayName} to run one duty, then return control for verification.";
             return true;
@@ -319,8 +325,23 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
     private ProgressionProviderCandidate[] DutyCandidates()
     {
         PluginPresence presence = dependencies.FindPlugin("AutoDuty");
+        bool canResetLeveling = autoDutySetLevelingMode.HasAction || autoDutySetConfig.HasAction;
         bool stockContractReady = autoDutyContentHasPath.HasFunction && autoDutyIsStopped.HasFunction &&
-                                  autoDutyRun.HasAction && autoDutyStop.HasAction && autoDutySetLevelingMode.HasAction;
+                                  autoDutyRun.HasAction && autoDutyStop.HasAction && canResetLeveling;
+        List<string> missing = [];
+        if (!autoDutyContentHasPath.HasFunction)
+            missing.Add("ContentHasPath");
+        if (!autoDutyIsStopped.HasFunction)
+            missing.Add("IsStopped");
+        if (!autoDutyRun.HasAction)
+            missing.Add("Run");
+        if (!autoDutyStop.HasAction)
+            missing.Add("Stop");
+        if (!canResetLeveling)
+            missing.Add("SetLevelingMode or SetConfig");
+        string contract = missing.Count == 0
+            ? "ContentHasPath, Run, IsStopped, Stop, and leveling-mode reset"
+            : $"missing {string.Join(", ", missing)}";
         bool isVieriCompatibilityProvider = vieriAutoDutyProgression.HasFunction ||
             string.Equals(presence.DisplayName, "VieriAutoDuty", StringComparison.OrdinalIgnoreCase);
         ProgressionProviderCandidate compatibility = isVieriCompatibilityProvider
@@ -331,7 +352,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
                 ProgressionProviderFlavor.VieriCompatibility,
                 presence,
                 stockContractReady,
-                "ContentHasPath, SetLevelingMode, Run, IsStopped, and Stop")
+                contract)
             : UnavailableDutyCandidate(
                 AutoDutyCompatibilityProviderId,
                 "VieriAutoDuty",
@@ -345,7 +366,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
                 ProgressionProviderFlavor.Stock,
                 presence,
                 stockContractReady,
-                "ContentHasPath, SetLevelingMode, Run, IsStopped, and Stop")
+                contract)
             : UnavailableDutyCandidate(
                 AutoDutyStockProviderId,
                 "AutoDuty",
