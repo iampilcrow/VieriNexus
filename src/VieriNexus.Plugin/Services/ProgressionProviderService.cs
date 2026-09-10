@@ -4,6 +4,7 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Lumina.Excel.Sheets;
+using System.Text.Json;
 using VieriNexus.Application;
 using VieriNexus.Domain;
 
@@ -14,7 +15,7 @@ namespace VieriNexus.Services;
 /// Merely having the expected plugin name is not enough: every required IPC member must be present.
 /// Questing remains observation-only; the duty edge exposes one exact bounded run and Stop.
 /// </summary>
-internal sealed class ProgressionProviderService : IProgressionDutyProvider
+internal sealed class ProgressionProviderService : IProgressionDutyProvider, IProgressionGearProvider
 {
     private static readonly ProviderId CodexProviderId = new("vieri.provider.codex-compat/v1");
     private static readonly ProviderId QuestionableProviderId = new("vieri.provider.questionable-stock/v1");
@@ -36,6 +37,13 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
     private readonly ICallGateSubscriber<int, object> autoDutySetLevelingMode;
     private readonly ICallGateSubscriber<string, object, object> autoDutySetConfig;
     private readonly ICallGateSubscriber<int, string> vieriAutoDutyProgression;
+    private readonly ICallGateSubscriber<bool> vieriAutoDutyGearBusy;
+    private readonly ICallGateSubscriber<string> vieriAutoDutyStartGear;
+    private readonly ICallGateSubscriber<string, string, string> vieriAutoDutyCommand;
+    private readonly ICallGateSubscriber<object, bool> autoDutyPushConfigOverrides;
+    private readonly ICallGateSubscriber<bool> autoDutyPopConfigOverrides;
+    private readonly ICallGateSubscriber<string> vieriAutoDutyStatus;
+    private bool gearOverridesActive;
     private long eligibleDutyCacheExpiresAt;
     private int eligibleDutyCacheLevel;
     private IReadOnlyList<ProgressionDutyCandidate> eligibleDutyCache = [];
@@ -60,6 +68,12 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
         autoDutySetLevelingMode = pluginInterface.GetIpcSubscriber<int, object>("AutoDuty.SetLevelingMode");
         autoDutySetConfig = pluginInterface.GetIpcSubscriber<string, object, object>("AutoDuty.SetConfig");
         vieriAutoDutyProgression = pluginInterface.GetIpcSubscriber<int, string>("AutoDuty.StartProgressionLeveling");
+        vieriAutoDutyGearBusy = pluginInterface.GetIpcSubscriber<bool>("AutoDuty.IsGearReadinessBusy");
+        vieriAutoDutyStartGear = pluginInterface.GetIpcSubscriber<string>("AutoDuty.StartGearReadiness");
+        vieriAutoDutyCommand = pluginInterface.GetIpcSubscriber<string, string, string>("AutoDuty.ExecuteVieriCommand");
+        autoDutyPushConfigOverrides = pluginInterface.GetIpcSubscriber<object, bool>("AutoDuty.PushConfigOverrides");
+        autoDutyPopConfigOverrides = pluginInterface.GetIpcSubscriber<bool>("AutoDuty.PopConfigOverrides");
+        vieriAutoDutyStatus = pluginInterface.GetIpcSubscriber<string>("AutoDuty.GetVieriStatus");
     }
 
     ProviderId IProgressionDutyProvider.Id =>
@@ -74,6 +88,21 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
         TryStartDuty(territoryId, out message);
 
     bool IProgressionDutyProvider.TryStop(out string message) => TryStopDuty(out message);
+
+    ProviderId IProgressionGearProvider.Id => AutoDutyCompatibilityProviderId;
+
+    ProgressionGearProviderObservation IProgressionGearProvider.ObserveGearReadiness() =>
+        ObserveGearReadiness();
+
+    bool IProgressionGearProvider.TryStartGearReadiness(int minimumGilReserve, out string message) =>
+        TryStartGearReadiness(minimumGilReserve, out message);
+
+    bool IProgressionGearProvider.TryStopGearReadiness(out string message) =>
+        TryStopGearReadiness(out message);
+
+    internal bool IsGearReadinessReady => GearContractReady() && IsVieriAutoDutyActive();
+
+    internal ProgressionCharacterMetrics CharacterMetrics() => new(CurrentItemLevel(), CurrentGil());
 
     internal ProgressionProviderSnapshot Snapshot()
     {
@@ -255,6 +284,139 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
         }
     }
 
+    internal ProgressionGearProviderObservation ObserveGearReadiness()
+    {
+        if (!IsGearReadinessReady)
+            return new(false, null, 0, 0, 0, 0, 0,
+                "VieriAutoDuty's temporary gear-readiness contract is unavailable. Nexus will not use stock AutoDuty's overlay or scheduler as a substitute.");
+
+        try
+        {
+            bool busy = vieriAutoDutyGearBusy.InvokeFunc();
+            long startedSequence = 0;
+            long completedSequence = 0;
+            int startingItemLevel = 0;
+            int endingItemLevel = 0;
+            int itemsPurchased = 0;
+            if (vieriAutoDutyStatus.HasFunction)
+            {
+                using JsonDocument document = JsonDocument.Parse(vieriAutoDutyStatus.InvokeFunc());
+                JsonElement root = document.RootElement;
+                startedSequence = ReadInt64(root, "gearShoppingStartedSequence");
+                completedSequence = ReadInt64(root, "gearShoppingCompletedSequence");
+                startingItemLevel = ReadInt32(root, "gearShoppingStartingItemLevel");
+                endingItemLevel = ReadInt32(root, "gearShoppingEndingItemLevel");
+                itemsPurchased = ReadInt32(root, "gearShoppingItemsPurchased");
+            }
+
+            if (!busy && gearOverridesActive)
+            {
+                if (!TryRestoreGearOverrides())
+                    return new(false, null, startedSequence, completedSequence, startingItemLevel,
+                        endingItemLevel, itemsPurchased,
+                        "Gear work ended, but Nexus could not yet restore the provider's prior settings.");
+                eligibleDutyCacheExpiresAt = 0;
+            }
+
+            string detail = busy
+                ? "The Nexus-owned gear-readiness transaction is running through the temporary VieriAutoDuty mechanics adapter."
+                : "The gear-readiness provider is inactive.";
+            return new(true, busy, startedSequence, completedSequence, startingItemLevel,
+                endingItemLevel, itemsPurchased, detail);
+        }
+        catch (Exception ex)
+        {
+            return new(false, null, 0, 0, 0, 0, 0, ex.Message);
+        }
+    }
+
+    internal bool TryStartGearReadiness(int minimumGilReserve, out string message)
+    {
+        if (!IsGearReadinessReady)
+        {
+            message = "VieriAutoDuty does not expose the temporary gear-readiness contract required for this migration step.";
+            return false;
+        }
+
+        try
+        {
+            if (vieriAutoDutyGearBusy.InvokeFunc())
+            {
+                message = "VieriAutoDuty is already running gear work that Nexus does not own.";
+                return false;
+            }
+            if (!autoDutyIsStopped.InvokeFunc())
+            {
+                message = "VieriAutoDuty is already running duty work. Stop it before Nexus starts gear readiness.";
+                return false;
+            }
+
+            Dictionary<string, string> overrides = new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AutoBuyGilVendorGear"] = "true",
+                ["AutoBuyGilVendorKeepGil"] = Math.Max(0, minimumGilReserve)
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture),
+            };
+            if (!autoDutyPushConfigOverrides.InvokeFunc(overrides))
+            {
+                message = "VieriAutoDuty rejected the temporary Nexus gear policy; no shopping was started.";
+                return false;
+            }
+            gearOverridesActive = true;
+
+            string result = vieriAutoDutyStartGear.InvokeFunc();
+            if (!result.StartsWith("Started gear readiness", StringComparison.OrdinalIgnoreCase))
+            {
+                bool restored = TryRestoreGearOverrides();
+                message = restored ? result : $"{result} The prior provider settings could not yet be restored.";
+                return false;
+            }
+
+            message = $"Nexus started gear readiness with a protected {minimumGilReserve:N0}-gil floor. " +
+                      "VieriAutoDuty is supplying temporary vendor/equip mechanics only.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            bool restored = TryRestoreGearOverrides();
+            message = $"Gear readiness could not start: {ex.Message}" +
+                      (restored ? string.Empty : " The prior provider settings could not yet be restored.");
+            return false;
+        }
+    }
+
+    internal bool TryStopGearReadiness(out string message)
+    {
+        if (!vieriAutoDutyCommand.HasFunction)
+        {
+            message = "The temporary gear-readiness Stop contract is unavailable.";
+            return false;
+        }
+
+        try
+        {
+            string result = vieriAutoDutyCommand.InvokeFunc("cancelgear", string.Empty);
+            if (!result.StartsWith("Gear readiness stopped", StringComparison.OrdinalIgnoreCase))
+            {
+                message = result;
+                return false;
+            }
+            if (!TryRestoreGearOverrides())
+            {
+                message = "Gear readiness stopped, but Nexus could not yet restore the provider's prior settings.";
+                return false;
+            }
+            eligibleDutyCacheExpiresAt = 0;
+            message = $"Nexus stopped gear readiness. {result}";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            message = $"The gear-readiness Stop request failed: {ex.Message}";
+            return false;
+        }
+    }
+
     private unsafe int CurrentItemLevel()
     {
         InventoryManager* manager = InventoryManager.Instance();
@@ -303,6 +465,52 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider
 
         return calculatedSlots <= 0 ? 0 : checked((int)(sum / (uint)calculatedSlots));
     }
+
+    private static unsafe int CurrentGil()
+    {
+        InventoryManager* manager = InventoryManager.Instance();
+        return manager is null ? 0 : checked((int)Math.Min(manager->GetGil(), int.MaxValue));
+    }
+
+    private bool GearContractReady() =>
+        vieriAutoDutyGearBusy.HasFunction &&
+        vieriAutoDutyStartGear.HasFunction &&
+        vieriAutoDutyCommand.HasFunction &&
+        autoDutyPushConfigOverrides.HasFunction &&
+        autoDutyPopConfigOverrides.HasFunction;
+
+    private bool IsVieriAutoDutyActive()
+    {
+        PluginPresence presence = dependencies.FindPlugin("AutoDuty");
+        return presence.IsLoaded && (vieriAutoDutyProgression.HasFunction ||
+            string.Equals(presence.DisplayName, "VieriAutoDuty", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool TryRestoreGearOverrides()
+    {
+        if (!gearOverridesActive)
+            return true;
+        if (!autoDutyPopConfigOverrides.HasFunction)
+            return false;
+        try
+        {
+            autoDutyPopConfigOverrides.InvokeFunc();
+            gearOverridesActive = false;
+            return true;
+        }
+        catch
+        {
+            // A provider Stop also restores overrides. The coordinator still verifies the live
+            // transaction result and never assumes that a failed restoration means success.
+            return false;
+        }
+    }
+
+    private static int ReadInt32(JsonElement root, string name) =>
+        root.TryGetProperty(name, out JsonElement value) && value.TryGetInt32(out int result) ? result : 0;
+
+    private static long ReadInt64(JsonElement root, string name) =>
+        root.TryGetProperty(name, out JsonElement value) && value.TryGetInt64(out long result) ? result : 0;
 
     private ProgressionProviderCandidate QuestCandidate(
         string internalName,

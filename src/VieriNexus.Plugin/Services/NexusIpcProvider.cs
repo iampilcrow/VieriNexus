@@ -72,7 +72,7 @@ internal sealed class NexusIpcProvider : IDisposable
                 (ready ? "No active goal." : "Waiting for required dependencies and a ready character."),
             activeTask?.Provider?.Value,
             progressionState?.Goal.Status == GoalStatus.Active
-                ? "Verify this bounded duty, then replan from current character state."
+                ? "Verify the current bounded activity, then replan from current character state."
                 : null,
             progressionState?.Goal.Status == GoalStatus.Blocked
                 ? progressionState.Goal.StatusDetail

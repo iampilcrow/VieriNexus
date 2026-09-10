@@ -93,9 +93,9 @@ Destination: Nexus command gateway, world snapshots, provider health, activity h
 
 ### 8. UI, branding, and packaging
 
-Vieri branding, consolidated overlay actions, manual shopping windows, striking-dummy menus, support-link changes, tags, versioning, and the Vieri changelog differ from stock.
+Vieri branding, the cleaned-up categorized overlay actions, manual shopping windows, striking-dummy menus, support-link changes, tags, versioning, and the Vieri changelog differ from stock.
 
-Destination: the neutral Nexus UI where the feature survives. Fork branding and duplicate AutoDuty windows are retired rather than migrated as product features.
+Destination: Nexus owns and preserves the custom overlay experience—not stock AutoDuty's overlay—including the compact categorized Goto, Gear, Inventory, and Extras actions; striking-dummy destinations; manual Shop for Upgrades review; and the useful duty controls/status. These are rebuilt as coherent Nexus UI over Nexus commands and narrow provider capabilities. Fork branding and duplicate AutoDuty windows retire; the user-facing functionality and cleaner organization do not.
 
 ### 9. Tests and provenance
 
@@ -111,8 +111,8 @@ Each receives one of three outcomes before retirement: an exact Nexus mapping, a
 
 1. Keep VieriAutoDuty authoritative while migration is incomplete.
 2. **Implemented through 0.1.0.29 and live-accepted:** replace the fork-only Nexus route-trip bridge with Nexus-owned Lifestream/vnavmesh travel composition. Nexus no longer references `TravelVieriRoute`.
-3. **Implemented in 0.1.0.30 and compatibility-corrected in 0.1.0.31; focused live acceptance pending:** build the Progression proof using the stock-compatible AutoDuty contract. Nexus selects one exact eligible duty, disables AutoDuty's internal leveling scheduler through either `SetLevelingMode` or the older stock `SetConfig("leveling", "None")` path, requests one loop, holds the full resource bundle, requires the matching game duty-completed event plus safe return, and decides whether to stop or schedule exactly one fresh task. It never calls the Vieri-only endless Progression endpoint. Questionable quest execution remains planning-only.
-4. Move gear-readiness, shopping, equipment, and maintenance policy/UI/state into Nexus with golden configuration and incident fixtures.
+3. **Implemented in 0.1.0.30, compatibility-corrected in 0.1.0.31, and live-accepted:** build the Progression proof using the stock-compatible AutoDuty contract. Nexus selects one exact eligible duty, disables AutoDuty's internal leveling scheduler through either `SetLevelingMode` or the older stock `SetConfig("leveling", "None")` path, requests one loop, holds the full resource bundle, requires the matching game duty-completed event plus safe return, and decides whether to stop or schedule exactly one fresh task. It never calls the Vieri-only endless Progression endpoint. The user accepted Start, Stop, fresh-plan Resume, and repeated Mt. Gulg dispatch. Questionable quest execution remains planning-only.
+4. **First transaction implemented in 0.1.0.32; full policy/UI migration remains:** Nexus creates a separate durable gear-readiness task before duty selection, owns Teleport/Navigation/Movement/UI/Inventory resources, applies the goal's protected gil floor as a temporary provider override, monitors the Vieri migration adapter, restores prior provider settings, verifies that gil and item level did not regress, records the result, and only then selects one duty. Stop, reload, provider loss, and setting-restoration failure remain fail-closed. Continue moving exact shopping preview/approval, slot policy, equipment mechanics, maintenance, and the custom categorized overlay into Nexus with golden configuration and incident fixtures.
 5. Audit the remaining duty-engine tree diff against then-current stock AutoDuty. Upstream generic fixes or prove the stock behavior equivalent; do not copy the full duty engine into Nexus.
 6. Add a transactional VieriAutoDuty importer covering all 21 identified custom settings/state groups, behavior/IPC compatibility, and rollback.
 7. Run coexistence, provider-loss, duty completion, Last Run, gear interruption, reload, and clean stock-provider tests.

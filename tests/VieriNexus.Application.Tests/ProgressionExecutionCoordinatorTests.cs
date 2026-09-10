@@ -8,6 +8,79 @@ public sealed class ProgressionExecutionCoordinatorTests
     private static readonly CharacterKey Character = new(0x1234, 74);
 
     [Fact]
+    public void GearReadinessRunsAsOwnedVerifiedTaskBeforeDutySelection()
+    {
+        MemoryStore store = new();
+        FakeDutyProvider duty = new();
+        FakeGearProvider gear = new();
+        ResourceLeaseManager leases = new();
+        ProgressionExecutionCoordinator coordinator = new(store, leases, duty, gear);
+
+        ProgressionActionResult result = coordinator.Start(
+            Draft() with { CurrentItemLevel = 640, CurrentGil = 1_500_000 }, Plan());
+
+        Assert.True(result.Success);
+        Assert.Equal([1_000_000], gear.StartedGilFloors);
+        Assert.Empty(duty.StartedTerritories);
+        Assert.Equal("vieri.gear.ensure-readiness/v1", coordinator.State!.ActiveTask!.Kind.Value);
+        Assert.True(leases.Snapshot().Single().Resources.IsSupersetOf(
+            [ResourceKind.Teleport, ResourceKind.Navigation, ResourceKind.Movement,
+                ResourceKind.UiInteraction, ResourceKind.InventoryMutation]));
+
+        gear.IsBusy = true;
+        coordinator.Update(World(level: 90, inDuty: false) with { ItemLevel = 640, Gil = 1_500_000 });
+        gear.IsBusy = false;
+        gear.ItemsPurchased = 2;
+        coordinator.Update(World(level: 90, inDuty: false) with { ItemLevel = 650, Gil = 1_420_000 });
+
+        Assert.Equal([200u], duty.StartedTerritories);
+        Assert.Equal(2, coordinator.State.Tasks.Count);
+        Assert.Equal(NexusTaskStatus.Succeeded, coordinator.State.Tasks[0].Status);
+        Assert.Contains("item level 640 → 650", coordinator.State.Tasks[0].StatusDetail);
+        Assert.Equal(NexusTaskStatus.Acquiring, coordinator.State.ActiveTask!.Status);
+    }
+
+    [Fact]
+    public void GearVerificationBlocksDutyWhenProtectedGilFloorIsViolated()
+    {
+        FakeDutyProvider duty = new();
+        FakeGearProvider gear = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), duty, gear);
+        coordinator.Start(Draft() with { CurrentItemLevel = 640, CurrentGil = 1_500_000 }, Plan());
+
+        gear.IsBusy = true;
+        coordinator.Update(World(90, false) with { ItemLevel = 640, Gil = 1_500_000 });
+        gear.IsBusy = false;
+        coordinator.Update(World(90, false) with { ItemLevel = 650, Gil = 999_999 });
+
+        Assert.Equal(GoalStatus.Blocked, coordinator.State!.Goal.Status);
+        Assert.Equal("gear-gil-floor-violated", coordinator.State.Tasks.Single().Failure!.Code);
+        Assert.Empty(duty.StartedTerritories);
+    }
+
+    [Fact]
+    public void StopDuringGearReadinessUsesGearStopAndNeverCallsDutyStop()
+    {
+        FakeDutyProvider duty = new();
+        FakeGearProvider gear = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), duty, gear);
+        coordinator.Start(Draft() with { CurrentItemLevel = 640, CurrentGil = 1_500_000 }, Plan());
+        gear.IsBusy = true;
+        coordinator.Update(World(90, false) with { ItemLevel = 640, Gil = 1_500_000 });
+
+        ProgressionActionResult stopped = coordinator.StopNow();
+
+        Assert.True(stopped.Success);
+        Assert.Equal(1, gear.StopCalls);
+        Assert.Equal(0, duty.StopCalls);
+        gear.IsBusy = false;
+        coordinator.Update(World(90, false) with { ItemLevel = 640, Gil = 1_500_000 });
+        Assert.Equal(GoalStatus.Cancelled, coordinator.State!.Goal.Status);
+    }
+
+    [Fact]
     public void StartsHighestEligibleDutyAsOneBoundedTaskWithFullOwnership()
     {
         MemoryStore store = new();
@@ -368,6 +441,45 @@ public sealed class ProgressionExecutionCoordinatorTests
         {
             StopCalls++;
             message = Available ? "stop requested" : "missing";
+            return Available;
+        }
+    }
+
+    private sealed class FakeGearProvider : IProgressionGearProvider
+    {
+        public ProviderId Id { get; } = new("provider.gear-test/v1");
+        public bool Available { get; set; } = true;
+        public bool IsBusy { get; set; }
+        public int ItemsPurchased { get; set; }
+        public int StopCalls { get; private set; }
+        public List<int> StartedGilFloors { get; } = [];
+
+        public ProgressionGearProviderObservation ObserveGearReadiness() => new(
+            Available,
+            Available ? IsBusy : null,
+            IsBusy ? 1 : 0,
+            IsBusy ? 0 : 1,
+            640,
+            650,
+            ItemsPurchased,
+            Available ? "test gear" : "missing gear");
+
+        public bool TryStartGearReadiness(int minimumGilReserve, out string message)
+        {
+            if (!Available)
+            {
+                message = "missing gear";
+                return false;
+            }
+            StartedGilFloors.Add(minimumGilReserve);
+            message = "started gear";
+            return true;
+        }
+
+        public bool TryStopGearReadiness(out string message)
+        {
+            StopCalls++;
+            message = Available ? "gear stop requested" : "missing gear";
             return Available;
         }
     }

@@ -42,17 +42,24 @@ internal sealed class ProgressionRuntimeService
     internal IReadOnlyList<ProgressionDutyCandidate> EligibleDuties(int currentLevel) =>
         provider.EligibleDuties(currentLevel);
 
+    internal bool IsGearReadinessReady => provider.IsGearReadinessReady;
+
+    internal ProgressionCharacterMetrics CurrentMetrics => provider.CharacterMetrics();
+
     internal void Update(CharacterSnapshot? character, bool isInDuty)
     {
         if (character is { Key.IsKnown: true })
         {
             EnsureCoordinator(character.Key);
+            ProgressionCharacterMetrics metrics = provider.CharacterMetrics();
             lastWorld = new ProgressionWorldObservation(
                 character.Key,
                 character.ClassJobId,
                 character.Level,
                 true,
-                isInDuty);
+                isInDuty,
+                metrics.ItemLevel,
+                metrics.Gil);
         }
         else if (lastWorld is { } prior)
         {
@@ -106,6 +113,7 @@ internal sealed class ProgressionRuntimeService
             coordinator = new ProgressionExecutionCoordinator(
                 new FileProgressionGoalStore(path),
                 leases,
+                provider,
                 provider);
         }
         catch (Exception ex)

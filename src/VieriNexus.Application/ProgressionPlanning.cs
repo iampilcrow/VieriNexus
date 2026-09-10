@@ -109,7 +109,9 @@ public sealed record ReachJobLevelGoalDraft(
     bool AllowHuntingLog,
     bool AllowSideQuests,
     bool AllowDuties,
-    int MinimumGilReserve);
+    int MinimumGilReserve,
+    int CurrentItemLevel = 0,
+    int CurrentGil = 0);
 
 public enum ProgressionPlanIssueSeverity
 {

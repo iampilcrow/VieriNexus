@@ -1452,7 +1452,9 @@ internal sealed class NexusWindow : Window
                 draftConfiguration.AllowHuntingLog,
                 draftConfiguration.AllowSideQuests,
                 draftConfiguration.AllowDuties,
-                draftConfiguration.MinimumGilReserve),
+                draftConfiguration.MinimumGilReserve,
+                progressionRuntime.CurrentMetrics.ItemLevel,
+                progressionRuntime.CurrentMetrics.Gil),
             providers.Questing,
             providers.Duties);
         DrawProgressionRuntime(plan, character, draftConfiguration);
@@ -1482,16 +1484,16 @@ internal sealed class NexusWindow : Window
         {
             int eligible = progressionRuntime.EligibleDuties(character.Level).Count;
             BeginAutoPanel("START");
-            bool hasEligibleDuty = plan.IsExecutionConnected && eligible > 0;
-            NexusTheme.StatusDot(hasEligibleDuty ? NexusTheme.Green : NexusTheme.Amber,
-                hasEligibleDuty
-                    ? $"Ready to run one eligible duty at a time • {eligible} available"
+            bool hasExecutableStart = plan.IsExecutionConnected && progressionRuntime.IsGearReadinessReady;
+            NexusTheme.StatusDot(hasExecutableStart ? NexusTheme.Green : NexusTheme.Amber,
+                hasExecutableStart
+                    ? $"Ready to verify gear, then run one duty at a time • {eligible} currently eligible"
                     : plan.IsExecutionConnected
-                        ? "No unlocked duty currently meets the level, item-level, and path requirements"
+                        ? "The temporary gear-readiness contract is unavailable"
                         : "No executable duty lane is ready");
             TextWrapped(NexusTheme.Muted,
                 "Nexus—not the provider—owns the level target, task history, Stop, Last Run, verification, and decision to schedule another duty.");
-            bool canStart = plan.IsValid && !plan.IsSatisfied && hasEligibleDuty &&
+            bool canStart = plan.IsValid && !plan.IsSatisfied && hasExecutableStart &&
                 plugin.Configuration.ForCharacter(character.Key.ToString()).AllowAutomation;
             if (!canStart)
                 ImGui.BeginDisabled();
@@ -1506,7 +1508,9 @@ internal sealed class NexusWindow : Window
                     draft.AllowHuntingLog,
                     draft.AllowSideQuests,
                     draft.AllowDuties,
-                    draft.MinimumGilReserve);
+                    draft.MinimumGilReserve,
+                    progressionRuntime.CurrentMetrics.ItemLevel,
+                    progressionRuntime.CurrentMetrics.Gil);
                 ProgressionActionResult result = progressionRuntime.Start(goalDraft, plan);
                 progressionMessage = result.Message;
             }
@@ -1530,7 +1534,9 @@ internal sealed class NexusWindow : Window
         };
         NexusTheme.StatusDot(statusColor, $"{state.Goal.Status}: {state.Goal.Title}");
         TextWrapped(NexusTheme.Muted, state.Goal.StatusDetail ?? "No status detail is available.");
-        ImGui.TextUnformatted($"Plan revision: {state.Goal.PlanRevision} • Bounded duties completed: {state.Tasks.Count(task => task.Status == NexusTaskStatus.Succeeded)}");
+        int completedDuties = state.Tasks.Count(task =>
+            task.Status == NexusTaskStatus.Succeeded && task.Kind.Value == "vieri.duties.run-one/v1");
+        ImGui.TextUnformatted($"Plan revision: {state.Goal.PlanRevision} • Bounded duties completed: {completedDuties}");
         if (activeTask is not null)
         {
             ImGui.TextColored(NexusTheme.Gold, activeTask.Title);
@@ -1648,7 +1654,7 @@ internal sealed class NexusWindow : Window
         if (plan.IsValid && !plan.IsSatisfied)
             TextWrapped(plan.IsExecutionConnected ? NexusTheme.Green : NexusTheme.Amber,
                 plan.IsExecutionConnected
-                    ? "The duty lane is connected as one verified run at a time. Quest and gear steps remain planning-only until their Nexus policies are migrated."
+                    ? "Gear readiness and the duty lane are connected as separate verified tasks. Quest execution remains planning-only until its Nexus policy is migrated."
                     : "Planning is live, but no bounded provider lane is ready to execute.");
         EndAutoPanel();
     }
