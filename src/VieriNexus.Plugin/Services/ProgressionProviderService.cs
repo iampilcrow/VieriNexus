@@ -50,6 +50,7 @@ internal sealed class ProgressionProviderService
 
     internal ProgressionProviderSnapshot Snapshot()
     {
+        ProgressionProviderCandidate[] dutyCandidates = DutyCandidates();
         ProgressionProviderCandidate[] candidates =
         [
             QuestCandidate(
@@ -64,7 +65,7 @@ internal sealed class ProgressionProviderService
                 QuestionableProviderId,
                 ProgressionProviderFlavor.Stock,
                 questionableIsRunning.HasFunction && questionableStartSingleQuest.HasFunction && questionableStop.HasFunction),
-            DutyCandidate(),
+            .. dutyCandidates,
         ];
 
         return new ProgressionProviderSnapshot(
@@ -105,24 +106,56 @@ internal sealed class ProgressionProviderService
             "IsRunning, StartSingleQuest, and Stop");
     }
 
-    private ProgressionProviderCandidate DutyCandidate()
+    private ProgressionProviderCandidate[] DutyCandidates()
     {
         PluginPresence presence = dependencies.FindPlugin("AutoDuty");
         bool stockContractReady = autoDutyContentHasPath.HasFunction && autoDutyIsStopped.HasFunction &&
                                   autoDutyRun.HasAction && autoDutyStop.HasAction;
         bool isVieriCompatibilityProvider = vieriAutoDutyProgression.HasFunction ||
             string.Equals(presence.DisplayName, "VieriAutoDuty", StringComparison.OrdinalIgnoreCase);
-        return Candidate(
-            isVieriCompatibilityProvider ? AutoDutyCompatibilityProviderId : AutoDutyStockProviderId,
-            isVieriCompatibilityProvider ? "VieriAutoDuty" : "AutoDuty",
-            ProgressionProviderRole.Duties,
-            isVieriCompatibilityProvider
-                ? ProgressionProviderFlavor.VieriCompatibility
-                : ProgressionProviderFlavor.Stock,
-            presence,
-            stockContractReady,
-            "ContentHasPath, Run, IsStopped, and Stop");
+        ProgressionProviderCandidate compatibility = isVieriCompatibilityProvider
+            ? Candidate(
+                AutoDutyCompatibilityProviderId,
+                "VieriAutoDuty",
+                ProgressionProviderRole.Duties,
+                ProgressionProviderFlavor.VieriCompatibility,
+                presence,
+                stockContractReady,
+                "ContentHasPath, Run, IsStopped, and Stop")
+            : UnavailableDutyCandidate(
+                AutoDutyCompatibilityProviderId,
+                "VieriAutoDuty",
+                ProgressionProviderFlavor.VieriCompatibility,
+                "The VieriAutoDuty migration source is not active.");
+        ProgressionProviderCandidate stock = !isVieriCompatibilityProvider
+            ? Candidate(
+                AutoDutyStockProviderId,
+                "AutoDuty",
+                ProgressionProviderRole.Duties,
+                ProgressionProviderFlavor.Stock,
+                presence,
+                stockContractReady,
+                "ContentHasPath, Run, IsStopped, and Stop")
+            : UnavailableDutyCandidate(
+                AutoDutyStockProviderId,
+                "AutoDuty",
+                ProgressionProviderFlavor.Stock,
+                "Target provider after Nexus absorbs the remaining VieriAutoDuty behavior; do not enable it beside the fork.");
+        return [compatibility, stock];
     }
+
+    private static ProgressionProviderCandidate UnavailableDutyCandidate(
+        ProviderId id,
+        string displayName,
+        ProgressionProviderFlavor flavor,
+        string detail) => new(
+        id,
+        displayName,
+        ProgressionProviderRole.Duties,
+        flavor,
+        ProgressionProviderReadiness.Missing,
+        null,
+        detail);
 
     private static ProgressionProviderCandidate Candidate(
         ProviderId id,

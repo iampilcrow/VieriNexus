@@ -17,7 +17,7 @@ Compared with current stock AutoDuty, the Vieri tree contains 105 commits after 
 
 Stock upstream is currently one substantive commit plus its merge ahead of the fork's common ancestor. That change corrects character gathering to use the home world rather than the current world. The Vieri final tree still uses the current world at that call site, so this is a pending one-line upstream correction while the fork remains in service; it must be integrated and released through the normal VieriAutoDuty verification path, not hidden inside this documentation-only audit. The source lock already records the current Vieri and upstream revisions. This audit classifies the final tree difference; it does not assume that every historical intermediate commit still represents distinct live behavior.
 
-## Why Nexus currently says “through VieriAutoDuty”
+## Why Nexus used to say “through VieriAutoDuty”
 
 Nexus Routes calls three fork-only endpoints:
 
@@ -27,7 +27,7 @@ Nexus Routes calls three fork-only endpoints:
 
 Those endpoints accept the Nexus route payload, perform city/inn/zone travel, run the authored points, expose visualization ownership, and stop the tracked trip. They do not exist in stock AutoDuty. Nexus therefore prefers the fork for every complete route trip when it is loaded, even for a same-territory route.
 
-The live 0.1.0.25 test accepted this temporary bridge in both directions, including ordinary vendor and Grand Company inn travel. It is not the intended permanent ownership boundary.
+The live 0.1.0.25 test accepted this temporary bridge in both directions, including ordinary vendor and Grand Company inn travel. Version 0.1.0.27 removes it: Nexus now owns the route-trip state, uses stock Lifestream for teleport/Aethernet/Grand Company inn entry, and uses vnavmesh for the authored path. The three fork-only AutoDuty route endpoints are no longer referenced by Nexus. A focused live parity check remains required before this retirement step is accepted in game.
 
 ## Stock IPC capability boundary
 
@@ -53,7 +53,7 @@ Stock AutoDuty is therefore usable now for bounded duty start/stop and path elig
 
 Current anchors include `VieriRouteTravelHelper`, `VieriRoutePlaybackContract`, `NexusNavigationRouteContract`, the Nexus/NavPlotter subscribers, the fork-only route IPC endpoints, special Grand Company inn destinations, and Nexus vendor-override consumption.
 
-Destination: Nexus Routes & Navigation. The 27 measured vendor templates and exact assignment model already live in Nexus. Remaining work is to own the whole trip—including cross-zone transfer, inn entry, authored playback, visualization state, and Stop—without calling a fork-only AutoDuty route endpoint.
+Destination: Nexus Routes & Navigation. Implemented in 0.1.0.27: the 27 measured vendor templates and exact assignment model live in Nexus, and Nexus owns cross-zone transfer coordination, exact Grand Company inn entry, authored playback, visualization state, provider failure reporting, and Stop without calling a fork-only AutoDuty route endpoint. Focused live parity remains the acceptance gate.
 
 ### 2. Vendor travel data and arrival policy
 
@@ -110,7 +110,7 @@ Each receives one of three outcomes before retirement: an exact Nexus mapping, a
 ## Retirement sequence
 
 1. Keep VieriAutoDuty authoritative while migration is incomplete.
-2. Replace the fork-only Nexus route-trip bridge with Nexus-owned travel composition. This removes the current route dependency on `TravelVieriRoute`.
+2. **Implemented in 0.1.0.27; live acceptance pending:** replace the fork-only Nexus route-trip bridge with Nexus-owned Lifestream/vnavmesh travel composition. Nexus no longer references `TravelVieriRoute`.
 3. Build the Progression proof using capability-versioned stock Questionable and stock AutoDuty adapters. Dispatch one bounded provider task at a time.
 4. Move gear-readiness, shopping, equipment, and maintenance policy/UI/state into Nexus with golden configuration and incident fixtures.
 5. Audit the remaining duty-engine tree diff against then-current stock AutoDuty. Upstream generic fixes or prove the stock behavior equivalent; do not copy the full duty engine into Nexus.

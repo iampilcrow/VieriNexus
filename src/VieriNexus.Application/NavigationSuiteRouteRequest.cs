@@ -58,6 +58,17 @@ public static class NavigationVendorTargetCatalog
 /// </summary>
 public static class NavigationSuiteRouteRequest
 {
+    public sealed record PlaybackRequest(
+        uint TerritoryId,
+        IReadOnlyList<NavigationRoutePoint> Points,
+        bool UseMesh,
+        bool UseFlight,
+        float Tolerance,
+        float LastPointTolerance,
+        bool TravelOnly,
+        uint VendorTargetDataId,
+        NavigationRoutePoint? VendorPosition);
+
     public static string Create(NavigationRouteSnapshot route, NavigationRoutePlanKind kind)
     {
         ArgumentNullException.ThrowIfNull(route);
@@ -87,5 +98,89 @@ public static class NavigationSuiteRouteRequest
             VendorTargetDataId = includeVendor ? route.TargetDataId : 0,
             VendorPosition = vendorPosition,
         });
+    }
+
+    public static PlaybackRequest? Parse(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(json);
+            JsonElement root = document.RootElement;
+            uint territoryId = root.GetProperty("TerritoryId").GetUInt32();
+            if (territoryId == 0)
+                return null;
+
+            var points = new List<NavigationRoutePoint>();
+            foreach (JsonElement point in root.GetProperty("Points").EnumerateArray())
+            {
+                var value = new NavigationRoutePoint(
+                    point.GetProperty("X").GetSingle(),
+                    point.GetProperty("Y").GetSingle(),
+                    point.GetProperty("Z").GetSingle());
+                if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z))
+                    return null;
+                points.Add(value);
+                if (points.Count > 500)
+                    return null;
+            }
+            if (points.Count == 0)
+                return null;
+
+            float tolerance = root.TryGetProperty("Tolerance", out JsonElement toleranceElement)
+                ? toleranceElement.GetSingle()
+                : 0.75f;
+            float lastPointTolerance = root.TryGetProperty("LastPointTolerance", out JsonElement lastToleranceElement)
+                ? lastToleranceElement.GetSingle()
+                : 3f;
+            if (tolerance is < 0.1f or > 20f || lastPointTolerance is < 0.1f or > 30f)
+                return null;
+
+            bool useMesh = !root.TryGetProperty("UseMesh", out JsonElement meshElement) || meshElement.GetBoolean();
+            bool useFlight = root.TryGetProperty("UseFlight", out JsonElement flightElement) && flightElement.GetBoolean();
+            bool travelOnly = root.TryGetProperty("Mode", out JsonElement modeElement) &&
+                              string.Equals(modeElement.GetString(), "travel", StringComparison.OrdinalIgnoreCase);
+            uint vendorTargetDataId = root.TryGetProperty("VendorTargetDataId", out JsonElement targetElement)
+                ? targetElement.GetUInt32()
+                : 0;
+            NavigationRoutePoint? vendorPosition = null;
+            if (root.TryGetProperty("VendorPosition", out JsonElement vendorElement) &&
+                vendorElement.ValueKind != JsonValueKind.Null)
+            {
+                if (vendorTargetDataId == 0 || vendorElement.ValueKind != JsonValueKind.Object)
+                    return null;
+                var value = new NavigationRoutePoint(
+                    vendorElement.GetProperty("X").GetSingle(),
+                    vendorElement.GetProperty("Y").GetSingle(),
+                    vendorElement.GetProperty("Z").GetSingle());
+                if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z))
+                    return null;
+                vendorPosition = value;
+            }
+
+            return new PlaybackRequest(
+                territoryId,
+                points,
+                useMesh,
+                useFlight,
+                tolerance,
+                lastPointTolerance,
+                travelOnly,
+                vendorTargetDataId,
+                vendorPosition);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
     }
 }

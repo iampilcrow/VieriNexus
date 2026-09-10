@@ -2,6 +2,23 @@ namespace VieriNexus.Application;
 
 public readonly record struct SuiteRouteDispatchResult(bool Started, string Message);
 
+public enum SuiteRouteProviderState
+{
+    Idle,
+    Running,
+    Completed,
+    Failed,
+}
+
+public readonly record struct SuiteRouteProviderObservation(
+    SuiteRouteProviderState State,
+    string Code,
+    string Message,
+    bool VisualizationActive)
+{
+    public bool IsActive => State == SuiteRouteProviderState.Running;
+}
+
 public interface INavigationSuiteTravelProvider
 {
     bool IsAvailable { get; }
@@ -10,7 +27,7 @@ public interface INavigationSuiteTravelProvider
 
     bool Stop();
 
-    bool IsRouteVisualizationActive();
+    SuiteRouteProviderObservation Observe(DateTimeOffset now);
 }
 
 /// <summary>
@@ -26,13 +43,14 @@ public sealed class NavigationSuiteTravelCoordinator(
     private NavigationRouteExecutionStatus status = Idle();
     private DateTimeOffset startedAt;
     private bool observedActive;
+    private bool visualizationActive;
 
     public NavigationRouteExecutionStatus Status => status;
 
     public bool CanDispatch => provider.IsAvailable;
 
     public bool IsVisualizationAuthorized =>
-        status.IsActive && provider.IsRouteVisualizationActive();
+        status.IsActive && visualizationActive;
 
     public NavigationRouteExecutionStatus Start(
         NavigationRouteSnapshot route,
@@ -54,7 +72,7 @@ public sealed class NavigationSuiteTravelCoordinator(
                 "character-execution-blocked", "Character automation is disabled for this character.");
         if (!provider.IsAvailable)
             return Set(NavigationRouteExecutionState.Blocked, plan, false, false,
-                "suite-route-provider-unavailable", "Cross-zone route travel requires VieriAutoDuty to be loaded.");
+                "suite-route-provider-unavailable", "Nexus route travel requires vnavmesh to be loaded.");
 
         string request;
         try
@@ -74,6 +92,7 @@ public sealed class NavigationSuiteTravelCoordinator(
 
         startedAt = now;
         observedActive = false;
+        visualizationActive = true;
         return Set(NavigationRouteExecutionState.Running, plan, true, true,
             "suite-route-running", dispatch.Message);
     }
@@ -83,20 +102,45 @@ public sealed class NavigationSuiteTravelCoordinator(
         if (!status.IsActive)
             return status;
         if (!provider.IsAvailable)
+        {
+            visualizationActive = false;
             return Set(NavigationRouteExecutionState.Failed, status, false, false,
-                "suite-route-provider-lost", "VieriAutoDuty became unavailable; Nexus will not replay the route.");
+                "suite-route-provider-lost", "vnavmesh became unavailable; Nexus will not replay the route.");
+        }
 
-        bool active = provider.IsRouteVisualizationActive();
-        if (active)
+        SuiteRouteProviderObservation observation;
+        try
+        {
+            observation = provider.Observe(now);
+        }
+        catch
+        {
+            observation = new SuiteRouteProviderObservation(
+                SuiteRouteProviderState.Failed,
+                "suite-route-provider-observation-failed",
+                "Nexus could not observe the route provider; the trip was stopped and will not replay.",
+                false);
+        }
+        visualizationActive = observation.VisualizationActive;
+        if (observation.IsActive)
         {
             observedActive = true;
-            return status;
+            return Set(NavigationRouteExecutionState.Running, status, true, true,
+                observation.Code, observation.Message);
+        }
+        if (observation.State == SuiteRouteProviderState.Failed)
+        {
+            visualizationActive = false;
+            return Set(NavigationRouteExecutionState.Failed, status, false, false,
+                observation.Code, observation.Message);
         }
         if (!observedActive && now - startedAt < StartObservationGrace)
             return status;
 
         return Set(NavigationRouteExecutionState.Completed, status, false, false,
-            "suite-route-completed", $"Completed {status.RouteName}; suite travel is no longer active.");
+            observation.Code, string.IsNullOrWhiteSpace(observation.Message)
+                ? $"Completed {status.RouteName}; Nexus route travel is no longer active."
+                : observation.Message);
     }
 
     public NavigationRouteExecutionStatus Stop()
@@ -104,6 +148,7 @@ public sealed class NavigationSuiteTravelCoordinator(
         if (!status.IsActive)
             return status;
         bool stopped = provider.Stop();
+        visualizationActive = false;
         return Set(stopped ? NavigationRouteExecutionState.Completed : NavigationRouteExecutionState.Failed,
             status, false, false,
             stopped ? "suite-route-stopped" : "suite-route-stop-unconfirmed",
@@ -121,7 +166,10 @@ public sealed class NavigationSuiteTravelCoordinator(
     public void ResetInactive()
     {
         if (!status.IsActive)
+        {
             status = Idle();
+            visualizationActive = false;
+        }
     }
 
     private NavigationRouteExecutionStatus Set(

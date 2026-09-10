@@ -103,6 +103,24 @@ public sealed class NavigationSuiteTravelCoordinatorTests
         Assert.Contains("provider reports inactive", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ProviderFailureIsReportedWithoutPretendingTheRouteCompleted()
+    {
+        var provider = new FakeProvider();
+        var coordinator = new NavigationSuiteTravelCoordinator(provider, () => true, () => true);
+        NavigationRouteSnapshot route = Route();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        coordinator.Start(route, Plan(route), now);
+        provider.Failure = "Lifestream stopped before reaching the route territory.";
+
+        NavigationRouteExecutionStatus result = coordinator.Update(now.AddSeconds(1));
+
+        Assert.Equal(NavigationRouteExecutionState.Failed, result.State);
+        Assert.Equal("fake-provider-failed", result.Code);
+        Assert.Equal(provider.Failure, result.Message);
+        Assert.False(coordinator.IsVisualizationAuthorized);
+    }
+
     private static NavigationRouteSnapshot Route() => new(
         Guid.NewGuid(), "Cross-zone test", 200, [new(1, 2, 3), new(4, 5, 6)],
         string.Empty, string.Empty, true, true, 0.75f, 3f,
@@ -119,13 +137,14 @@ public sealed class NavigationSuiteTravelCoordinatorTests
         public int StopCount { get; private set; }
         public string? LastRequest { get; private set; }
         public bool StopResult { get; set; } = true;
+        public string? Failure { get; set; }
 
         public SuiteRouteDispatchResult Dispatch(string requestJson)
         {
             DispatchCount++;
             LastRequest = requestJson;
             RouteActive = true;
-            return new(true, "Started route playback through VieriAutoDuty (2 points).");
+            return new(true, "Started route playback through Nexus (2 points).");
         }
 
         public bool Stop()
@@ -135,6 +154,22 @@ public sealed class NavigationSuiteTravelCoordinatorTests
             return StopResult;
         }
 
-        public bool IsRouteVisualizationActive() => RouteActive;
+        public SuiteRouteProviderObservation Observe(DateTimeOffset now) => Failure is not null
+            ? new SuiteRouteProviderObservation(
+                SuiteRouteProviderState.Failed,
+                "fake-provider-failed",
+                Failure,
+                false)
+            : RouteActive
+            ? new SuiteRouteProviderObservation(
+                SuiteRouteProviderState.Running,
+                "suite-route-running",
+                "Nexus route travel is running.",
+                true)
+            : new SuiteRouteProviderObservation(
+                SuiteRouteProviderState.Completed,
+                "suite-route-completed",
+                "Nexus route travel completed.",
+                false);
     }
 }

@@ -63,4 +63,33 @@ public sealed class NavigationSuiteRouteRequestTests
 
         Assert.Equal(0u, document.RootElement.GetProperty("VendorTargetDataId").GetUInt32());
     }
+
+    [Fact]
+    public void CreatedRequestRoundTripsIntoNexusOwnedPlaybackContract()
+    {
+        NavigationRouteSnapshot route = NavigationBuiltInRouteCatalog.Find(133, 1000215)!;
+
+        NavigationSuiteRouteRequest.PlaybackRequest parsed = NavigationSuiteRouteRequest.Parse(
+            NavigationSuiteRouteRequest.Create(route, NavigationRoutePlanKind.Playback))!;
+
+        Assert.Equal(route.TerritoryId, parsed.TerritoryId);
+        Assert.Equal(route.Points, parsed.Points);
+        Assert.Equal(route.UseMesh, parsed.UseMesh);
+        Assert.Equal(route.UseFlight, parsed.UseFlight);
+        Assert.Equal(route.Tolerance, parsed.Tolerance);
+        Assert.Equal(route.LastPointTolerance, parsed.LastPointTolerance);
+        Assert.False(parsed.TravelOnly);
+        Assert.Equal(route.TargetDataId, parsed.VendorTargetDataId);
+        Assert.NotNull(parsed.VendorPosition);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("{}")]
+    [InlineData("{\"TerritoryId\":0,\"Points\":[]}")]
+    [InlineData("{\"TerritoryId\":100,\"Points\":[]}")]
+    public void InvalidRequestIsRejected(string json)
+    {
+        Assert.Null(NavigationSuiteRouteRequest.Parse(json));
+    }
 }

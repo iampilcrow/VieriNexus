@@ -1455,7 +1455,9 @@ internal sealed class NexusWindow : Window
 
     private void DrawProgressionProviders(ProgressionProviderSnapshot providers)
     {
-        NexusTheme.SectionTitle("Providers", "Vieri remains authoritative while the same narrow contracts are proven against stock plugins");
+        NexusTheme.SectionTitle("Providers");
+        TextWrapped(NexusTheme.Muted,
+            "Vieri entries are temporary migration providers. Stock Questionable and AutoDuty are the long-term targets.");
         if (!ImGui.BeginTable("###ProgressionProviders", 2, ImGuiTableFlags.SizingStretchSame))
             return;
 
@@ -1477,7 +1479,9 @@ internal sealed class NexusWindow : Window
             _ => NexusTheme.Red,
         };
         NexusTheme.StatusDot(selectionColor, selection.IsReady
-            ? $"Selected: {selection.Selected!.DisplayName}"
+            ? selection.Selected!.Flavor == ProgressionProviderFlavor.Stock
+                ? $"Target provider active: {selection.Selected.DisplayName}"
+                : $"Current migration provider: {selection.Selected.DisplayName}"
             : selection.Readiness.ToString());
         foreach (ProgressionProviderCandidate candidate in selection.Candidates)
         {
@@ -1489,7 +1493,7 @@ internal sealed class NexusWindow : Window
                 _ => NexusTheme.Red,
             };
             string version = string.IsNullOrWhiteSpace(candidate.Version) ? string.Empty : $" • {candidate.Version}";
-            string flavor = candidate.Flavor == ProgressionProviderFlavor.Stock ? "stock" : "transition";
+            string flavor = candidate.Flavor == ProgressionProviderFlavor.Stock ? "target" : "migration";
             TextWrapped(candidateColor,
                 $"• {candidate.DisplayName}: {candidate.Readiness} • {flavor}{version}");
         }

@@ -27,6 +27,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
+    [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
 
     internal Configuration Configuration { get; }
 
@@ -120,7 +122,14 @@ public sealed class Plugin : IDalamudPlugin
             navigationStopProvider,
             routeStartAllowed,
             () => ClientState.TerritoryType);
-        var suiteTravelProvider = new AutoDutyRouteTravelProvider(PluginInterface, dependencyService);
+        var suiteTravelProvider = new NexusRouteTravelProvider(
+            PluginInterface,
+            dependencyService,
+            ClientState,
+            Condition,
+            DataManager,
+            AetheryteList,
+            navigationStopProvider);
         var suiteTravel = new NavigationSuiteTravelCoordinator(
             suiteTravelProvider,
             () => navigationAuthority.Status.IsActive,
