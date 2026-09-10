@@ -88,6 +88,21 @@ public sealed class NavigationSuiteTravelCoordinatorTests
         Assert.False(result.IsActive);
     }
 
+    [Fact]
+    public void UnconfirmedStopDoesNotDirectTheUserToProviderUi()
+    {
+        var provider = new FakeProvider { StopResult = false };
+        var coordinator = new NavigationSuiteTravelCoordinator(provider, () => true, () => true);
+        NavigationRouteSnapshot route = Route();
+        coordinator.Start(route, Plan(route), DateTimeOffset.UtcNow);
+
+        NavigationRouteExecutionStatus result = coordinator.Stop();
+
+        Assert.Equal("suite-route-stop-unconfirmed", result.Code);
+        Assert.DoesNotContain("VieriAutoDuty Stop", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("provider reports inactive", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static NavigationRouteSnapshot Route() => new(
         Guid.NewGuid(), "Cross-zone test", 200, [new(1, 2, 3), new(4, 5, 6)],
         string.Empty, string.Empty, true, true, 0.75f, 3f,
@@ -103,6 +118,7 @@ public sealed class NavigationSuiteTravelCoordinatorTests
         public int DispatchCount { get; private set; }
         public int StopCount { get; private set; }
         public string? LastRequest { get; private set; }
+        public bool StopResult { get; set; } = true;
 
         public SuiteRouteDispatchResult Dispatch(string requestJson)
         {
@@ -116,7 +132,7 @@ public sealed class NavigationSuiteTravelCoordinatorTests
         {
             StopCount++;
             RouteActive = false;
-            return true;
+            return StopResult;
         }
 
         public bool IsRouteVisualizationActive() => RouteActive;

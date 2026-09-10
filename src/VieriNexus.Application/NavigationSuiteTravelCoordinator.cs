@@ -90,7 +90,7 @@ public sealed class NavigationSuiteTravelCoordinator(
                 stopped ? "suite-route-safety-stopped" : "suite-route-safety-stop-unconfirmed",
                 stopped
                     ? "Player control took priority and stopped the complete Nexus route trip."
-                    : "Nexus could not confirm the suite route stopped; use VieriAutoDuty Stop before starting other movement.");
+                    : "Nexus could not confirm the suite route stopped. The route remains blocked until its provider reports inactive.");
         }
         if (!provider.IsAvailable)
             return Set(NavigationRouteExecutionState.Failed, status, false, false,
@@ -119,7 +119,7 @@ public sealed class NavigationSuiteTravelCoordinator(
             stopped ? "suite-route-stopped" : "suite-route-stop-unconfirmed",
             stopped
                 ? "Suite route travel stopped. It will not resume or replay automatically."
-                : "Suite route travel could not be confirmed stopped; use VieriAutoDuty Stop before starting other movement.");
+                : "Suite route travel could not be confirmed stopped. The route remains blocked until its provider reports inactive.");
     }
 
     public void Shutdown()
