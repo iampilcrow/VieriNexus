@@ -1383,12 +1383,6 @@ internal sealed class NexusWindow : Window
             characterConfig.AllowAutomation = automation;
             plugin.Save();
         }
-        var manualMove = characterConfig.PauseOnManualMovement;
-        if (ImGui.Checkbox("Pause movement automation when I move manually", ref manualMove))
-        {
-            characterConfig.PauseOnManualMovement = manualMove;
-            plugin.Save();
-        }
         var manualTarget = characterConfig.PauseOnManualTarget;
         if (ImGui.Checkbox("Pause automated targeting when I change targets", ref manualTarget))
         {

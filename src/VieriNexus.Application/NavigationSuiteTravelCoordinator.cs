@@ -20,7 +20,7 @@ public interface INavigationSuiteTravelProvider
 public sealed class NavigationSuiteTravelCoordinator(
     INavigationSuiteTravelProvider provider,
     Func<bool> authorityActive,
-    Func<bool> executionAllowed)
+    Func<bool> startAllowed)
 {
     private static readonly TimeSpan StartObservationGrace = TimeSpan.FromSeconds(2);
     private NavigationRouteExecutionStatus status = Idle();
@@ -49,9 +49,9 @@ public sealed class NavigationSuiteTravelCoordinator(
         if (!authorityActive())
             return Set(NavigationRouteExecutionState.Blocked, plan, false, false,
                 "navigation-authority-required", "Nexus navigation is not ready while VieriNavPlotter or another movement owner is active.");
-        if (!executionAllowed())
+        if (!startAllowed())
             return Set(NavigationRouteExecutionState.Blocked, plan, false, false,
-                "character-execution-blocked", "Character automation or manual-movement safety currently blocks route execution.");
+                "character-execution-blocked", "Character automation is disabled for this character.");
         if (!provider.IsAvailable)
             return Set(NavigationRouteExecutionState.Blocked, plan, false, false,
                 "suite-route-provider-unavailable", "Cross-zone route travel requires VieriAutoDuty to be loaded.");
@@ -82,16 +82,6 @@ public sealed class NavigationSuiteTravelCoordinator(
     {
         if (!status.IsActive)
             return status;
-        if (!executionAllowed())
-        {
-            bool stopped = provider.Stop();
-            return Set(stopped ? NavigationRouteExecutionState.Completed : NavigationRouteExecutionState.Failed,
-                status, false, false,
-                stopped ? "suite-route-safety-stopped" : "suite-route-safety-stop-unconfirmed",
-                stopped
-                    ? "Player control took priority and stopped the complete Nexus route trip."
-                    : "Nexus could not confirm the suite route stopped. The route remains blocked until its provider reports inactive.");
-        }
         if (!provider.IsAvailable)
             return Set(NavigationRouteExecutionState.Failed, status, false, false,
                 "suite-route-provider-lost", "VieriAutoDuty became unavailable; Nexus will not replay the route.");

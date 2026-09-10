@@ -45,8 +45,8 @@ internal sealed class NavigationDiagnosticsService(
                         ? "Installed but not available to the verified Stop contract."
                         : "Not installed; navigation execution cannot be made safe."),
             new(
-                "manual-movement",
-                "Manual movement observer",
+                "explicit-route-stop",
+                "Route Stop policy",
                 manualMovement.IsReadyForActivation
                     ? NavigationDiagnosticState.Healthy
                     : manualMovement.Current.RequiresExplicitResume

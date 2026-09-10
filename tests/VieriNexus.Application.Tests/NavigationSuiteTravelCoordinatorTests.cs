@@ -70,7 +70,7 @@ public sealed class NavigationSuiteTravelCoordinatorTests
     }
 
     [Fact]
-    public void ManualSafetyLossStopsTheEntireTrackedSuiteTrip()
+    public void StartPermissionChangesDoNotStopAnActiveSuiteTrip()
     {
         var provider = new FakeProvider();
         bool executionAllowed = true;
@@ -83,9 +83,9 @@ public sealed class NavigationSuiteTravelCoordinatorTests
         executionAllowed = false;
         NavigationRouteExecutionStatus result = coordinator.Update(now.AddMilliseconds(50));
 
-        Assert.Equal("suite-route-safety-stopped", result.Code);
-        Assert.Equal(1, provider.StopCount);
-        Assert.False(result.IsActive);
+        Assert.Equal("suite-route-running", result.Code);
+        Assert.Equal(0, provider.StopCount);
+        Assert.True(result.IsActive);
     }
 
     [Fact]

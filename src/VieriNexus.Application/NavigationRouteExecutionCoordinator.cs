@@ -170,10 +170,6 @@ public sealed class NavigationRouteExecutionCoordinator
             if (currentTerritory() != activePlan.TerritoryId || !ProviderAvailable())
                 return Interrupt(now, "route-runtime-prerequisite-lost",
                     "Territory or provider state changed; Nexus stopped the route without replay.");
-            if (!executionAllowed())
-                return Interrupt(now, "route-character-safety-stop",
-                    "Character automation or manual-movement safety changed; Nexus stopped the route without replay.");
-
             bool? movement = ProviderMovementActive();
             if (movement is true)
             {

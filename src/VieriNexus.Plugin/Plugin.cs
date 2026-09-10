@@ -74,13 +74,8 @@ public sealed class Plugin : IDalamudPlugin
             navigationStop,
             navigationStopProvider,
             navigationIntentStore);
-        var manualMovementInput = new GameManualMovementInputSource();
         var manualMovement = new ManualMovementSafetyCoordinator(navigationStop);
-        manualMovementSafety = new ManualMovementSafetyService(
-            Configuration,
-            worldStore,
-            manualMovementInput,
-            manualMovement);
+        manualMovementSafety = new ManualMovementSafetyService();
         navigationRecovery = new NavigationRecoveryService(
             new NavigationRecoveryCoordinator(
                 navigationExecutionSafety,
@@ -115,21 +110,20 @@ public sealed class Plugin : IDalamudPlugin
         var navigationRecording = new NavigationRouteRecordingService(
             navigationLibrary,
             new NavigationRouteRecordingCoordinator());
-        Func<bool> routeExecutionAllowed = () =>
-            manualMovementSafety.Current.CanStartExecution &&
+        Func<bool> routeStartAllowed = () =>
             worldStore.Current.Character.Value is { Key.IsKnown: true } character &&
             Configuration.ForCharacter(character.Key.ToString()).AllowAutomation;
         var navigationExecution = new NavigationRouteExecutionCoordinator(
             navigationAuthority,
             navigationExecutionSafety,
             navigationStopProvider,
-            routeExecutionAllowed,
+            routeStartAllowed,
             () => ClientState.TerritoryType);
         var suiteTravelProvider = new AutoDutyRouteTravelProvider(PluginInterface, dependencyService);
         var suiteTravel = new NavigationSuiteTravelCoordinator(
             suiteTravelProvider,
             () => navigationAuthority.Status.IsActive,
-            routeExecutionAllowed);
+            routeStartAllowed);
         navigationRuntime = new NavigationRouteRuntimeService(
             navigationExecution,
             suiteTravel,
