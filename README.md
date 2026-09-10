@@ -8,7 +8,7 @@ Install it alongside the existing Vieri plugins during migration. Nexus never di
 
 The shared foundation provides the application shell, Home experience, module registry, dependency gate, character-scoped settings, shared world snapshots, resource ownership, migration discovery, and versioned IPC contracts needed for safe consolidation.
 
-Progression now has its first Nexus-owned planning surface. For the current job, it persists a target level, allowed job-quest/Hunting Log/side-quest/duty methods, and a hard minimum-gil reserve. It capability-checks VieriCodex versus stock Questionable and VieriAutoDuty versus stock AutoDuty, rejects simultaneous ready quest providers, and previews a bounded gear/quest/one-duty/verification plan. These probes are read-only and the planner cannot start provider work yet, so the existing Vieri progression products remain authoritative while the execution lifecycle is built.
+Progression now owns its first durable execution lifecycle. For the current job, it persists a target level, allowed job-quest/Hunting Log/side-quest/duty methods, a hard minimum-gil reserve, bounded task history, completion checkpoints, Last Run, Stop, and plan revision in character-scoped atomic storage. Nexus capability-checks VieriCodex versus stock Questionable and VieriAutoDuty versus stock AutoDuty, rejects simultaneous ready quest providers, and can ask the selected AutoDuty implementation to run exactly one eligible duty. Nexus disables the provider's internal leveling scheduler for that call, verifies the matching game duty-completion event and return to the world, then either satisfies, pauses, blocks, or schedules one fresh task. Quest and gear execution remain planning-only while their Nexus policies are migrated.
 
 Routes & Navigation is the first transactional migration slice. Its Migration card previews every VieriNavPlotter setting, creates a timestamped backup, writes a staged Nexus-owned route library atomically, records hashes and a rollback receipt, and can restore the prior Nexus state. Importing does not activate Nexus navigation or disable VieriNavPlotter.
 
@@ -50,6 +50,9 @@ An explicit Stop confirms inactivity, releases ownership, and completes its chec
 - Stop completion requires a separate inactive-path confirmation; sending a Stop request alone never releases navigation ownership.
 - Player movement input does not stop or block Nexus routes; the route Stop button and `/nexus stop` are the user cancellation controls.
 - Reload recovery never replays a saved movement instruction; it stops first and waits for a new explicit route action.
+- Progression stores desired state and task checkpoints, never a provider instruction pointer. Reload/unload stops and reconciles the old duty task without replaying it.
+- A duty counts only after Nexus observes provider start, correct duty entry, the matching game duty-completion event, provider shutdown, and return to the world. Abandonment or an unconfirmed exit pauses the goal without scheduling another run.
+- Progression acquires the full duty/teleport/UI/inventory/targeting/rotation resource bundle and retains it across Stop reconciliation until provider inactivity is confirmed.
 - Expired ownership leases are reported to the active watchdog and trigger the same fail-closed Stop path instead of disappearing silently.
 - Navigation authority is automatic while VieriNavPlotter is off and is revoked if the predecessor or another owner conflicts.
 - Same-zone and cross-zone route actions prefer the capability-checked suite travel provider for consistent whole-trip behavior; guarded direct vnavmesh is a same-zone fallback.

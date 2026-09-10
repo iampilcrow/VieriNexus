@@ -36,6 +36,7 @@ internal sealed class NexusWindow : Window
     private readonly NavigationDiagnosticsService navigationDiagnostics;
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly ProgressionProviderService progressionProviders;
+    private readonly ProgressionRuntimeService progressionRuntime;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
@@ -62,6 +63,7 @@ internal sealed class NexusWindow : Window
         NavigationDiagnosticsService navigationDiagnostics,
         NavigationRouteRuntimeService navigationRuntime,
         ProgressionProviderService progressionProviders,
+        ProgressionRuntimeService progressionRuntime,
         ModuleRegistry modules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
@@ -76,6 +78,7 @@ internal sealed class NexusWindow : Window
         this.navigationDiagnostics = navigationDiagnostics;
         this.navigationRuntime = navigationRuntime;
         this.progressionProviders = progressionProviders;
+        this.progressionRuntime = progressionRuntime;
         this.modules = modules;
         this.world = world;
         this.logo = logo;
@@ -209,7 +212,7 @@ internal sealed class NexusWindow : Window
             ImGui.TableNextColumn();
             StatusCard("ROUTES", "Live", "Author, travel, play, and stop", NexusTheme.Green);
             ImGui.TableNextColumn();
-            StatusCard("PROGRESSION", "Planning", "Current-job level goal preview", NexusTheme.Cyan);
+            StatusCard("PROGRESSION", "Duty lane live", "One verified run at a time", NexusTheme.Green);
             ImGui.TableNextColumn();
             StatusCard("PROVIDERS", "Observed", "Vieri and stock contracts separated", NexusTheme.Amber);
             ImGui.EndTable();
@@ -223,7 +226,11 @@ internal sealed class NexusWindow : Window
         if (ImGui.BeginTable("###OverviewStatus", 3, ImGuiTableFlags.SizingStretchSame))
         {
             ImGui.TableNextColumn();
-            StatusCard("AUTOMATION", "Idle", "No active goal", NexusTheme.Muted);
+            ProgressionGoalState? progression = progressionRuntime.State;
+            StatusCard("AUTOMATION",
+                progression?.Goal.Status.ToString() ?? "Idle",
+                progression?.Goal.Title ?? "No active level goal",
+                progression?.Goal.Status == GoalStatus.Active ? NexusTheme.Green : NexusTheme.Muted);
             ImGui.TableNextColumn();
             StatusCard("DEPENDENCIES", dependencies.RequiredReady ? "Ready" : "Attention", "Required services", dependencies.RequiredReady ? NexusTheme.Green : NexusTheme.Amber);
             ImGui.TableNextColumn();
@@ -243,14 +250,14 @@ internal sealed class NexusWindow : Window
             ImGui.TableNextColumn();
             BeginPanel("CURRENT ACTIVITY");
             NexusTheme.StatusDot(NexusTheme.Green, "Nexus foundation running");
-            ImGui.TextWrapped("Routes are live. Progression plans are saved and reviewed without starting quest or duty automation.");
+            ImGui.TextWrapped("Routes are live. Progression can own a durable level goal and run one eligible duty at a time with verification before replanning.");
             EndPanel();
             ImGui.TableNextColumn();
             BeginPanel("SAFETY STATE");
             ImGui.TextUnformatted("Route control: Explicit Stop");
-            ImGui.TextUnformatted("Progression execution: Locked");
+            ImGui.TextUnformatted("Progression execution: Bounded duty lane");
             ImGui.TextUnformatted("Provider selection: Capability checked");
-            ImGui.TextColored(NexusTheme.Green, "Vieri progression providers remain authoritative.");
+            ImGui.TextColored(NexusTheme.Green, "Nexus owns goal scheduling; the current duty provider owns only its bounded run.");
             EndPanel();
             ImGui.EndTable();
         }
@@ -1435,8 +1442,6 @@ internal sealed class NexusWindow : Window
             TextWrapped(NexusTheme.Green, progressionMessage);
         EndPanel();
 
-        DrawProgressionProviders(providers);
-
         ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
             new ReachJobLevelGoalDraft(
                 character.Key,
@@ -1450,7 +1455,119 @@ internal sealed class NexusWindow : Window
                 draftConfiguration.MinimumGilReserve),
             providers.Questing,
             providers.Duties);
-        DrawProgressionPlan(plan);
+        DrawProgressionRuntime(plan, character, draftConfiguration);
+        if (ImGui.CollapsingHeader("Provider details###ProgressionProviders"))
+            DrawProgressionProviders(providers);
+        if (ImGui.CollapsingHeader("Plan details###ProgressionPlan"))
+            DrawProgressionPlan(plan);
+    }
+
+    private void DrawProgressionRuntime(
+        ReachJobLevelPlan plan,
+        CharacterSnapshot character,
+        ProgressionDraftConfiguration draft)
+    {
+        ProgressionGoalState? state = progressionRuntime.State;
+        NexusTheme.SectionTitle("Goal control");
+        if (!string.IsNullOrWhiteSpace(progressionRuntime.LoadError))
+        {
+            BeginPanel("SAVED GOAL", 110f * Math.Max(1f, plugin.Configuration.UiScale));
+            NexusTheme.StatusDot(NexusTheme.Red, progressionRuntime.LoadError);
+            TextWrapped(NexusTheme.Muted, "The saved file was left untouched for diagnosis and recovery.");
+            EndPanel();
+            return;
+        }
+
+        if (state is null || state.Goal.Status is GoalStatus.Satisfied or GoalStatus.Cancelled)
+        {
+            int eligible = progressionRuntime.EligibleDuties(character.Level).Count;
+            BeginPanel("START", 150f * Math.Max(1f, plugin.Configuration.UiScale));
+            bool hasEligibleDuty = plan.IsExecutionConnected && eligible > 0;
+            NexusTheme.StatusDot(hasEligibleDuty ? NexusTheme.Green : NexusTheme.Amber,
+                hasEligibleDuty
+                    ? $"Ready to run one eligible duty at a time • {eligible} available"
+                    : plan.IsExecutionConnected
+                        ? "No unlocked duty currently meets the level, item-level, and path requirements"
+                        : "No executable duty lane is ready");
+            TextWrapped(NexusTheme.Muted,
+                "Nexus—not the provider—owns the level target, task history, Stop, Last Run, verification, and decision to schedule another duty.");
+            bool canStart = plan.IsValid && !plan.IsSatisfied && hasEligibleDuty &&
+                plugin.Configuration.ForCharacter(character.Key.ToString()).AllowAutomation;
+            if (!canStart)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Start level goal", new Vector2(-1, 0)))
+            {
+                ReachJobLevelGoalDraft goalDraft = new(
+                    character.Key,
+                    character.ClassJobId,
+                    character.Level,
+                    draft.TargetLevel,
+                    draft.AllowJobQuests,
+                    draft.AllowHuntingLog,
+                    draft.AllowSideQuests,
+                    draft.AllowDuties,
+                    draft.MinimumGilReserve);
+                ProgressionActionResult result = progressionRuntime.Start(goalDraft, plan);
+                progressionMessage = result.Message;
+            }
+            if (!canStart)
+                ImGui.EndDisabled();
+            if (state?.Goal.Status is GoalStatus.Satisfied or GoalStatus.Cancelled)
+                TextWrapped(state.Goal.Status == GoalStatus.Satisfied ? NexusTheme.Green : NexusTheme.Muted,
+                    state.Goal.StatusDetail ?? state.Goal.Status.ToString());
+            EndPanel();
+            return;
+        }
+
+        NexusTask? activeTask = state.ActiveTask;
+        int lineCount = activeTask is null ? 7 : 11;
+        BeginPanel("ACTIVE GOAL", lineCount * ImGui.GetTextLineHeightWithSpacing() + 72f);
+        Vector4 statusColor = state.Goal.Status switch
+        {
+            GoalStatus.Active => NexusTheme.Green,
+            GoalStatus.Paused => NexusTheme.Amber,
+            GoalStatus.Blocked => NexusTheme.Red,
+            _ => NexusTheme.Muted,
+        };
+        NexusTheme.StatusDot(statusColor, $"{state.Goal.Status}: {state.Goal.Title}");
+        TextWrapped(NexusTheme.Muted, state.Goal.StatusDetail ?? "No status detail is available.");
+        ImGui.TextUnformatted($"Plan revision: {state.Goal.PlanRevision} • Bounded duties completed: {state.Tasks.Count(task => task.Status == NexusTaskStatus.Succeeded)}");
+        if (activeTask is not null)
+        {
+            ImGui.TextColored(NexusTheme.Gold, activeTask.Title);
+            TextWrapped(NexusTheme.Muted, activeTask.StatusDetail ?? activeTask.Reason);
+            ImGui.TextUnformatted($"Task state: {activeTask.Status} • Provider: {activeTask.Provider?.Value ?? "Nexus"}");
+        }
+
+        if (state.Goal.Status == GoalStatus.Active)
+        {
+            bool disableLastRun = state.StopAfterCurrentDuty || activeTask is null;
+            if (disableLastRun)
+                ImGui.BeginDisabled();
+            if (ImGui.Button(state.StopAfterCurrentDuty ? "Last Run armed" : "Stop after this duty"))
+                progressionMessage = progressionRuntime.StopAfterCurrentDuty().Message;
+            if (disableLastRun)
+                ImGui.EndDisabled();
+            ImGui.SameLine();
+            if (ImGui.Button("Stop now"))
+                progressionMessage = progressionRuntime.StopNow().Message;
+        }
+        else if (state.Goal.Status is GoalStatus.Paused or GoalStatus.Blocked)
+        {
+            if (activeTask is not null)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Resume with a fresh plan"))
+                progressionMessage = progressionRuntime.Resume().Message;
+            if (activeTask is not null)
+                ImGui.EndDisabled();
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel goal"))
+                progressionMessage = progressionRuntime.StopNow().Message;
+        }
+
+        if (!string.IsNullOrWhiteSpace(progressionMessage))
+            TextWrapped(NexusTheme.Cyan, progressionMessage);
+        EndPanel();
     }
 
     private void DrawProgressionProviders(ProgressionProviderSnapshot providers)
@@ -1530,8 +1647,10 @@ internal sealed class NexusWindow : Window
         }
 
         if (plan.IsValid && !plan.IsSatisfied)
-            TextWrapped(NexusTheme.Amber,
-                "Planning is live; execution remains locked. Existing VieriCodex and VieriAutoDuty behavior is unchanged.");
+            TextWrapped(plan.IsExecutionConnected ? NexusTheme.Green : NexusTheme.Amber,
+                plan.IsExecutionConnected
+                    ? "The duty lane is connected as one verified run at a time. Quest and gear steps remain planning-only until their Nexus policies are migrated."
+                    : "Planning is live, but no bounded provider lane is ready to execute.");
         EndPanel();
     }
 
@@ -1594,7 +1713,7 @@ internal sealed class NexusWindow : Window
         EndPanel();
         ImGui.Spacing();
         BeginPanel("WHY THIS IS SAFE");
-        ImGui.TextWrapped("The new shell currently observes only. It does not start duties, move the character, change rotations, access retainers, alter the HUD, or send Discord messages.");
+        ImGui.TextWrapped("Only explicit Routes actions and bounded Progression duty tasks are live. Other automation, retainers, market work, HUD changes, and Discord actions remain inactive.");
         EndPanel();
     }
 
@@ -1609,7 +1728,7 @@ internal sealed class NexusWindow : Window
             (Vector4 color, string status) = module.Descriptor.Id switch
             {
                 "navigation" => (NexusTheme.Green, "Live"),
-                "progression" => (NexusTheme.Cyan, "Planning foundation"),
+                "progression" => (NexusTheme.Green, "Bounded duty execution"),
                 _ => (NexusTheme.Amber, "Migration staged"),
             };
             NexusTheme.StatusDot(color, status);

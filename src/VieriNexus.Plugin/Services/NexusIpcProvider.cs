@@ -2,6 +2,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
 using VieriNexus.Application;
 using VieriNexus.Contracts;
+using VieriNexus.Domain;
 
 namespace VieriNexus.Services;
 
@@ -18,6 +19,7 @@ internal sealed class NexusIpcProvider : IDisposable
     private readonly DependencyService dependencies;
     private readonly NavigationLibraryService navigation;
     private readonly NavigationActivationService navigationActivation;
+    private readonly ProgressionRuntimeService progression;
     private readonly WorldStateStore world;
 
     internal NexusIpcProvider(
@@ -25,11 +27,13 @@ internal sealed class NexusIpcProvider : IDisposable
         DependencyService dependencies,
         NavigationLibraryService navigation,
         NavigationActivationService navigationActivation,
+        ProgressionRuntimeService progression,
         WorldStateStore world)
     {
         this.dependencies = dependencies;
         this.navigation = navigation;
         this.navigationActivation = navigationActivation;
+        this.progression = progression;
         this.world = world;
         statusProvider = pluginInterface.GetIpcProvider<NexusStatusDto>(NexusIpc.GetStatus);
         dependencyProvider = pluginInterface.GetIpcProvider<DependencyDto[]>(NexusIpc.GetDependencies);
@@ -53,17 +57,26 @@ internal sealed class NexusIpcProvider : IDisposable
     {
         var snapshot = world.Current;
         var ready = dependencies.RequiredReady && snapshot.Session.IsLoggedIn && snapshot.Session.IsPlayerAvailable;
+        ProgressionGoalState? progressionState = progression.State;
+        NexusTask? activeTask = progressionState?.ActiveTask;
+        bool paused = progressionState?.Goal.Status == GoalStatus.Paused;
+        string state = progressionState?.Goal.Status.ToString() ?? (ready ? "Idle" : "SetupRequired");
         return new NexusStatusDto(
             NexusIpc.CurrentVersion,
             ready,
-            false,
-            ready ? "Idle" : "SetupRequired",
-            null,
-            null,
-            ready ? "No active goal." : "Waiting for required dependencies and a ready character.",
-            null,
-            null,
-            ready ? null : "Complete the Dependencies page.",
+            paused,
+            state,
+            progressionState?.Goal.Title,
+            activeTask?.Title,
+            progressionState?.Goal.StatusDetail ??
+                (ready ? "No active goal." : "Waiting for required dependencies and a ready character."),
+            activeTask?.Provider?.Value,
+            progressionState?.Goal.Status == GoalStatus.Active
+                ? "Verify this bounded duty, then replan from current character state."
+                : null,
+            progressionState?.Goal.Status == GoalStatus.Blocked
+                ? progressionState.Goal.StatusDetail
+                : ready ? null : "Complete the Dependencies page.",
             snapshot.Revision);
     }
 

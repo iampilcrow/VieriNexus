@@ -6,6 +6,7 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using VieriNexus.Application;
+using VieriNexus.Domain;
 using VieriNexus.Services;
 using VieriNexus.UI;
 
@@ -29,6 +30,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
+    [PluginService] internal static IDutyState DutyState { get; private set; } = null!;
 
     internal Configuration Configuration { get; }
 
@@ -36,6 +38,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NexusWindow mainWindow;
     private readonly DependencyService dependencyService;
     private readonly GameplayReadyGate gameplayReadyGate = new();
+    private readonly WorldStateStore worldStore;
     private readonly WorldSnapshotObserver worldObserver;
     private readonly ManualMovementSafetyService manualMovementSafety;
     private readonly NavigationExecutionSafetyCoordinator navigationExecutionSafety;
@@ -45,6 +48,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly NavigationLibraryService navigationLibrary;
     private readonly ProgressionProviderService progressionProviders;
+    private readonly ProgressionRuntimeService progressionRuntime;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -64,7 +68,7 @@ public sealed class Plugin : IDalamudPlugin
             navigationMigration,
             PluginInterface.GetPluginConfigDirectory());
         var moduleRegistry = BuiltInModuleCatalog.Create();
-        var worldStore = new WorldStateStore();
+        worldStore = new WorldStateStore();
         var resourceLeases = new ResourceLeaseManager();
         var navigationStopProvider = new VnavmeshNavigationStopProvider(PluginInterface, dependencyService);
         var navigationStop = new NavigationStopCoordinator(navigationStopProvider, TimeSpan.FromSeconds(15));
@@ -152,7 +156,13 @@ public sealed class Plugin : IDalamudPlugin
             new NavigationDiagnosticsMonitor(),
             new NavigationSafetySimulator());
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
-        progressionProviders = new ProgressionProviderService(PluginInterface, dependencyService);
+        progressionProviders = new ProgressionProviderService(PluginInterface, dependencyService, DataManager);
+        progressionRuntime = new ProgressionRuntimeService(
+            PluginInterface.GetPluginConfigDirectory(),
+            resourceLeases,
+            progressionProviders,
+            DutyState,
+            Log);
         worldObserver = new WorldSnapshotObserver(
             ClientState,
             PlayerState,
@@ -167,10 +177,16 @@ public sealed class Plugin : IDalamudPlugin
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration,
             navigationLibrary, navigationActivation, navigationDiagnostics,
-            navigationRuntime, progressionProviders, moduleRegistry, worldStore, logo);
+            navigationRuntime, progressionProviders, progressionRuntime, moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 
-        ipc = new NexusIpcProvider(PluginInterface, dependencyService, navigationLibrary, navigationActivation, worldStore);
+        ipc = new NexusIpcProvider(
+            PluginInterface,
+            dependencyService,
+            navigationLibrary,
+            navigationActivation,
+            progressionRuntime,
+            worldStore);
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
@@ -187,6 +203,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        progressionRuntime.Shutdown();
         navigationRuntime.Shutdown();
         navigationAuthority.ReturnToStaging(DateTimeOffset.UtcNow);
         navigationExecutionSafety.Shutdown(DateTimeOffset.UtcNow);
@@ -212,6 +229,11 @@ public sealed class Plugin : IDalamudPlugin
         navigationRuntime.Update(now);
         navigationRecovery.Update(now);
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
+        progressionRuntime.Update(
+            worldStore.Current.Character.Value,
+            Condition[ConditionFlag.BoundByDuty] ||
+            Condition[ConditionFlag.BoundByDuty56] ||
+            Condition[ConditionFlag.BoundByDuty95]);
 
         if (!ClientState.IsLoggedIn)
         {
@@ -297,7 +319,10 @@ public sealed class Plugin : IDalamudPlugin
                 mainWindow.IsOpen = true;
                 break;
             case "stop":
-                ChatGui.Print($"[VieriNexus] {navigationRuntime.Stop().Message}");
+                if (progressionRuntime.State is { Goal.Status: GoalStatus.Active, ActiveTask: not null })
+                    ChatGui.Print($"[VieriNexus] {progressionRuntime.StopNow().Message}");
+                else
+                    ChatGui.Print($"[VieriNexus] {navigationRuntime.Stop().Message}");
                 break;
             case "home":
             case "splash":

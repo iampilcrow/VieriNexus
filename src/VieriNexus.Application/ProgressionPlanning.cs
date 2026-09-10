@@ -278,13 +278,17 @@ public static class ReachJobLevelPlanner
             null,
             new HashSet<ResourceKind>()));
 
-        issues.Add(new(ProgressionPlanIssueSeverity.Information, "execution-not-connected",
-            "This release saves and reviews the Nexus-owned goal plan. It does not start quest or duty automation yet."));
+        bool dutyExecutionConnected = dutyLaneReady;
+        issues.Add(new(ProgressionPlanIssueSeverity.Information,
+            dutyExecutionConnected ? "bounded-duty-connected" : "execution-not-connected",
+            dutyExecutionConnected
+                ? "Nexus can execute the duty lane as one verified run at a time. Quest and gear tasks remain planning-only."
+                : "This plan has no bounded provider task that Nexus can execute yet."));
         return new ReachJobLevelPlan(
             true,
             false,
             true,
-            false,
+            dutyExecutionConnected,
             "draft-ready",
             $"Plan ready for the current job: level {draft.CurrentLevel} to {draft.TargetLevel}.",
             issues,

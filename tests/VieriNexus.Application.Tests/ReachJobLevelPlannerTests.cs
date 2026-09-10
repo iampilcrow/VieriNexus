@@ -6,7 +6,7 @@ namespace VieriNexus.Application.Tests;
 public sealed class ReachJobLevelPlannerTests
 {
     [Fact]
-    public void BuildsBoundedQuestAndDutyPlanWithoutConnectingExecution()
+    public void BuildsPlanWithOnlyBoundedDutyExecutionConnected()
     {
         ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
             Draft(),
@@ -15,7 +15,7 @@ public sealed class ReachJobLevelPlannerTests
 
         Assert.True(plan.IsValid);
         Assert.True(plan.HasUsableProvider);
-        Assert.False(plan.IsExecutionConnected);
+        Assert.True(plan.IsExecutionConnected);
         Assert.Equal(
         [
             "ensure-gear-readiness",
@@ -49,6 +49,7 @@ public sealed class ReachJobLevelPlannerTests
             Ready(ProgressionProviderRole.Duties, "autoduty"));
 
         Assert.True(plan.IsValid);
+        Assert.True(plan.IsExecutionConnected);
         Assert.DoesNotContain(plan.Steps, step => step.Code == "run-supported-quest-work");
         Assert.Contains(plan.Steps, step => step.Code == "run-one-supported-duty");
     }
@@ -62,6 +63,7 @@ public sealed class ReachJobLevelPlannerTests
             Ready(ProgressionProviderRole.Duties, "autoduty"));
 
         Assert.True(plan.IsValid);
+        Assert.True(plan.IsExecutionConnected);
         Assert.Contains(plan.Issues, issue =>
             issue.Code == "quest-provider-unavailable" &&
             issue.Severity == ProgressionPlanIssueSeverity.Warning);
