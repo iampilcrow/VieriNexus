@@ -50,7 +50,7 @@ An all-at-once merge is rejected. It would combine several mature state machines
 
 ### Nexus does not own
 
-- Reimplementing Questionable, BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, or Allagan Market. VieriCodex remains authoritative during migration; its Vieri-specific planners, policies, safety fixes, custom-route overlay, and UI migrate into Nexus, while stock Questionable becomes the replaceable provider for ordinary supported quest execution after capability/parity validation.
+- Reimplementing Questionable, AutoDuty's stock duty engine, BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, or Allagan Market. VieriCodex and VieriAutoDuty remain authoritative during migration; their Vieri-specific planners, policies, safety fixes, custom route/travel, gear, maintenance, coordination, and UI migrate into Nexus. Stock Questionable and stock AutoDuty then become replaceable module-scoped providers after capability/parity validation.
 - Per-frame combat decisions. Those remain inside the embedded Wrath engine.
 - General ownership of third-party dependencies or their update channels.
 - Arbitrary remote control without an explicit allowlist and local safety checks.
@@ -68,6 +68,8 @@ Installed external dependencies as required by enabled modules
   TextAdvance
   Marketbuddy
   Allagan Market
+  Questionable (when Progression/Questing is enabled)
+  AutoDuty (when Duties are enabled)
   other explicitly supported third-party providers added later
 ```
 
@@ -153,11 +155,11 @@ The current Progression Queue contains useful policies, but its persisted queue 
 
 ### VieriAutoDuty
 
-Keep stock duty path execution stable. Wrap it first as the Duty provider.
+Treat the fork as a migration source and temporary compatibility provider. Wrap stock AutoDuty through a narrow capability/version adapter as the permanent Duty provider; keep its supported duty paths and internal duty state machine native and updateable through its own channel.
 
-Gear shopping, equipping, repair, extraction, desynthesis, selling, turn-ins, and duty-loop controls become capabilities. The Gear module should ultimately own selection policy, while UI automation remains behind an adapter.
+Move Vieri-specific route travel, gear shopping/readiness, equipment cleanup, repair/extraction/desynthesis/selling/turn-in policy, maintenance scheduling, Last Run, progression loops, telemetry, command coordination, and UI into Nexus-owned modules. Prefer one bounded stock duty run per Nexus task so Nexus—not a custom endless provider loop—decides whether another duty is needed.
 
-Do not change stock dungeon routing as part of the Nexus foundation.
+Do not copy or casually modify stock dungeon routing as part of Nexus. Generic duty-engine corrections should be contributed upstream or proven present through provider-contract/replay tests before the fork retires. The exact current inventory and retirement gates are recorded in `docs/AUTODUTY_PROVIDER_MIGRATION_AUDIT.md`.
 
 ### VieriRotationHelper
 
@@ -225,7 +227,7 @@ GoalKind       vieri.progression.reach-job-level/v1
 TaskKind       vieri.gear.ensure-readiness/v1
 CapabilityId   vieri.capability.duty.run/v1
 ResourceId     vieri.resource.movement/v1
-ProviderId     vieri.provider.autoduty/v1
+ProviderId     vieri.provider.autoduty-stock/v1
 ```
 
 Typed payloads are registered with serializers and migrators. Unknown kinds remain inspectable and recoverable instead of crashing deserialization.
@@ -560,7 +562,7 @@ Faulted
 
 The Dependencies page offers explicit install/open/update actions. Nexus must never silently install, enable, disable, or update another plugin.
 
-BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, and Allagan Market are the initial core external providers. Stock Questionable joins that provider model for ordinary supported quest execution only after the Vieri-specific Progression layer has migrated and its capability/version/fallback contract passes parity. Recommended integrations are listed separately and include AutoRetainer, Glamour Log, Anti-AFK, Pandora's Box, Gearsetter, Stylist, Fast Job Switcher, CBT, Artisan, AutoHook, Mogmail, NotificationMaster, SelectString, QuestMap, YesAlready, and Skippy.
+BossMod, vnavmesh, Lifestream, TextAdvance, Marketbuddy, and Allagan Market are the initial core external providers. Stock Questionable joins for ordinary supported quest execution after the Vieri-specific Progression layer migrates, and stock AutoDuty joins as the Duties provider after Vieri route/gear/maintenance/control behavior migrates. Both are module-scoped rather than global setup blockers and require capability/version/parity validation. Recommended integrations are listed separately and include AutoRetainer, Glamour Log, Anti-AFK, Pandora's Box, Gearsetter, Stylist, Fast Job Switcher, CBT, Artisan, AutoHook, Mogmail, NotificationMaster, SelectString, QuestMap, YesAlready, and Skippy.
 
 ## 15. Unified UI
 
@@ -694,7 +696,7 @@ Exit: fake providers can run, pause, cancel, crash, reload, reconcile, and resum
 
 ### Phase 2 — Proof vertical slice
 
-Implement `Reach Job Level` for one selected combat job through adapters to existing Codex and AutoDuty.
+Implement `Reach Job Level` for one selected combat job through the temporary Vieri sources while proving the same capability contracts against stock Questionable and stock AutoDuty.
 
 The real workflow may:
 
@@ -702,7 +704,7 @@ The real workflow may:
 - Switch job through the existing safe service.
 - Request gear readiness as an exclusive prerequisite.
 - Select eligible job quests, hunting log, side quests, or duty leveling according to policy and unlocks.
-- Delegate quest work to Codex and duty work to AutoDuty.
+- Delegate ordinary supported quest work through the Questionable provider boundary and one bounded duty run through the AutoDuty provider boundary; use the Vieri sources only as temporary compatibility providers until parity gates pass.
 - Grant Combat/Rotation to the existing embedded Wrath engine.
 - Replan after every level, unlock, gear change, duty completion, or manual intervention.
 
@@ -726,10 +728,10 @@ Exit: one real goal demonstrates desired state, planning, ownership, verificatio
 
 ### Phase 5 — Duties, gear, and inventory
 
-- Bring AutoDuty-facing capabilities into Nexus incrementally.
-- Preserve stock paths and BossMod behavior.
+- Bring VieriAutoDuty-specific capabilities into Nexus incrementally while stock AutoDuty remains the replaceable duty executor.
+- Preserve stock paths and BossMod behavior; upstream generic duty fixes or prove current stock parity instead of embedding the duty engine.
 - Make gear/inventory shared services available to every progression workflow.
-- Retire VieriAutoDuty only after dungeon, shopping, maintenance, Last Run, and IPC parity.
+- Retire the VieriAutoDuty fork only after dungeon-provider, shopping, maintenance, Last Run, configuration, IPC, recovery, and rollback parity.
 
 ### Phase 6 — Communications and command palette
 

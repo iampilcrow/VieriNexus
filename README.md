@@ -26,11 +26,11 @@ Route actions prefer the capability-checked VieriAutoDuty suite-travel adapter f
 
 Live generated vnavmesh waypoints can now be shown separately from the saved route preview. The ownership filter draws them only during local Nexus execution or suite travel explicitly dispatched by the current Nexus process; ordinary AutoDuty, duty, Questionable, and unrelated vnavmesh movement remains hidden.
 
-Manual-movement yielding observes FFXIV's configured movement actions, covering remapped keyboard controls, mouse steering, gamepad movement, jump, and autorun. Physical player input blocks a new movement start; during tracked execution, takeover latches verified Stop and cannot silently auto-resume after input ends. The character setting must remain enabled for navigation readiness.
+Route input policy is explicit-Stop-only. Nexus does not observe keyboard, mouse, gamepad, jump, or autorun input to block or cancel route movement. Historical manual-yield types remain only as compatibility/regression fixtures and are not part of the production route path.
 
 Reload reconciliation and active lease enforcement remain connected behind the same assessment. Before direct local provider movement, Nexus atomically persists a minimal execution ID, route ID, lease ID, and state—never an instruction pointer. Reload, shutdown, or a missed heartbeat can only Stop and confirm movement inactive; they never replay a route. A normal user Stop completes immediately. Corrupt or unwritable intent remains fail-closed. The watchdog and execution monitor run every draw, including while the Nexus window is closed.
 
-Nexus still never disables or enables VieriNavPlotter. Each route start rechecks the source, current character automation setting, manual-input quiet period, provider readiness, and every ownership/safety prerequisite before movement. If the source reappears or safety is lost, Nexus revokes authority and safely ends tracked work. Reload never replays an interrupted route.
+Nexus still never disables or enables VieriNavPlotter. Each route start rechecks the source, current character automation setting, provider readiness, and every ownership/safety prerequisite before movement. Manual movement is not a cancellation signal; user cancellation is only the explicit Stop button or `/nexus stop`. If the source reappears or provider/ownership safety is lost, Nexus revokes authority and safely ends tracked work. Reload never replays an interrupted route.
 
 The Routes page includes provider-health and transition-audit panels for explicit route Stop, reload/watchdog state, predecessor ownership, the atomic resource bundle, and Nexus authority. These observations also populate the shared world snapshot instead of leaving provider health empty.
 
@@ -54,7 +54,7 @@ An explicit Stop confirms inactivity, releases ownership, and completes its chec
 - A replacement shared-provider path causes Nexus to yield its own lease without sending Stop to the new owner.
 - Provider health is observed read-only and its bounded session audit records transitions rather than every frame.
 - The non-moving safety simulation uses isolated memory-only state and has no movement operation.
-- A manual-takeover checkpoint can clear only after Stop is confirmed, ownership is released, and manual input is quiet; the next explicit Play/Travel click is the resume decision.
+- Route cancellation is explicit-Stop-only. Historical manual-takeover primitives remain as compatibility fixtures but are not connected to production route input.
 - No migration-source plugin is disabled automatically.
 - Nexus starts route movement only from an explicit Routes-page or `/nexus play <name>` action after working-library and safety checks.
 - The Nexus window waits until a targetable character is fully in the world.

@@ -1,0 +1,127 @@
+# AutoDuty provider migration audit
+
+Snapshot: 2026-09-09
+Vieri source: `a5e1e757e35bd77191a647add7124210cdf86122` (`1.0.0.440`)
+Stock upstream: `2b0943ed113da76f3ce9df0df2f302151f828292`
+Common ancestor: `17f54e99235d84fe39582258eca7058fc5fb3e2b`
+
+## Decision
+
+The permanent dependency is stock AutoDuty as a replaceable, module-scoped Duty provider. VieriAutoDuty is a migration source and temporary compatibility provider, not the final duty engine inside Nexus. Nexus owns Vieri-specific goals, policy, UI, routes, travel composition, gear/inventory decisions, maintenance scheduling, telemetry, commands, and cross-provider coordination. Stock AutoDuty continues to own its supported duty paths and internal duty state machine.
+
+This matches the stock-Questionable direction: compatible upstream updates should normally require only a provider-contract check, not a Vieri fork merge or a Nexus source change.
+
+## Measured fork delta
+
+Compared with current stock AutoDuty, the Vieri tree contains 105 commits after the common ancestor and changes 110 files: 8,712 insertions and 1,156 deletions. The changed-file distribution is 70 helpers, 18 tests, 9 core files, 6 UI/config files, 4 IPC files, one duty path, and two root/provenance files.
+
+Stock upstream is currently one substantive commit plus its merge ahead of the fork's common ancestor. That change corrects character gathering to use the home world rather than the current world. The Vieri final tree still uses the current world at that call site, so this is a pending one-line upstream correction while the fork remains in service; it must be integrated and released through the normal VieriAutoDuty verification path, not hidden inside this documentation-only audit. The source lock already records the current Vieri and upstream revisions. This audit classifies the final tree difference; it does not assume that every historical intermediate commit still represents distinct live behavior.
+
+## Why Nexus currently says “through VieriAutoDuty”
+
+Nexus Routes calls three fork-only endpoints:
+
+- `AutoDuty.TravelVieriRoute`
+- `AutoDuty.StopVieriRouteTravel`
+- `AutoDuty.IsNavPlotterVisualizationActive`
+
+Those endpoints accept the Nexus route payload, perform city/inn/zone travel, run the authored points, expose visualization ownership, and stop the tracked trip. They do not exist in stock AutoDuty. Nexus therefore prefers the fork for every complete route trip when it is loaded, even for a same-territory route.
+
+The live 0.1.0.25 test accepted this temporary bridge in both directions, including ordinary vendor and Grand Company inn travel. It is not the intended permanent ownership boundary.
+
+## Stock IPC capability boundary
+
+Current stock AutoDuty publicly exposes configuration listing/get/set and override push/pop; duty `Run`, `Start`, and `Stop`; `IsNavigating`, `IsLooping`, and `IsStopped`; `ContentHasPath`; leveling-mode selection; and the Wrath lease callback.
+
+The following Vieri endpoints are additions and cannot be assumed on stock:
+
+| Vieri endpoint | Current purpose | Permanent owner/replacement |
+| --- | --- | --- |
+| `IsPaused` | Companion control/status | Nexus task/provider state; use a capability check if stock later adds it |
+| `IsGearReadinessBusy` / `StartGearReadiness` | Shared pre-duty gear transaction | Nexus Gear & Inventory module |
+| `IsNavPlotterVisualizationActive` | Filter route drawing to owned travel | Nexus route execution state |
+| `TravelVieriRoute` / `StopVieriRouteTravel` | Whole Nexus route trip | Nexus travel orchestrator over Lifestream, vnavmesh, and interaction adapters |
+| `StartProgressionLeveling` | Long-running target-level loop | Nexus Progression goal scheduling one bounded duty task at a time |
+| `ExecuteVieriCommand` | Start/stop/leave/pause/resume/loops/sell/repair/inn/job gateway | Nexus command gateway plus narrow stock-provider calls |
+| `GetVieriStatus` | Character, duty, queue, gear, durability, and completion telemetry | Nexus world snapshots, provider observations, and activity history |
+
+Stock AutoDuty is therefore usable now for bounded duty start/stop and path eligibility, but it cannot replace VieriAutoDuty in production until the Vieri-only responsibilities below have moved or been proven unnecessary.
+
+## Custom behavior inventory and destination
+
+### 1. Nexus route and vendor bridge
+
+Current anchors include `VieriRouteTravelHelper`, `VieriRoutePlaybackContract`, `NexusNavigationRouteContract`, the Nexus/NavPlotter subscribers, the fork-only route IPC endpoints, special Grand Company inn destinations, and Nexus vendor-override consumption.
+
+Destination: Nexus Routes & Navigation. The 27 measured vendor templates and exact assignment model already live in Nexus. Remaining work is to own the whole trip—including cross-zone transfer, inn entry, authored playback, visualization state, and Stop—without calling a fork-only AutoDuty route endpoint.
+
+### 2. Vendor travel data and arrival policy
+
+This includes measured standing points, separate NPC object coordinates, native interaction checks, authored-point priority, collision avoidance, short-leg walking, destination-region aetheryte selection, flight policy, bounded stall recovery, and the retired Old Sharlayan stair sequence.
+
+Destination: Nexus Routes & Navigation plus shared Travel Utilities. Generic correctness improvements that benefit stock AutoDuty should be proposed upstream, but Nexus must retain its route fixtures independently.
+
+### 3. Gear readiness and shopping
+
+This is the largest Vieri-owned domain: vendor-band/catalog selection, empty/weak slot handling, job-primary-stat filtering, explicit preview and approval, gil reserve, owned-item recovery, EXP-item protection, main-hand-first ordering, two-handed/off-hand rejection, verified equipping with one retry, gearset update, displaced-equipment cleanup, telemetry, and VieriCodex readiness coordination.
+
+Destination: Nexus Gear & Inventory. Stock AutoDuty may request a readiness outcome before a duty, but it should not own Nexus selection policy or the user-facing shopping planner.
+
+### 4. Inventory and maintenance
+
+Custom work covers protected selling, bag thresholds and preferred vendors, repair, extraction confirmation, desynthesis/Armoire/Glamour ordering, minion/orchestrion registration, deferred displaced-item transfers, and safe in-duty withdrawal/maintenance/resume policy.
+
+Destination: Nexus Gear & Inventory and task orchestration. Low-level UI operations remain behind focused adapters. Generic AutoDuty defects may be upstreamed; Vieri policy and scheduling remain in Nexus.
+
+### 5. Progression, loops, and Last Run
+
+Custom work includes target-level looping, delayed duty selection after gear changes, gear-readiness coordination, Last Run, cooperative VieriCodex queue stop, pause/resume handoff, duty timing, and completion events.
+
+Destination: Nexus Progression and Duties orchestration. Nexus should schedule one bounded stock-AutoDuty duty run, verify completion, and decide whether another task is needed. Last Run then means “do not schedule another duty,” rather than requiring a custom endless loop inside AutoDuty.
+
+### 6. Duty-engine corrections
+
+The history contains wipe/death/shortcut recovery, stale-path cancellation, Ktisis teleporter work, chest timing, boss encounter handling, combat target range, gaze handling, and explicit restorations of proven stock behavior. One duty path file still differs from current upstream.
+
+Destination: stock AutoDuty wherever the behavior is generic. Before retiring the fork, compare each remaining final-tree duty difference with current upstream, contribute generally useful fixes upstream where practical, and retain Nexus provider-contract/replay tests for the required outcomes. Nexus must not absorb the stock dungeon engine merely to preserve a fork patch.
+
+### 7. Integration, control, and status
+
+Custom work coordinates VieriCodex, VieriLink, VieriRotationHelper/Wrath, Avarice, Boss Mod, Discord status, remote control, live location/level/durability, queue readiness, and gear events.
+
+Destination: Nexus command gateway, world snapshots, provider health, activity history, Communications, Progression, and Combat ownership. Cross-module behavior must not remain as peer plugins calling private Vieri endpoints.
+
+### 8. UI, branding, and packaging
+
+Vieri branding, consolidated overlay actions, manual shopping windows, striking-dummy menus, support-link changes, tags, versioning, and the Vieri changelog differ from stock.
+
+Destination: the neutral Nexus UI where the feature survives. Fork branding and duplicate AutoDuty windows are retired rather than migrated as product features.
+
+### 9. Tests and provenance
+
+The 18 custom test files and `VIERI_CHANGELOG.md` preserve important regression evidence. Tests should move with their owning Nexus policy or become stock-provider contract/replay fixtures. Historical source and license provenance remains pinned even after the fork is retired.
+
+## Persisted VieriAutoDuty state that requires disposition
+
+The final configuration diff identifies 21 Vieri-added fields/state collections that cannot be silently lost: retired-equipment transfers; the Sell action toggle; smart gil-vendor buying and gil reserve; minion and orchestrion registration; automatic selling mode; occupied-slot and bag-percent thresholds; gearset protection; preferred seller; and the safe in-duty maintenance, durability, inventory, extract, desynthesis, and return-to-inn settings.
+
+Each receives one of three outcomes before retirement: an exact Nexus mapping, a documented compatibility default, or an explicit user-approved retirement reason. The source configuration remains untouched and rollbackable.
+
+## Retirement sequence
+
+1. Keep VieriAutoDuty authoritative while migration is incomplete.
+2. Replace the fork-only Nexus route-trip bridge with Nexus-owned travel composition. This removes the current route dependency on `TravelVieriRoute`.
+3. Build the Progression proof using capability-versioned stock Questionable and stock AutoDuty adapters. Dispatch one bounded provider task at a time.
+4. Move gear-readiness, shopping, equipment, and maintenance policy/UI/state into Nexus with golden configuration and incident fixtures.
+5. Audit the remaining duty-engine tree diff against then-current stock AutoDuty. Upstream generic fixes or prove the stock behavior equivalent; do not copy the full duty engine into Nexus.
+6. Add a transactional VieriAutoDuty importer covering all 21 identified custom settings/state groups, behavior/IPC compatibility, and rollback.
+7. Run coexistence, provider-loss, duty completion, Last Run, gear interruption, reload, and clean stock-provider tests.
+8. Only then enable stock AutoDuty beside Nexus by default and retire the VieriAutoDuty package/feed entry through the deliberate retirement process.
+
+## Non-goals
+
+- Do not enable stock AutoDuty beside VieriAutoDuty while both could act.
+- Do not copy the full stock duty engine or its path tree into Nexus.
+- Do not expose the fork's branding as a Nexus module.
+- Do not treat a matching method name as a capability handshake.
+- Do not retire the fork until configuration, behavior, IPC, recovery, in-game, and rollback parity are demonstrated.

@@ -36,10 +36,19 @@ The 2026-09-09 provider audit pins Boss Mod 7.5.6.0 (`a96b0a4614a8ae28c6fc7949ec
 | YesAlready | AutoDuty | Compatible confirmation automation with exclusive-control pausing |
 | Skippy | AutoDuty | Optional supported MSQ duty playback skipping |
 
-## Intentionally not external dependencies
+## Planned module-scoped providers
+
+| Provider | Nexus module | Transition rule |
+| --- | --- | --- |
+| Stock Questionable | Progression / Questing | VieriCodex remains authoritative until Nexus owns its custom planners, policies, route overlay, safety, and UI and the stock capability contract passes parity. |
+| Stock AutoDuty | Duties | VieriAutoDuty remains authoritative until Nexus owns its custom route/travel, gear/inventory, maintenance, progression-loop, Last Run, telemetry, command, and UI behavior and the stock duty contract passes parity. See `AUTODUTY_PROVIDER_MIGRATION_AUDIT.md`. |
+
+These providers are required only when their owning module is enabled. They must not become global first-run blockers.
+
+## Intentionally not permanent external dependencies
 
 - During migration, Questionable is incorporated through VieriCodex's maintained quest engine and route library and must not be installed beside VieriCodex. The approved end-state moves Vieri-specific behavior into Nexus, retires the full fork only after parity, and then uses stock Questionable as a capability-versioned provider for ordinary supported quests.
 - Questionable 15.756.0.1 is incorporated through VieriCodex 1.12.2.80 at source commit `5c03483bccd2551257b61c45dcf9a5d53fbab844`. It adds `Hearts Aligned`, Beastmaster/Bastion model support, the level-16 Beastmaster quest override, current Allied Society route validations, and Boss Mod execution for the `A Rush of Cold Wind` solo duty while retaining the Vieri live-gearset guard.
-- The eight Vieri products are temporary migration sources, not final third-party dependencies.
+- The eight Vieri forks/products are temporary migration sources, not final third-party dependencies. This does not exclude their stock upstreams from becoming module-scoped providers after parity.
 - Wrath Combo and VieriWrathSwitch are already incorporated into VieriRotationHelper and migrate as Nexus's embedded combat engine.
 - Rotation Solver Reborn and BossMod AutoRotation are alternative rotation engines, not requirements for the Nexus combat engine.
