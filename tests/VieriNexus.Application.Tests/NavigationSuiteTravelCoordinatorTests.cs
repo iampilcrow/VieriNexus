@@ -69,6 +69,25 @@ public sealed class NavigationSuiteTravelCoordinatorTests
         Assert.False(result.IsActive);
     }
 
+    [Fact]
+    public void ManualSafetyLossStopsTheEntireTrackedSuiteTrip()
+    {
+        var provider = new FakeProvider();
+        bool executionAllowed = true;
+        var coordinator = new NavigationSuiteTravelCoordinator(
+            provider, () => true, () => executionAllowed);
+        NavigationRouteSnapshot route = Route();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        coordinator.Start(route, Plan(route), now);
+
+        executionAllowed = false;
+        NavigationRouteExecutionStatus result = coordinator.Update(now.AddMilliseconds(50));
+
+        Assert.Equal("suite-route-safety-stopped", result.Code);
+        Assert.Equal(1, provider.StopCount);
+        Assert.False(result.IsActive);
+    }
+
     private static NavigationRouteSnapshot Route() => new(
         Guid.NewGuid(), "Cross-zone test", 200, [new(1, 2, 3), new(4, 5, 6)],
         string.Empty, string.Empty, true, true, 0.75f, 3f,

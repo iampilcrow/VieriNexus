@@ -2,7 +2,7 @@
 
 Recovery snapshot: 2026-09-08 (America/New_York)  
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.22`
+Current product version: `0.1.0.23`
 Current Git state at recovery: `main`, `HEAD ecaa8c7`, synchronized with `origin/main`, clean before this file was added.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -23,7 +23,7 @@ The repository is authoritative for what exists today. The recovered conversatio
 
 `VieriNexus` is the permanent product and Dalamud internal name for the planned unified Vieri FFXIV suite. It is intended to replace the separately installed Vieri plugins with one coherent, modular Dalamud package. It is not intended to be a launcher for separate plugins, a collection of embedded predecessor windows, or one giant controller.
 
-The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, maintains a separate Nexus-owned working library, records and edits personal routes, previews saved/generated paths, and performs guarded local or cross-zone travel. Version 0.1.0.22 automatically makes Nexus ready whenever VieriNavPlotter is not loaded, uses VieriAutoDuty as the consistent whole-trip route provider when available, permits Play from anywhere including one-point destinations, completes a user Stop without a second acknowledgement, and presents a compact route-first UI. It does not yet replace VieriNavPlotter completely or enable other gameplay modules.
+The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, maintains a separate Nexus-owned working library, records and edits personal routes, previews saved/generated paths, and performs guarded local, cross-zone, or Grand Company inn travel. Version 0.1.0.23 pairs with VieriAutoDuty 1.0.0.439 so Play from outside an inn enters through the correct innkeeper and then follows the authored route; manual input stops the complete Nexus-dispatched trip, including provider-led travel to the route. It does not yet replace VieriNavPlotter completely or enable other gameplay modules.
 
 ### Product vision
 
@@ -193,7 +193,7 @@ Several target concepts already have types or tests but are not general live sub
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — global presentation/setup settings, character-scoped safety settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.22`, assembly/internal root `VieriNexus`.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.23`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -220,7 +220,7 @@ Several target concepts already have types or tests but are not general live sub
 
 ### `tests/VieriNexus.Application.Tests`
 
-There are 136 automated tests across:
+There are 137 automated tests across:
 
 - `DependencyCatalogTests.cs`
 - `NavigationRouteMigrationImporterTests.cs`
@@ -251,7 +251,7 @@ There are 136 automated tests across:
 - `TransactionalMigrationStoreTests.cs`
 - `WorldStateStoreTests.cs`
 
-The 0.1.0.22 source passes all 136 tests plus a zero-warning full plugin build.
+The 0.1.0.23 source passes all 137 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -682,12 +682,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `d91be400 Streamline Nexus route ownership and playback`.
-- `origin/main` contains the released implementation commit.
+- Current released implementation commit: `d91be400 Streamline Nexus route ownership and playback`; the 0.1.0.23 release candidate follows it locally until committed and published.
+- `origin/main` contains the 0.1.0.22 released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project/live feed version: `0.1.0.22`. Dalamud API 15.
+- Plugin project version: `0.1.0.23`; live feed remains `0.1.0.22` until publication. Dalamud API 15.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -718,6 +718,7 @@ These are migration requirements, not current Nexus features:
 - `5b908e91` — released 0.1.0.20 with exact current-target capture, filtered live generated-waypoint display, guarded cross-zone delegation, and the first fail-closed Nexus-to-VieriAutoDuty route-provider contract.
 - `f359e900` — released 0.1.0.21 so fresh-route creation remains directly available below Search after the working library contains one or more routes.
 - `d91be400` — released 0.1.0.22 with automatic route authority while VieriNavPlotter is off, consistent same/cross-zone suite dispatch, Play from anywhere including one-point routes, immediate Stop/restart, and the compact categorized Routes UI.
+- Release candidate 0.1.0.23 pairs with VieriAutoDuty `3ae9957838110d457554b39f7c71469bf904727d` / 1.0.0.439 to enter Grand Company inns before playing authored route points and to forward manual takeover to the complete Nexus-dispatched trip.
 
 ### Last completed work
 
@@ -787,6 +788,8 @@ The user then reported that a cross-zone Travel to Start reached Faezghim correc
 
 Version 0.1.0.22 is published from source `d91be400b0b8c3741f87e64968372adb8091da7d`. All 136 Nexus tests and the zero-warning Release build pass. Daily Pilcrow release `90aef0118406bfb44e13bcb3425981ec137f81c8` is live in production deployment `dpl_J917MaCr7zxFZcj7qsRmmaYQnJii`; documentation commit `45d84411d31f3e3efcec2159c61dd7f583687d4d` is live in final production deployment `dpl_H1vpZKdz36ZnBeAVP1BSCvZdtUYf`. All 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, production build, public HTTP/ZIP/hash checks, and Discord workflow `34423862188` succeeded. Runtime/source SHA-256: `209528F99AEE59563143291328770721C5A85B371E87A54EBF34F064DAAE5345` / `F7A33F2BD74DC7250CD112FADC3FF537F5AEFB6D8AF5EFBC49F0DD60CB16F634`.
 
+The user's 0.1.0.22 check exposed two narrower route-provider defects. `Inn Test` targets Twin Adder inn territory 179, which has no ordinary aetheryte destination; the generic suite transfer therefore could not reach it from outside. Manual-input safety also guarded direct Nexus vnavmesh execution but was not evaluated while the suite adapter owned the approach to a route. VieriAutoDuty 1.0.0.439 now owns an inn-aware complete-trip helper: territories 177, 179, and 178 enter through the matching Grand Company innkeeper and only then dispatch the authored route points. Nexus 0.1.0.23 evaluates its existing execution-safety decision throughout suite travel and sends the provider Stop as soon as player input takes priority. The provider continues to track only work Nexus explicitly started, so unrelated AutoDuty, duties, Questionable, and vnavmesh movement remain untouched. All 332 VieriAutoDuty tests and 137 Nexus tests pass; AutoDuty builds with its known upstream warnings and no errors, while Nexus builds with zero warnings/errors. The exact VieriAutoDuty source pin is `3ae9957838110d457554b39f7c71469bf904727d`.
+
 The user then accepted the 0.1.0.19 vendor-template persistence gate in game: after copying a vendor template and enabling `Use as gear vendor override`, disabling and re-enabling Nexus preserved that assignment. No automatic movement was reported. Template copying, explicit assignment, and reload persistence are therefore accepted.
 
 A read-only VieriCodex/Questionable architecture review found that stock Questionable exposes a useful but bounded IPC surface for starting/stopping supported quests and gathering work, querying current quest/step and quest eligibility/status, and managing its quest-priority list. It does not expose VieriCodex's Progression Queue, Progress Atlas, Hunting Log planner and target data, exploration/Aether Current/Aetheryte planners, one-click/local transport, gear-readiness and AutoDuty sequencing, solo-duty combat handoff, named VieriNavPlotter routes, custom UI/hotkeys/settings, or arbitrary custom quest-path injection. The user approved a capability-versioned hybrid target: retain VieriCodex as authoritative during migration, move the Vieri planning/policy/UI layer into Nexus, and prove stock Questionable as the external provider for ordinary supported quest execution before retiring whole-fork upstream merges. Custom or unsupported route data remains in a small Nexus-owned overlay/executor or is accepted upstream.
@@ -797,7 +800,7 @@ The user had said all vendor routes were in a good place and instructed developm
 
 The user subsequently confirmed that VieriNexus installs and updates through Dalamud, that the Migration card successfully staged a valid VieriNavPlotter configuration containing zero personal routes, and that closing/reopening the window retained the staged message. Disabling/re-enabling 0.1.0.4 made only the in-memory message disappear. Direct inspection confirmed that Nexus configuration, `routes.v1.json`, backups, and receipts remained present; the current VieriNavPlotter source and its timestamped backup both still match the receipt's original SHA-256. The zero-route result is expected because recording/display/pane/selection settings are still migrated. The earlier fixed-size button and status clipping was corrected in 0.1.0.4.
 
-The explicit next gate is one focused 0.1.0.22 smoke check: with VieriNavPlotter off, start **Play route** away from the saved start, Stop mid-trip, and press **Play route** again. No authority/staging/acknowledgement steps should appear. Earlier import, persistence, rollback, route authoring, preview, both Stop paths, manual takeover, destructive confirmations/cancellation, single-scroll layout, and vendor assignment persistence are already accepted and should not be repeated without a specific regression signal. After this check, active production moves to the substantial Progression/stock-Questionable boundary.
+The explicit next gate is one focused 0.1.0.23 + VieriAutoDuty 1.0.0.439 smoke check. From outside the Twin Adder inn, press **Play route** on `Inn Test` and confirm Nexus travels to and enters the inn before playing its eight points. On a second attempt, press a movement control during the provider-led approach and confirm the entire trip stops. No authority/staging/acknowledgement steps should appear. Earlier import, persistence, rollback, route authoring, preview, ordinary playback, destructive confirmations/cancellation, single-scroll layout, and vendor assignment persistence are already accepted and should not be repeated without a specific regression signal. After this check, active production moves to the substantial Progression/stock-Questionable boundary.
 
 ### Completed versus unfinished
 
@@ -978,7 +981,7 @@ NPC object coordinates remain separate lookup metadata and must not replace auth
 
 Firm next gates, in priority order:
 
-1. **RELEASE CANDIDATE 0.1.0.22:** publish the simplified Routes page and whole-trip provider correction. One practical in-game smoke check is sufficient: with VieriNavPlotter off, Play a saved route from away from its start, Stop mid-trip, then Play again. No manual authority or stopped-intent acknowledgement steps remain.
+1. **RELEASE CANDIDATE 0.1.0.23 + VieriAutoDuty 1.0.0.439:** publish inn-aware route entry and complete-trip manual takeover. One focused in-game check is sufficient: from outside the applicable Grand Company inn, Play the saved inn route and confirm entry followed by authored playback; during a second provider-led approach, press movement and confirm the whole trip stops. No staging or authority workflow is required.
 2. **NEXT SUBSTANTIAL SLICE — Progression:** freeze the Vieri-specific behavior currently carried by VieriCodex into Nexus-owned planning/policy/UI capabilities, introduce a narrow capability-versioned adapter for stock Questionable, and keep VieriCodex authoritative until behavior parity is proven.
 3. **FOUNDATION AS NEEDED BY REAL MODULES:** expand world/provider observations, framework-thread sequencing, commands, events, durable state, and watchdogs only where the next executable vertical slice requires them; do not return to synthetic navigation gate-by-gate releases.
 4. **PLANNED:** generalize the transactional importer/store carefully and implement remaining source importers one bounded module at a time with complete field inventory, golden fixtures, behavior/IPC parity, and rollback.
@@ -1011,7 +1014,7 @@ All of these remain planned; no standalone product may be retired until configur
 
 Do not execute these as part of recovery. The next normal development thread should:
 
-1. Publish 0.1.0.22 and perform only the focused Play → Stop → Play smoke check described above. The earlier staged import, rollback, persistence, route creation/editing, vendor assignment, preview, playback, manual takeover, and single-scroll acceptance checks are already complete and should not be repeated without a specific regression signal.
+1. Publish 0.1.0.23 with VieriAutoDuty 1.0.0.439 and perform only the focused inn-entry/playback and provider-led manual-stop checks described above. The earlier staged import, rollback, persistence, route creation/editing, vendor assignment, preview, ordinary playback, and single-scroll acceptance checks are already complete and should not be repeated without a specific regression signal.
 2. Begin the Progression foundation in a substantial slice: freeze VieriCodex custom behavior as Nexus-owned capabilities, add the capability-versioned stock Questionable provider boundary, and keep VieriCodex authoritative until parity is proven.
 3. Then choose the next low-risk importer. Do not choose Communications until encrypted-value tests exist; do not choose Market as an early runtime proof.
 4. For every substantial change, update this file, `IMPLEMENTATION_STATUS.md`, migration/upstream policy, source lock, tests, package metadata, and release documentation consistently.
@@ -1056,8 +1059,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current release:** `0.1.0.22`.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.22</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current release candidate:** `0.1.0.23` (production remains `0.1.0.22` until publication).
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.23</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.
@@ -1160,7 +1163,7 @@ The exact archive naming convention, hosted path, and generation command must be
 
 ### 18.6 Version synchronization
 
-Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.22` in:
+Before a release, inspect every location in the current code/release infrastructure that represents the plugin version. The currently verified Nexus source contains version `0.1.0.23` in:
 
 `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj`
 

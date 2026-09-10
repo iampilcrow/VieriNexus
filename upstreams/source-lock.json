@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "capturedAtUtc": "2026-09-09T21:00:15Z",
+  "capturedAtUtc": "2026-09-10T01:45:02Z",
   "migrationSources": [
     {
       "name": "VieriAutoDuty",
       "repository": "https://github.com/iampilcrow/VieriAutoDuty.git",
-      "commit": "cffd9a021fe4fac1b74188d8e96ee19d41ebba43",
+      "commit": "3ae9957838110d457554b39f7c71469bf904727d",
       "upstreamRepository": "https://github.com/erdelf/AutoDuty.git",
       "upstreamCommit": "2b0943ed113da76f3ce9df0df2f302151f828292"
     },
