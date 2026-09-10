@@ -40,8 +40,8 @@ The 2026-09-09 provider audit pins Boss Mod 7.5.6.0 (`a96b0a4614a8ae28c6fc7949ec
 
 | Provider | Nexus module | Transition rule |
 | --- | --- | --- |
-| Stock Questionable | Progression / Questing | VieriCodex remains authoritative until Nexus owns its custom planners, policies, route overlay, safety, and UI and the stock capability contract passes parity. |
-| Stock AutoDuty | Duties | VieriAutoDuty remains authoritative until Nexus owns its custom route/travel, gear/inventory, maintenance, progression-loop, Last Run, telemetry, command, and UI behavior and the stock duty contract passes parity. See `AUTODUTY_PROVIDER_MIGRATION_AUDIT.md`. |
+| Stock Questionable | Progression / Questing | The 0.1.0.26 read-only adapter verifies `IsRunning`, `StartSingleQuest`, and `Stop` without invoking them. VieriCodex remains authoritative until Nexus owns its custom planners, policies, route overlay, safety, and UI and the stock capability contract passes parity. |
+| Stock AutoDuty | Duties | The 0.1.0.26 read-only adapter verifies `ContentHasPath`, `Run`, `IsStopped`, and `Stop` without invoking them. VieriAutoDuty remains authoritative until Nexus owns its custom route/travel, gear/inventory, maintenance, progression-loop, Last Run, telemetry, command, and UI behavior and the stock duty contract passes parity. See `AUTODUTY_PROVIDER_MIGRATION_AUDIT.md`. |
 
 These providers are required only when their owning module is enabled. They must not become global first-run blockers.
 

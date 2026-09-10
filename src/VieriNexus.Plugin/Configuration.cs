@@ -6,7 +6,7 @@ namespace VieriNexus;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 2;
+    public int Version { get; set; } = 3;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
@@ -24,7 +24,9 @@ public sealed class Configuration : IPluginConfiguration
         UiScale = Math.Clamp(UiScale, .8f, 1.5f);
         Characters = new Dictionary<string, CharacterConfiguration>(Characters ?? [], StringComparer.Ordinal);
         LegacyImports = new Dictionary<string, LegacyImportState>(LegacyImports ?? [], StringComparer.OrdinalIgnoreCase);
-        Version = 2;
+        foreach (CharacterConfiguration character in Characters.Values)
+            character.Progression ??= new ProgressionDraftConfiguration();
+        Version = 3;
     }
 
     public CharacterConfiguration ForCharacter(string key)
@@ -58,6 +60,18 @@ public sealed class CharacterConfiguration
     public bool PauseOnManualMovement { get; set; } = true;
     public bool PauseOnManualTarget { get; set; } = true;
     public int ManualControlQuietPeriodMs { get; set; } = 1500;
+    public ProgressionDraftConfiguration Progression { get; set; } = new();
+}
+
+[Serializable]
+public sealed class ProgressionDraftConfiguration
+{
+    public int TargetLevel { get; set; }
+    public bool AllowJobQuests { get; set; } = true;
+    public bool AllowHuntingLog { get; set; } = true;
+    public bool AllowSideQuests { get; set; } = true;
+    public bool AllowDuties { get; set; } = true;
+    public int MinimumGilReserve { get; set; } = 1_000_000;
 }
 
 [Serializable]

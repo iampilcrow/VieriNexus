@@ -42,6 +42,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NavigationRecoveryService navigationRecovery;
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly NavigationLibraryService navigationLibrary;
+    private readonly ProgressionProviderService progressionProviders;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -142,26 +143,29 @@ public sealed class Plugin : IDalamudPlugin
             new NavigationDiagnosticsMonitor(),
             new NavigationSafetySimulator());
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
+        progressionProviders = new ProgressionProviderService(PluginInterface, dependencyService);
         worldObserver = new WorldSnapshotObserver(
             ClientState,
             PlayerState,
             ObjectTable,
             Condition,
             worldStore,
-            navigationDiagnostics.ProviderHealth);
+            () => navigationDiagnostics.ProviderHealth()
+                .Concat(progressionProviders.ProviderHealth())
+                .ToDictionary(pair => pair.Key, pair => pair.Value));
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration,
             navigationLibrary, navigationActivation, navigationDiagnostics,
-            navigationRuntime, moduleRegistry, worldStore, logo);
+            navigationRuntime, progressionProviders, moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 
         ipc = new NexusIpcProvider(PluginInterface, dependencyService, navigationLibrary, navigationActivation, worldStore);
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Subcommands: routes, play <name>, preview <name>, stop, home, dependencies, migration.",
+            HelpMessage = "Open VieriNexus. Subcommands: progression, routes, play <name>, preview <name>, stop, home, dependencies, migration.",
         });
         CommandManager.AddHandler(ShortCommand, new CommandInfo(OnCommand)
         {
@@ -277,6 +281,10 @@ public sealed class Plugin : IDalamudPlugin
                 break;
             case "routes":
                 Configuration.SelectedPage = "Routes & Navigation";
+                mainWindow.IsOpen = true;
+                break;
+            case "progression":
+                Configuration.SelectedPage = "Progression";
                 mainWindow.IsOpen = true;
                 break;
             case "stop":

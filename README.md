@@ -8,6 +8,8 @@ Install it alongside the existing Vieri plugins during migration. Nexus never di
 
 The shared foundation provides the application shell, Home experience, module registry, dependency gate, character-scoped settings, shared world snapshots, resource ownership, migration discovery, and versioned IPC contracts needed for safe consolidation.
 
+Progression now has its first Nexus-owned planning surface. For the current job, it persists a target level, allowed job-quest/Hunting Log/side-quest/duty methods, and a hard minimum-gil reserve. It capability-checks VieriCodex versus stock Questionable and VieriAutoDuty versus stock AutoDuty, rejects simultaneous ready quest providers, and previews a bounded gear/quest/one-duty/verification plan. These probes are read-only and the planner cannot start provider work yet, so the existing Vieri progression products remain authoritative while the execution lifecycle is built.
+
 Routes & Navigation is the first transactional migration slice. Its Migration card previews every VieriNavPlotter setting, creates a timestamped backup, writes a staged Nexus-owned route library atomically, records hashes and a rollback receipt, and can restore the prior Nexus state. Importing does not activate Nexus navigation or disable VieriNavPlotter.
 
 Staged migration status survives a Nexus reload: the saved receipt, target path, target hash, schema, and staged payload are verified before the import message and rollback action are restored.

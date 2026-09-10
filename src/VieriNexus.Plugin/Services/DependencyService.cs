@@ -19,7 +19,11 @@ internal sealed record DependencyStatus(
     internal bool IsReady => Health == DependencyHealth.Healthy;
 }
 
-internal sealed record PluginPresence(bool IsInstalled, bool IsLoaded, string? Version);
+internal sealed record PluginPresence(
+    bool IsInstalled,
+    bool IsLoaded,
+    string? Version,
+    string? DisplayName = null);
 
 internal sealed class DependencyService(IDalamudPluginInterface pluginInterface)
 {
@@ -43,7 +47,7 @@ internal sealed class DependencyService(IDalamudPluginInterface pluginInterface)
     {
         var plugin = pluginInterface.InstalledPlugins.FirstOrDefault(candidate =>
             string.Equals(candidate.InternalName, internalName, StringComparison.OrdinalIgnoreCase));
-        return new(plugin is not null, plugin?.IsLoaded == true, plugin?.Version?.ToString());
+        return new(plugin is not null, plugin?.IsLoaded == true, plugin?.Version?.ToString(), plugin?.Name);
     }
 
     internal void OpenInstaller(DependencyStatus dependency)

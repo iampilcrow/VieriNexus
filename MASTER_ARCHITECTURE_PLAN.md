@@ -698,6 +698,8 @@ Exit: fake providers can run, pause, cancel, crash, reload, reconcile, and resum
 
 Implement `Reach Job Level` for one selected combat job through the temporary Vieri sources while proving the same capability contracts against stock Questionable and stock AutoDuty.
 
+Current 0.1.0.26 checkpoint: the character-scoped draft, method/gil constraints, fail-closed stock/transition provider selection, shared provider-health observations, and bounded plan preview are implemented. Provider execution, durable goal/task lifecycle, ownership, verification, and replanning remain locked.
+
 The real workflow may:
 
 - Validate character/job and goal constraints.

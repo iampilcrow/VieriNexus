@@ -35,6 +35,7 @@ internal sealed class NexusWindow : Window
     private readonly NavigationActivationService navigationActivation;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
     private readonly NavigationRouteRuntimeService navigationRuntime;
+    private readonly ProgressionProviderService progressionProviders;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
@@ -49,6 +50,7 @@ internal sealed class NexusWindow : Window
     private Guid? pendingDeleteRouteId;
     private Guid? pendingClearRouteId;
     private int selectedBuiltInRoute;
+    private string progressionMessage = string.Empty;
 
     internal NexusWindow(
         Plugin plugin,
@@ -59,6 +61,7 @@ internal sealed class NexusWindow : Window
         NavigationActivationService navigationActivation,
         NavigationDiagnosticsService navigationDiagnostics,
         NavigationRouteRuntimeService navigationRuntime,
+        ProgressionProviderService progressionProviders,
         ModuleRegistry modules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
@@ -72,6 +75,7 @@ internal sealed class NexusWindow : Window
         this.navigationActivation = navigationActivation;
         this.navigationDiagnostics = navigationDiagnostics;
         this.navigationRuntime = navigationRuntime;
+        this.progressionProviders = progressionProviders;
         this.modules = modules;
         this.world = world;
         this.logo = logo;
@@ -157,6 +161,7 @@ internal sealed class NexusWindow : Window
         {
             case "Home": DrawHome(); break;
             case "Overview": DrawOverview(); break;
+            case "Progression": DrawProgression(); break;
             case "Routes & Navigation": DrawRoutesAndNavigation(); break;
             case "Dependencies": DrawDependencies(); break;
             case "Migration": DrawMigration(); break;
@@ -202,11 +207,11 @@ internal sealed class NexusWindow : Window
         if (ImGui.BeginTable("###HomeStatus", 3, ImGuiTableFlags.SizingStretchSame))
         {
             ImGui.TableNextColumn();
-            StatusCard("FOUNDATION", "Online", "Safe migration shell", NexusTheme.Green);
+            StatusCard("ROUTES", "Live", "Author, travel, play, and stop", NexusTheme.Green);
             ImGui.TableNextColumn();
-            StatusCard("AUTOMATION", "Staged", "Existing Vieri products remain authoritative", NexusTheme.Amber);
+            StatusCard("PROGRESSION", "Planning", "Current-job level goal preview", NexusTheme.Cyan);
             ImGui.TableNextColumn();
-            StatusCard("NEXT", "Migration", "Module parity before replacement", NexusTheme.Cyan);
+            StatusCard("PROVIDERS", "Observed", "Vieri and stock contracts separated", NexusTheme.Amber);
             ImGui.EndTable();
         }
     }
@@ -238,14 +243,14 @@ internal sealed class NexusWindow : Window
             ImGui.TableNextColumn();
             BeginPanel("CURRENT ACTIVITY");
             NexusTheme.StatusDot(NexusTheme.Green, "Nexus foundation running");
-            ImGui.TextWrapped("No automation has been enabled. Existing Vieri plugins remain authoritative while migration is staged safely.");
+            ImGui.TextWrapped("Routes are live. Progression plans are saved and reviewed without starting quest or duty automation.");
             EndPanel();
             ImGui.TableNextColumn();
             BeginPanel("SAFETY STATE");
-            ImGui.TextUnformatted("Resource owners: 0");
-            ImGui.TextUnformatted("Active goals: 0");
-            ImGui.TextUnformatted("Pending migrations: 9");
-            ImGui.TextColored(NexusTheme.Green, "No live behavior has been replaced.");
+            ImGui.TextUnformatted("Route control: Explicit Stop");
+            ImGui.TextUnformatted("Progression execution: Locked");
+            ImGui.TextUnformatted("Provider selection: Capability checked");
+            ImGui.TextColored(NexusTheme.Green, "Vieri progression providers remain authoritative.");
             EndPanel();
             ImGui.EndTable();
         }
@@ -260,7 +265,7 @@ internal sealed class NexusWindow : Window
         var readyCount = required.Count(x => x.IsReady);
         ImGui.ProgressBar((float)readyCount / required.Length, new Vector2(-1, 22),
             $"{readyCount} of {required.Length} required services ready");
-        ImGui.TextDisabled("VieriCodex and the other current Vieri products are migration sources, not third-party dependencies. Questionable is incorporated through VieriCodex and is intentionally not listed separately.");
+        ImGui.TextDisabled("Migration-source Vieri products are not global dependencies. Progression checks Vieri and stock provider contracts separately without requiring both implementations at once.");
         ImGui.Spacing();
 
         NexusTheme.SectionTitle("Required", "Core navigation, travel, quest, duty, and market providers");
@@ -1341,6 +1346,191 @@ internal sealed class NexusWindow : Window
         EndPanel();
     }
 
+    private void DrawProgression()
+    {
+        PageHeading("Progression", "Set a level goal once; Nexus plans the work and delegates only bounded provider tasks.");
+
+        CharacterSnapshot? character = world.Current.Character.Value;
+        ProgressionProviderSnapshot providers = progressionProviders.Snapshot();
+        if (character is null || !character.Key.IsKnown)
+        {
+            BeginPanel("CURRENT JOB", 130f * Math.Max(1f, plugin.Configuration.UiScale));
+            NexusTheme.StatusDot(NexusTheme.Muted, "Waiting for the current character");
+            TextWrapped(NexusTheme.Muted,
+                "The progression planner becomes available after the character and permanent job level are known.");
+            EndPanel();
+            DrawProgressionProviders(providers);
+            return;
+        }
+
+        CharacterConfiguration characterConfiguration = plugin.Configuration.ForCharacter(character.Key.ToString());
+        ProgressionDraftConfiguration draftConfiguration = characterConfiguration.Progression;
+        if (draftConfiguration.TargetLevel == 0)
+        {
+            draftConfiguration.TargetLevel = Math.Min(
+                ReachJobLevelPlanner.MaximumSupportedLevel,
+                Math.Max(1, character.Level + 2));
+            plugin.Save();
+        }
+
+        float scale = Math.Max(1f, plugin.Configuration.UiScale);
+        BeginPanel("REACH JOB LEVEL", 320f * scale);
+        NexusTheme.StatusDot(NexusTheme.Cyan,
+            $"{character.Name} • Job {character.ClassJobId} • Level {character.Level}");
+        TextWrapped(NexusTheme.Muted,
+            "This first goal follows the job you are currently playing. Job switching joins the queue after its ownership contract is migrated.");
+
+        bool changed = false;
+        int targetLevel = draftConfiguration.TargetLevel;
+        if (ImGui.SliderInt("Target level", ref targetLevel, 1, ReachJobLevelPlanner.MaximumSupportedLevel))
+        {
+            draftConfiguration.TargetLevel = targetLevel;
+            changed = true;
+        }
+
+        ImGui.Spacing();
+        ImGui.TextColored(NexusTheme.Gold, "Allowed leveling methods");
+        bool jobQuests = draftConfiguration.AllowJobQuests;
+        if (ImGui.Checkbox("Job quests", ref jobQuests))
+        {
+            draftConfiguration.AllowJobQuests = jobQuests;
+            changed = true;
+        }
+        ImGui.SameLine();
+        bool huntingLog = draftConfiguration.AllowHuntingLog;
+        if (ImGui.Checkbox("Hunting Log", ref huntingLog))
+        {
+            draftConfiguration.AllowHuntingLog = huntingLog;
+            changed = true;
+        }
+        ImGui.SameLine();
+        bool sideQuests = draftConfiguration.AllowSideQuests;
+        if (ImGui.Checkbox("Side quests", ref sideQuests))
+        {
+            draftConfiguration.AllowSideQuests = sideQuests;
+            changed = true;
+        }
+        ImGui.SameLine();
+        bool duties = draftConfiguration.AllowDuties;
+        if (ImGui.Checkbox("Duties", ref duties))
+        {
+            draftConfiguration.AllowDuties = duties;
+            changed = true;
+        }
+
+        int gilReserve = draftConfiguration.MinimumGilReserve;
+        if (ImGui.InputInt("Minimum gil to keep", ref gilReserve, 10_000, 100_000))
+        {
+            draftConfiguration.MinimumGilReserve = Math.Clamp(gilReserve, 0, 999_999_999);
+            changed = true;
+        }
+        TextWrapped(NexusTheme.Muted,
+            "Nexus-owned gear planning will treat this as a hard spending floor. Providers will not make that policy decision.");
+        if (changed)
+        {
+            progressionMessage = "Progression draft saved for this character.";
+            plugin.Save();
+        }
+        if (!string.IsNullOrWhiteSpace(progressionMessage))
+            TextWrapped(NexusTheme.Green, progressionMessage);
+        EndPanel();
+
+        DrawProgressionProviders(providers);
+
+        ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
+            new ReachJobLevelGoalDraft(
+                character.Key,
+                character.ClassJobId,
+                character.Level,
+                draftConfiguration.TargetLevel,
+                draftConfiguration.AllowJobQuests,
+                draftConfiguration.AllowHuntingLog,
+                draftConfiguration.AllowSideQuests,
+                draftConfiguration.AllowDuties,
+                draftConfiguration.MinimumGilReserve),
+            providers.Questing,
+            providers.Duties);
+        DrawProgressionPlan(plan);
+    }
+
+    private void DrawProgressionProviders(ProgressionProviderSnapshot providers)
+    {
+        NexusTheme.SectionTitle("Providers", "Vieri remains authoritative while the same narrow contracts are proven against stock plugins");
+        if (!ImGui.BeginTable("###ProgressionProviders", 2, ImGuiTableFlags.SizingStretchSame))
+            return;
+
+        ImGui.TableNextColumn();
+        DrawProgressionProvider("QUESTING", providers.Questing);
+        ImGui.TableNextColumn();
+        DrawProgressionProvider("DUTIES", providers.Duties);
+        ImGui.EndTable();
+    }
+
+    private void DrawProgressionProvider(string title, ProgressionProviderSelection selection)
+    {
+        BeginPanel(title, 205f * Math.Max(1f, plugin.Configuration.UiScale));
+        Vector4 selectionColor = selection.Readiness switch
+        {
+            ProgressionProviderReadiness.Ready => NexusTheme.Green,
+            ProgressionProviderReadiness.Disabled => NexusTheme.Amber,
+            ProgressionProviderReadiness.Missing => NexusTheme.Muted,
+            _ => NexusTheme.Red,
+        };
+        NexusTheme.StatusDot(selectionColor, selection.IsReady
+            ? $"Selected: {selection.Selected!.DisplayName}"
+            : selection.Readiness.ToString());
+        foreach (ProgressionProviderCandidate candidate in selection.Candidates)
+        {
+            Vector4 candidateColor = candidate.Readiness switch
+            {
+                ProgressionProviderReadiness.Ready => NexusTheme.Green,
+                ProgressionProviderReadiness.Disabled => NexusTheme.Amber,
+                ProgressionProviderReadiness.Missing => NexusTheme.Muted,
+                _ => NexusTheme.Red,
+            };
+            string version = string.IsNullOrWhiteSpace(candidate.Version) ? string.Empty : $" • {candidate.Version}";
+            string flavor = candidate.Flavor == ProgressionProviderFlavor.Stock ? "stock" : "transition";
+            TextWrapped(candidateColor,
+                $"• {candidate.DisplayName}: {candidate.Readiness} • {flavor}{version}");
+        }
+        TextWrapped(NexusTheme.Muted, selection.Detail);
+        EndPanel();
+    }
+
+    private void DrawProgressionPlan(ReachJobLevelPlan plan)
+    {
+        int estimatedLines = 5 + (plan.Steps.Count * 3) + (plan.Issues.Count * 2);
+        float height = Math.Max(180f, estimatedLines * ImGui.GetTextLineHeightWithSpacing() + 48f);
+        BeginPanel("PLAN PREVIEW", height);
+        Vector4 summaryColor = plan.IsSatisfied
+            ? NexusTheme.Green
+            : plan.IsValid ? NexusTheme.Cyan : NexusTheme.Red;
+        NexusTheme.StatusDot(summaryColor, plan.Summary);
+
+        foreach (ProgressionPlanStep step in plan.Steps)
+        {
+            string provider = step.Provider is null ? "Nexus" : step.Provider.Value.Value;
+            ImGui.TextColored(NexusTheme.Gold, step.Title);
+            TextWrapped(NexusTheme.Muted, $"{step.Reason} Owner: {provider}.");
+        }
+
+        foreach (ProgressionPlanIssue issue in plan.Issues)
+        {
+            Vector4 color = issue.Severity switch
+            {
+                ProgressionPlanIssueSeverity.Information => NexusTheme.Muted,
+                ProgressionPlanIssueSeverity.Warning => NexusTheme.Amber,
+                _ => NexusTheme.Red,
+            };
+            TextWrapped(color, $"• {issue.Message}");
+        }
+
+        if (plan.IsValid && !plan.IsSatisfied)
+            TextWrapped(NexusTheme.Amber,
+                "Planning is live; execution remains locked. Existing VieriCodex and VieriAutoDuty behavior is unchanged.");
+        EndPanel();
+    }
+
     private void DrawSettings()
     {
         PageHeading("Settings", "Global presentation and character-specific safety controls.");
@@ -1412,7 +1602,13 @@ internal sealed class NexusWindow : Window
         {
             ImGui.TableNextColumn();
             BeginPanel(module.Descriptor.DisplayName.ToUpperInvariant());
-            NexusTheme.StatusDot(NexusTheme.Amber, "Migration staged");
+            (Vector4 color, string status) = module.Descriptor.Id switch
+            {
+                "navigation" => (NexusTheme.Green, "Live"),
+                "progression" => (NexusTheme.Cyan, "Planning foundation"),
+                _ => (NexusTheme.Amber, "Migration staged"),
+            };
+            NexusTheme.StatusDot(color, status);
             ImGui.TextWrapped(module.Descriptor.Description);
             ImGui.TextColored(NexusTheme.Gold, module.Descriptor.Category);
             EndPanel();
