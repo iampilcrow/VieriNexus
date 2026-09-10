@@ -73,9 +73,9 @@ internal sealed class NavigationDiagnosticsService(
                 source.Version,
                 source.IsLoaded ? "source-owner-loaded" : "source-owner-unloaded",
                 source.IsLoaded
-                    ? "Loaded and authoritative; Nexus approval remains unavailable."
+                    ? "Loaded and authoritative; Nexus route actions are paused."
                     : source.IsInstalled
-                        ? "Installed but manually unloaded; Nexus may be approved when every gate is ready."
+                        ? "Installed but unloaded; Nexus routes become ready automatically when every gate is healthy."
                         : "Not installed; no predecessor navigation owner is loaded."),
             new(
                 "navigation-resources",

@@ -33,9 +33,9 @@ public sealed record NavigationExecutionStartResult(
     ResourceLeaseHandle? Lease);
 
 /// <summary>
-/// Owns the session-scoped decision that Nexus, rather than the predecessor, may become
-/// the navigation authority. It never disables the predecessor and never persists approval.
-/// A future execution can begin only through the same lock that re-checks source authority,
+/// Makes Nexus the route authority whenever its working library and providers are ready and
+/// VieriNavPlotter is not loaded. It never disables the predecessor and never persists a claim.
+/// An execution can begin only through the same lock that re-checks source authority,
 /// atomically acquires Navigation/Movement, and arms the durable no-replay safety journal.
 /// </summary>
 public sealed class NavigationAuthorityCoordinator
@@ -47,7 +47,7 @@ public sealed class NavigationAuthorityCoordinator
     private readonly Func<NavigationAuthorityPrerequisites> observe;
     private bool active;
     private NavigationAuthorityStatus status = Staging("activation-not-reviewed",
-        "Nexus navigation ownership is staging-only until every safety gate passes and the user approves it.");
+        "Nexus navigation is waiting for its route library and providers.");
 
     public NavigationAuthorityCoordinator(
         ResourceLeaseManager leases,
@@ -98,16 +98,24 @@ public sealed class NavigationAuthorityCoordinator
                 return status;
             }
 
-            status = blocker is not null
-                ? Blocked(blocker)
-                : resourceConflict
-                    ? Blocked("Navigation or Movement is already owned by another task.", "activation-resource-conflict")
-                    : new(
-                        NavigationAuthorityState.ReadyForExplicitApproval,
-                        false,
-                        true,
-                        "authority-ready-for-approval",
-                        "Every safety gate is ready. Explicit approval can activate Nexus navigation ownership for this session without starting movement.");
+            if (blocker is not null)
+            {
+                status = Blocked(blocker);
+                return status;
+            }
+            if (resourceConflict)
+            {
+                status = Blocked("Navigation or Movement is already owned by another task.", "activation-resource-conflict");
+                return status;
+            }
+
+            active = true;
+            status = new(
+                NavigationAuthorityState.ActiveWithoutExecution,
+                true,
+                false,
+                "authority-auto-active",
+                "Nexus routes are ready. VieriNavPlotter is not loaded, so no manual ownership approval is needed.");
             return status;
         }
     }
@@ -116,41 +124,7 @@ public sealed class NavigationAuthorityCoordinator
     {
         lock (sync)
         {
-            if (active)
-                return status;
-
-            NavigationAuthorityPrerequisites inputs = ObserveSafely();
-            string? blocker = Blocker(inputs);
-            if (blocker is not null)
-            {
-                status = Blocked(blocker);
-                return status;
-            }
-
-            if (!leases.TryAcquire(
-                    ProbeOwner(),
-                    [ResourceKind.Navigation],
-                    TimeSpan.FromSeconds(5),
-                    out ResourceLeaseHandle? probe,
-                    out _))
-            {
-                status = Blocked(
-                    "Navigation or Movement became owned before approval could complete.",
-                    "activation-resource-conflict");
-                return status;
-            }
-
-            // The probe proves the approval transition observed a free atomic resource bundle.
-            // Gameplay work must acquire its own fresh bundle through TryBeginExecution.
-            probe!.Dispose();
-            active = true;
-            status = new(
-                NavigationAuthorityState.ActiveWithoutExecution,
-                true,
-                false,
-                "authority-approved",
-                "Nexus navigation ownership is active for this session. No route was started automatically.");
-            return status;
+            return Update();
         }
     }
 
@@ -173,8 +147,8 @@ public sealed class NavigationAuthorityCoordinator
                 return status;
             }
 
-            status = Staging("authority-returned-to-staging",
-                "Nexus navigation ownership returned to staging. No source plugin was enabled or changed.");
+            status = Staging("authority-released",
+                "Nexus navigation ownership was released for shutdown. No source plugin was enabled or changed.");
             return status;
         }
     }
@@ -197,7 +171,11 @@ public sealed class NavigationAuthorityCoordinator
         lock (sync)
         {
             if (!active)
-                return FailedStart("authority-not-active", "Nexus navigation ownership is not active.");
+            {
+                NavigationAuthorityStatus automatic = Update();
+                if (!automatic.IsActive)
+                    return FailedStart("authority-not-active", automatic.Message);
+            }
 
             NavigationAuthorityPrerequisites inputs = ObserveSafely();
             string? blocker = Blocker(inputs);
@@ -292,7 +270,7 @@ public sealed class NavigationAuthorityCoordinator
         if (!inputs.HasVerifiedStagedLibrary)
             return "A verified staged route library is required.";
         if (inputs.SourcePluginLoaded)
-            return "VieriNavPlotter is loaded and remains the navigation owner. Disable it manually before approving Nexus ownership.";
+            return "VieriNavPlotter is loaded and remains the navigation owner. Disable it to use Nexus routes.";
         if (!inputs.RequiredDependenciesReady)
             return "Required navigation providers are not ready.";
         if (!inputs.StopAvailable)
@@ -303,13 +281,6 @@ public sealed class NavigationAuthorityCoordinator
             return "Reload recovery and the lease watchdog are not ready.";
         return null;
     }
-
-    private static LeaseOwner ProbeOwner() => new(
-        GoalId.New(),
-        TaskId.New(),
-        AttemptId.New(),
-        int.MaxValue,
-        "Explicit Nexus navigation authority approval probe");
 
     private static NavigationAuthorityStatus Staging(string code, string message) =>
         new(NavigationAuthorityState.StagingOnly, false, false, code, message);

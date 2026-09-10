@@ -75,8 +75,6 @@ public static class NavigationRoutePlanner
             return "Choose a territory before planning this route.";
         if (route.Points.Count == 0)
             return "Add at least one route point first.";
-        if (kind == NavigationRoutePlanKind.Playback && route.Points.Count < 2)
-            return "Playback requires at least two route points.";
         if (route.Points.Any(point =>
                 !float.IsFinite(point.X) || !float.IsFinite(point.Y) || !float.IsFinite(point.Z)))
             return "Every route point must contain finite coordinates.";

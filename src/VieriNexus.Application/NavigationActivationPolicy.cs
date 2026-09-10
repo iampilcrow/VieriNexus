@@ -64,9 +64,6 @@ public static class NavigationActivationPolicy
             "Manual movement detection and safe yielding must be available and enabled.", blockers);
         AddIf(!inputs.ReloadReconciliationAvailable, "reload-reconciliation-required",
             "Reload reconciliation must recover intent without replaying unsafe movement.", blockers);
-        AddIf(!inputs.ExplicitActivationApproved, "explicit-approval-required",
-            "Activation requires a separate explicit user decision after safety validation.", blockers);
-
         bool prerequisitesSatisfied = blockers.Count == 0;
         NavigationActivationState state = ResolveState(inputs, blockers, prerequisitesSatisfied);
         bool sourceAuthoritative = inputs.SourcePluginLoaded && !inputs.NexusExecutionEnabled;
@@ -102,8 +99,6 @@ public static class NavigationActivationPolicy
         if (!inputs.ResourceOwnershipConnected || !inputs.StopAvailable ||
             !inputs.ManualOverrideAvailable || !inputs.ReloadReconciliationAvailable)
             return NavigationActivationState.SafetyInfrastructureIncomplete;
-        if (!inputs.ExplicitActivationApproved)
-            return NavigationActivationState.AwaitingExplicitApproval;
         return prerequisitesSatisfied
             ? NavigationActivationState.ReadyForActivation
             : NavigationActivationState.SafetyInfrastructureIncomplete;

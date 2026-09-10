@@ -17,20 +17,20 @@ public sealed class NavigationAuthorityCoordinatorTests
         Assert.Equal(NavigationAuthorityState.Blocked, status.State);
         Assert.False(status.CanApprove);
         Assert.False(approval.IsActive);
-        Assert.Contains("Disable it manually", approval.Message);
+        Assert.Contains("Disable it", approval.Message);
         Assert.Empty(setup.Leases.Snapshot());
     }
 
     [Fact]
-    public void ApprovalIsSessionScopedAndStartsNoMovement()
+    public void ReadyPrerequisitesAutomaticallyActivateWithoutMovement()
     {
         var setup = Setup();
 
         NavigationAuthorityStatus ready = setup.Authority.Update();
         NavigationAuthorityStatus active = setup.Authority.Approve();
 
-        Assert.Equal(NavigationAuthorityState.ReadyForExplicitApproval, ready.State);
-        Assert.True(ready.CanApprove);
+        Assert.Equal(NavigationAuthorityState.ActiveWithoutExecution, ready.State);
+        Assert.False(ready.CanApprove);
         Assert.Equal(NavigationAuthorityState.ActiveWithoutExecution, active.State);
         Assert.True(active.IsActive);
         Assert.Equal(0, setup.Provider.StopRequests);
@@ -133,16 +133,17 @@ public sealed class NavigationAuthorityCoordinatorTests
     }
 
     [Fact]
-    public void ExecutionCannotStartBeforeExplicitApproval()
+    public void ExecutionStartAutomaticallyActivatesWhenPrerequisitesAreReady()
     {
         var setup = Setup();
 
         NavigationExecutionStartResult result = setup.Authority.TryBeginExecution(
             Guid.NewGuid(), Owner(), TimeSpan.FromMinutes(1), DateTimeOffset.UtcNow);
 
-        Assert.False(result.Success);
-        Assert.Equal("authority-not-active", result.Code);
-        Assert.Null(setup.Store.Current);
+        Assert.True(result.Success);
+        Assert.Equal("execution-safety-armed", result.Code);
+        Assert.NotNull(setup.Store.Current);
+        result.Lease!.Dispose();
     }
 
     [Fact]

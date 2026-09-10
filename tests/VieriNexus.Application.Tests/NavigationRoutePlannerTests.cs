@@ -53,14 +53,14 @@ public sealed class NavigationRoutePlannerTests
     }
 
     [Fact]
-    public void PlaybackRejectsDraftWithOnlyOnePoint()
+    public void PlaybackAllowsOnePointDestinationRoute()
     {
         NavigationRoutePlan plan = NavigationRoutePlanner.Build(
             Route([new(1, 2, 3)]), NavigationRoutePlanKind.Playback, 100);
 
-        Assert.False(plan.IsValid);
-        Assert.False(plan.IsExecutable);
-        Assert.Contains("at least two", plan.Message);
+        Assert.True(plan.IsValid);
+        Assert.True(plan.IsExecutable);
+        Assert.Single(plan.Points);
     }
 
     private static NavigationRouteSnapshot Route(IReadOnlyList<NavigationRoutePoint> points) => new(

@@ -9,7 +9,8 @@ internal sealed class NavigationRouteRuntimeService(
     NavigationRoutePreviewService preview,
     NavigationLivePathService livePath,
     NavigationRouteRecordingService recording,
-    NavigationLibraryService library)
+    NavigationLibraryService library,
+    NavigationRecoveryService recovery)
 {
     internal NavigationRouteExecutionStatus Status => execution.Status.IsActive
         ? execution.Status
@@ -36,6 +37,16 @@ internal sealed class NavigationRouteRuntimeService(
         NavigationRoutePlanKind kind)
     {
         NavigationRoutePlan plan = Plan(route, kind);
+        NavigationRecoveryStatus recoveryStatus = recovery.PrepareForExplicitStart(Environment.TickCount64);
+        if (recoveryStatus.IsRequired)
+            return new NavigationRouteExecutionStatus(
+                NavigationRouteExecutionState.Blocked,
+                plan.RouteId,
+                plan.RouteName,
+                false,
+                false,
+                recoveryStatus.Code,
+                recoveryStatus.Message);
         if (recording.Status.IsRecording)
             return new NavigationRouteExecutionStatus(
                 NavigationRouteExecutionState.Blocked,
@@ -54,21 +65,20 @@ internal sealed class NavigationRouteRuntimeService(
                 false,
                 "route-already-running",
                 "Stop the current Nexus route before starting another one.");
-        if (plan.IsExecutable)
+        suiteTravel.ResetInactive();
+        return NavigationRouteDispatchPolicy.Select(plan, suiteTravel.CanDispatch) switch
         {
-            suiteTravel.ResetInactive();
-            return execution.Start(plan, DateTimeOffset.UtcNow);
-        }
-        return plan.IsValid && route.TerritoryId != Plugin.ClientState.TerritoryType
-            ? suiteTravel.Start(route, plan, DateTimeOffset.UtcNow)
-            : new NavigationRouteExecutionStatus(
+            NavigationRouteDispatchKind.SuiteTravel => suiteTravel.Start(route, plan, DateTimeOffset.UtcNow),
+            NavigationRouteDispatchKind.Local => execution.Start(plan, DateTimeOffset.UtcNow),
+            _ => new NavigationRouteExecutionStatus(
                 NavigationRouteExecutionState.Blocked,
                 plan.RouteId,
                 plan.RouteName,
                 false,
                 false,
                 plan.Code,
-                plan.Message);
+                plan.Message),
+        };
     }
 
     internal NavigationRouteExecutionStatus Stop() => suiteTravel.Status.IsActive

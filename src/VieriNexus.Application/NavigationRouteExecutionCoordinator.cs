@@ -207,8 +207,34 @@ public sealed class NavigationRouteExecutionCoordinator
         }
     }
 
-    public NavigationRouteExecutionStatus Stop(DateTimeOffset now) =>
-        Interrupt(now, "route-user-stopped", "Route stopped. It will not resume or replay automatically.");
+    public NavigationRouteExecutionStatus Stop(DateTimeOffset now)
+    {
+        lock (sync)
+        {
+            if (lease is null || activePlan is null)
+                return status;
+
+            NavigationRoutePlan interrupted = activePlan;
+            NavigationExecutionSafetyStatus stopped = safety.StopByUser(now);
+            bool retained = safety.TrackedLeaseId is not null;
+            if (!retained)
+            {
+                lease = null;
+                activePlan = null;
+            }
+            return Set(
+                stopped.State == NavigationExecutionSafetyState.Ready
+                    ? NavigationRouteExecutionState.Completed
+                    : stopped.State == NavigationExecutionSafetyState.AwaitingExplicitResume
+                        ? NavigationRouteExecutionState.AwaitingAcknowledgement
+                        : NavigationRouteExecutionState.Stopping,
+                interrupted,
+                retained,
+                retained,
+                stopped.Code,
+                stopped.Message);
+        }
+    }
 
     private NavigationRouteExecutionStatus Interrupt(DateTimeOffset now, string code, string message)
     {

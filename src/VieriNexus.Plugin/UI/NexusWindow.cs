@@ -34,7 +34,6 @@ internal sealed class NexusWindow : Window
     private readonly NavigationLibraryService navigationLibrary;
     private readonly NavigationActivationService navigationActivation;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
-    private readonly NavigationRecoveryService navigationRecovery;
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
@@ -59,7 +58,6 @@ internal sealed class NexusWindow : Window
         NavigationLibraryService navigationLibrary,
         NavigationActivationService navigationActivation,
         NavigationDiagnosticsService navigationDiagnostics,
-        NavigationRecoveryService navigationRecovery,
         NavigationRouteRuntimeService navigationRuntime,
         ModuleRegistry modules,
         WorldStateStore world,
@@ -73,7 +71,6 @@ internal sealed class NexusWindow : Window
         this.navigationLibrary = navigationLibrary;
         this.navigationActivation = navigationActivation;
         this.navigationDiagnostics = navigationDiagnostics;
-        this.navigationRecovery = navigationRecovery;
         this.navigationRuntime = navigationRuntime;
         this.modules = modules;
         this.world = world;
@@ -366,7 +363,7 @@ internal sealed class NexusWindow : Window
 
     private void DrawRoutesAndNavigation()
     {
-        PageHeading("Routes & Navigation", "Build, preview, and safely run Nexus-owned routes through one guarded navigation authority.");
+        PageHeading("Routes & Navigation", "Create, edit, and run your saved routes.");
 
         NavigationLibrarySnapshot? snapshot = navigationLibrary.Current;
         if (snapshot is null)
@@ -381,38 +378,16 @@ internal sealed class NexusWindow : Window
                 plugin.Save();
             }
             EndPanel();
-            DrawNavigationActivationSafety();
-            DrawNavigationRecovery();
-            DrawNavigationDiagnostics();
             return;
         }
 
-        DrawNavigationWorkingLibrary();
-
-        NexusTheme.StatusDot(NexusTheme.Green, navigationLibrary.HasWorkingLibrary
-            ? "Nexus working library available"
-            : "Verified staged library available");
-        ImGui.SameLine();
-        ImGui.TextDisabled(navigationLibrary.HasWorkingLibrary
-            ? "Nexus-owned • atomic saves • previous working copy retained"
-            : "Read-only staging • VieriNavPlotter remains authoritative");
+        if (!navigationLibrary.HasWorkingLibrary)
+            DrawNavigationWorkingLibrary();
+        DrawCompactNavigationStatus();
         ImGui.Spacing();
 
-        if (ImGui.BeginTable("###RouteSummary", 3, ImGuiTableFlags.SizingStretchSame))
-        {
-            ImGui.TableNextColumn();
-            StatusCard("PERSONAL ROUTES", snapshot.Routes.Count.ToString(),
-                navigationLibrary.HasWorkingLibrary ? "Nexus working library" : "Imported into Nexus staging", NexusTheme.Cyan);
-            ImGui.TableNextColumn();
-            int enabledOverrides = snapshot.Routes.Count(route => route.OverrideEnabled);
-            StatusCard("ENABLED OVERRIDES", enabledOverrides.ToString(),
-                "Target resolution ready", NexusTheme.Amber);
-            ImGui.TableNextColumn();
-            StatusCard("SOURCE CONFIG", $"Version {snapshot.SourceConfigurationVersion}", "Verified migration snapshot", NexusTheme.Green);
-            ImGui.EndTable();
-        }
-
-        DrawBuiltInVendorTemplates();
+        if (ImGui.CollapsingHeader("Add a built-in vendor route"))
+            DrawBuiltInVendorTemplates();
 
         if (snapshot.Routes.Count == 0)
         {
@@ -444,14 +419,10 @@ internal sealed class NexusWindow : Window
                     "Create a separate Nexus working copy before adding or changing routes.");
             }
             EndPanel();
-            DrawStagedNavigationSettings(snapshot);
-            DrawNavigationActivationSafety();
-            DrawNavigationRecovery();
-            DrawNavigationDiagnostics();
+            if (!navigationLibrary.HasWorkingLibrary)
+                DrawStagedNavigationSettings(snapshot);
             return;
         }
-
-        DrawStagedNavigationSettings(snapshot);
 
         ImGui.SetNextItemWidth(Math.Min(420f, ImGui.GetContentRegionAvail().X));
         ImGui.InputTextWithHint("###RouteSearch", "Search name, tags, notes, target, or territory", ref routeSearch, 256);
@@ -517,9 +488,27 @@ internal sealed class NexusWindow : Window
         DrawRouteDetails(selectedRoute, snapshot.ShowPointNumbers);
         ImGui.EndTable();
 
-        DrawNavigationActivationSafety();
-        DrawNavigationRecovery();
-        DrawNavigationDiagnostics();
+        if (ImGui.CollapsingHeader("Troubleshooting"))
+            DrawNavigationDiagnostics();
+    }
+
+    private void DrawCompactNavigationStatus()
+    {
+        NavigationActivationAssessment assessment = navigationActivation.Assess();
+        NavigationAuthorityStatus authority = navigationActivation.AuthorityStatus;
+        if (authority.IsActive)
+        {
+            NexusTheme.StatusDot(NexusTheme.Green, "Ready — Nexus handles routes while VieriNavPlotter is off");
+            return;
+        }
+
+        if (assessment.IsSourcePluginLoaded)
+        {
+            NexusTheme.StatusDot(NexusTheme.Amber, "Paused — disable VieriNavPlotter to use Nexus routes");
+            return;
+        }
+
+        NexusTheme.StatusDot(NexusTheme.Amber, authority.Message);
     }
 
     private void DrawRouteDetails(NavigationRouteSnapshot? route, bool showPointNumbers)
@@ -533,170 +522,121 @@ internal sealed class NexusWindow : Window
             PrepareRouteEditor(route);
             if (navigationLibrary.HasWorkingLibrary)
             {
-                ImGui.SetNextItemWidth(-1);
+                float saveNameWidth = ButtonWidth("Save name");
+                ImGui.SetNextItemWidth(Math.Max(140f, ImGui.GetContentRegionAvail().X - saveNameWidth - ImGui.GetStyle().ItemSpacing.X));
                 ImGui.InputText("###NexusRouteName", ref routeNameEdit, 120);
+                ImGui.SameLine();
+                if (ImGui.Button("Save name"))
+                {
+                    routeOperationMessage = navigationLibrary.UpdateRoute(route with
+                    {
+                        Name = routeNameEdit,
+                        Tags = routeTagsEdit,
+                        Notes = routeNotesEdit,
+                    }).Message;
+                }
             }
             else
             {
                 ImGui.TextColored(NexusTheme.Gold, route.Name);
             }
             ImGui.Separator();
-            ImGui.TextUnformatted($"Territory: {route.TerritoryId}");
-            ImGui.TextUnformatted($"Points: {route.Points.Count}");
-            ImGui.TextUnformatted($"Movement: {(route.UseMesh ? "Mesh" : "Direct")} • {(route.UseFlight ? "Flight allowed" : "Ground only")}");
-            ImGui.TextUnformatted($"Tolerance: {route.Tolerance:0.##} • Final point: {route.LastPointTolerance:0.##}");
-            if (navigationLibrary.HasWorkingLibrary)
+            ImGui.TextDisabled($"Territory {route.TerritoryId} • {route.Points.Count} point{(route.Points.Count == 1 ? string.Empty : "s")}");
+            DrawRoutePlaybackControls(route, showPointNumbers);
+
+            if (ImGui.CollapsingHeader("Route details & automation"))
             {
-                bool mesh = route.UseMesh;
-                bool flight = route.UseFlight;
-                float tolerance = route.Tolerance;
-                float finalTolerance = route.LastPointTolerance;
-                bool changed = ImGui.Checkbox("Mesh-assisted", ref mesh);
-                ImGui.SameLine();
-                changed |= ImGui.Checkbox("Allow flight", ref flight);
-                ImGui.SetNextItemWidth(180);
-                changed |= ImGui.SliderFloat("Route tolerance", ref tolerance, 0.1f, 20f, "%.2f");
-                ImGui.SetNextItemWidth(180);
-                changed |= ImGui.SliderFloat("Final tolerance", ref finalTolerance, 0.1f, 30f, "%.2f");
-                if (changed)
+                if (navigationLibrary.HasWorkingLibrary)
                 {
-                    routeOperationMessage = navigationLibrary.UpdateRoute(route with
+                    bool mesh = route.UseMesh;
+                    bool flight = route.UseFlight;
+                    float tolerance = route.Tolerance;
+                    float finalTolerance = route.LastPointTolerance;
+                    bool changed = ImGui.Checkbox("Mesh-assisted", ref mesh);
+                    ImGui.SameLine();
+                    changed |= ImGui.Checkbox("Allow flight", ref flight);
+                    ImGui.SetNextItemWidth(180);
+                    changed |= ImGui.SliderFloat("Route tolerance", ref tolerance, 0.1f, 20f, "%.2f");
+                    ImGui.SetNextItemWidth(180);
+                    changed |= ImGui.SliderFloat("Final tolerance", ref finalTolerance, 0.1f, 30f, "%.2f");
+                    if (changed)
                     {
-                        UseMesh = mesh,
-                        UseFlight = flight,
-                        Tolerance = tolerance,
-                        LastPointTolerance = finalTolerance,
-                    }).Message;
-                }
-            }
-            string binding = route.BindingKind == 1 ? "Gear vendor" : "None";
-            ImGui.TextUnformatted($"Binding: {binding}");
-            if (navigationLibrary.HasWorkingLibrary)
-            {
-                int bindingKind = route.BindingKind;
-                ImGui.SetNextItemWidth(180);
-                if (ImGui.Combo("Use this route for", ref bindingKind, "No override\0Gear vendor\0"))
-                    routeOperationMessage = navigationLibrary.SetBinding(route.Id, bindingKind).Message;
-                if (bindingKind == 1)
-                {
-                    if (ImGui.Button("Bind current target"))
-                    {
-                        if (Plugin.TargetManager.Target is not { } target)
+                        routeOperationMessage = navigationLibrary.UpdateRoute(route with
                         {
-                            routeOperationMessage = "Target the vendor or object first.";
-                        }
-                        else
-                        {
-                            routeOperationMessage = navigationLibrary.BindCurrentTarget(
-                                route.Id,
-                                Plugin.ClientState.TerritoryType,
-                                target.BaseId,
-                                target.Name.ToString()).Message;
-                        }
+                            UseMesh = mesh,
+                            UseFlight = flight,
+                            Tolerance = tolerance,
+                            LastPointTolerance = finalTolerance,
+                        }).Message;
                     }
-                    TextWrapped(NexusTheme.Muted,
-                        "Capturing a target never enables its override; approval remains a separate action.");
                 }
-            }
-            if (route.TargetDataId != 0 || !string.IsNullOrWhiteSpace(route.TargetLabel))
-                ImGui.TextUnformatted($"Target: {route.TargetLabel} ({route.TargetDataId})");
-            if (navigationLibrary.HasWorkingLibrary && route.BindingKind == 1 && route.TargetDataId != 0)
-            {
-                bool enabled = route.OverrideEnabled;
-                if (ImGui.Checkbox("Use as gear vendor override", ref enabled))
-                    routeOperationMessage = navigationLibrary.SetOverride(route.Id, enabled).Message;
-                TextWrapped(NexusTheme.Muted, "Only one route can be enabled for this exact territory and vendor target.");
-            }
-            if (navigationLibrary.HasWorkingLibrary)
-            {
-                ImGui.SetNextItemWidth(-1);
-                ImGui.InputTextWithHint("###NexusRouteTags", "Tags", ref routeTagsEdit, 240);
-                ImGui.SetNextItemWidth(-1);
-                ImGui.InputTextMultiline("###NexusRouteNotes", ref routeNotesEdit, 600, new Vector2(-1, 46));
-                if (ImGui.Button("Save route details"))
+                string binding = route.BindingKind == 1 ? "Gear vendor" : "None";
+                ImGui.TextUnformatted($"Binding: {binding}");
+                if (navigationLibrary.HasWorkingLibrary)
                 {
-                    NavigationLibraryWriteResult result = navigationLibrary.UpdateRoute(route with
+                    int bindingKind = route.BindingKind;
+                    ImGui.SetNextItemWidth(180);
+                    if (ImGui.Combo("Use this route for", ref bindingKind, "No override\0Gear vendor\0"))
+                        routeOperationMessage = navigationLibrary.SetBinding(route.Id, bindingKind).Message;
+                    if (bindingKind == 1)
                     {
-                        Name = routeNameEdit,
-                        Tags = routeTagsEdit,
-                        Notes = routeNotesEdit,
-                    });
-                    routeOperationMessage = result.Message;
+                        if (ImGui.Button("Bind current target"))
+                        {
+                            if (Plugin.TargetManager.Target is not { } target)
+                            {
+                                routeOperationMessage = "Target the vendor or object first.";
+                            }
+                            else
+                            {
+                                routeOperationMessage = navigationLibrary.BindCurrentTarget(
+                                    route.Id,
+                                    Plugin.ClientState.TerritoryType,
+                                    target.BaseId,
+                                    target.Name.ToString()).Message;
+                            }
+                        }
+                        TextWrapped(NexusTheme.Muted,
+                            "Changing the target turns its override off until you enable it again.");
+                    }
                 }
-            }
-            else
-            {
-                if (!string.IsNullOrWhiteSpace(route.Tags))
-                    ImGui.TextWrapped($"Tags: {route.Tags}");
-                if (!string.IsNullOrWhiteSpace(route.Notes))
-                    ImGui.TextWrapped($"Notes: {route.Notes}");
-            }
-            ImGui.TextDisabled($"Updated {route.UpdatedAtUtc.ToLocalTime():g}");
-
-            ImGui.Spacing();
-            if (ImGui.Button(navigationRuntime.IsPreviewing(route.Id) ? "Hide route" : "Show route"))
-            {
-                if (!navigationRuntime.IsPreviewing(route.Id) && !navigationLibrary.Current!.ShowWorldPreview)
+                if (route.TargetDataId != 0 || !string.IsNullOrWhiteSpace(route.TargetLabel))
+                    ImGui.TextUnformatted($"Target: {route.TargetLabel} ({route.TargetDataId})");
+                if (navigationLibrary.HasWorkingLibrary && route.BindingKind == 1 && route.TargetDataId != 0)
                 {
-                    NavigationLibrarySnapshot preferences = navigationLibrary.Current!;
-                    navigationLibrary.UpdatePreferences(
-                        preferences.RecordingIntervalSeconds,
-                        preferences.MinimumPointDistance,
-                        showWorldPreview: true,
-                        preferences.ShowPointNumbers,
-                        preferences.ShowLiveNavigationPath);
+                    bool enabled = route.OverrideEnabled;
+                    if (ImGui.Checkbox("Use as gear vendor override", ref enabled))
+                        routeOperationMessage = navigationLibrary.SetOverride(route.Id, enabled).Message;
                 }
-                NavigationRoutePlan preview = navigationRuntime.TogglePreview(route, showPointNumbers);
-                routeOperationMessage = preview.Message;
-            }
-            NavigationRoutePlan travelPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.TravelToStart);
-            bool canExecute = navigationLibrary.HasWorkingLibrary &&
-                              navigationActivation.AuthorityStatus.IsActive &&
-                              !navigationRuntime.Status.IsActive &&
-                              !navigationRuntime.RecordingStatus.IsRecording;
-            bool travelAvailable = travelPlan.IsExecutable ||
-                                   (travelPlan.IsValid && route.TerritoryId != Plugin.ClientState.TerritoryType &&
-                                    navigationRuntime.CanDispatchCrossZone);
-            if (!canExecute || !travelAvailable)
-                ImGui.BeginDisabled();
-            if (ImGui.Button("Travel to start") && canExecute && travelAvailable)
-                routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.TravelToStart).Message;
-            if (!canExecute || !travelAvailable)
-                ImGui.EndDisabled();
-            NavigationRoutePlan playbackPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.Playback);
-            bool playbackAvailable = playbackPlan.IsExecutable ||
-                                     (playbackPlan.IsValid && route.TerritoryId != Plugin.ClientState.TerritoryType &&
-                                      navigationRuntime.CanDispatchCrossZone);
-            if (!canExecute || !playbackAvailable)
-                ImGui.BeginDisabled();
-            if (ImGui.Button("Play route") && canExecute && playbackAvailable)
-                routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.Playback).Message;
-            if (!canExecute || !playbackAvailable)
-                ImGui.EndDisabled();
-            if (navigationRuntime.Status.CanStop)
-            {
-                if (ImGui.Button("Stop playback"))
-                    routeOperationMessage = navigationRuntime.Stop().Message;
-            }
-            TextWrapped(NexusTheme.Muted,
-                $"Plan: {playbackPlan.Points.Count} point(s) • {playbackPlan.TotalDistance:0.0} yalms • {playbackPlan.Message}");
-            NavigationRouteExecutionStatus executionStatus = navigationRuntime.Status;
-            if (executionStatus.RouteId == route.Id && executionStatus.State != NavigationRouteExecutionState.Idle)
-            {
-                Vector4 executionColor = executionStatus.State switch
+                if (navigationLibrary.HasWorkingLibrary)
                 {
-                    NavigationRouteExecutionState.Running => NexusTheme.Green,
-                    NavigationRouteExecutionState.Completed => NexusTheme.Green,
-                    NavigationRouteExecutionState.Blocked => NexusTheme.Amber,
-                    NavigationRouteExecutionState.AwaitingAcknowledgement => NexusTheme.Amber,
-                    _ => NexusTheme.Red,
-                };
-                TextWrapped(executionColor, executionStatus.Message);
+                    ImGui.SetNextItemWidth(-1);
+                    ImGui.InputTextWithHint("###NexusRouteTags", "Tags", ref routeTagsEdit, 240);
+                    ImGui.SetNextItemWidth(-1);
+                    ImGui.InputTextMultiline("###NexusRouteNotes", ref routeNotesEdit, 600, new Vector2(-1, 46));
+                    if (ImGui.Button("Save route details"))
+                    {
+                        NavigationLibraryWriteResult result = navigationLibrary.UpdateRoute(route with
+                        {
+                            Name = routeNameEdit,
+                            Tags = routeTagsEdit,
+                            Notes = routeNotesEdit,
+                        });
+                        routeOperationMessage = result.Message;
+                    }
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(route.Tags))
+                        ImGui.TextWrapped($"Tags: {route.Tags}");
+                    if (!string.IsNullOrWhiteSpace(route.Notes))
+                        ImGui.TextWrapped($"Notes: {route.Notes}");
+                }
+                ImGui.TextDisabled($"Updated {route.UpdatedAtUtc.ToLocalTime():g}");
             }
 
-            if (navigationLibrary.HasWorkingLibrary)
+            if (navigationLibrary.HasWorkingLibrary &&
+                ImGui.CollapsingHeader("Record & edit route", ImGuiTreeNodeFlags.DefaultOpen))
             {
-                ImGui.Spacing();
                 bool routeExecutionActive = navigationRuntime.Status.IsActive;
                 bool anotherRouteRecording = navigationRuntime.RecordingStatus is
                 { IsRecording: true, RouteId: { } recordingRouteId } && recordingRouteId != route.Id;
@@ -744,6 +684,8 @@ internal sealed class NexusWindow : Window
                 NavigationRouteRecordingStatus recording = navigationRuntime.RecordingStatus;
                 if (thisRouteRecording || recording.RouteId == route.Id)
                     TextWrapped(thisRouteRecording ? NexusTheme.Green : NexusTheme.Muted, recording.Message);
+
+                DrawInlineRecordingAndDisplaySettings();
             }
             DrawRouteOperationMessage();
 
@@ -830,7 +772,7 @@ internal sealed class NexusWindow : Window
                     ImGui.EndDisabled();
             }
 
-            if (navigationLibrary.HasWorkingLibrary)
+            if (navigationLibrary.HasWorkingLibrary && ImGui.CollapsingHeader("More route actions"))
             {
                 ImGui.Spacing();
                 bool routeExecutionActive = navigationRuntime.Status.IsActive;
@@ -887,6 +829,113 @@ internal sealed class NexusWindow : Window
         // Popups must be drawn in the same ImGui ID scope as the buttons that open them.
         DrawDeleteRouteConfirmation();
         DrawClearPointsConfirmation();
+    }
+
+    private void DrawRoutePlaybackControls(NavigationRouteSnapshot route, bool showPointNumbers)
+    {
+        ImGui.Spacing();
+        NavigationRouteExecutionStatus executionStatus = navigationRuntime.Status;
+        if (executionStatus.CanStop)
+        {
+            if (ImGui.Button("Stop"))
+                routeOperationMessage = navigationRuntime.Stop().Message;
+        }
+        else
+        {
+            NavigationRoutePlan playbackPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.Playback);
+            bool canExecute = navigationLibrary.HasWorkingLibrary &&
+                              !navigationRuntime.Status.IsActive &&
+                              !navigationRuntime.RecordingStatus.IsRecording;
+            bool playbackAvailable = playbackPlan.IsValid &&
+                                     (playbackPlan.IsExecutable || navigationRuntime.CanDispatchCrossZone);
+            if (!canExecute || !playbackAvailable)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Play route") && canExecute && playbackAvailable)
+                routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.Playback).Message;
+            if (!canExecute || !playbackAvailable)
+                ImGui.EndDisabled();
+
+            ImGui.SameLine();
+            NavigationRoutePlan travelPlan = navigationRuntime.Plan(route, NavigationRoutePlanKind.TravelToStart);
+            bool travelAvailable = travelPlan.IsValid &&
+                                   (travelPlan.IsExecutable || navigationRuntime.CanDispatchCrossZone);
+            if (!canExecute || !travelAvailable)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Travel to start") && canExecute && travelAvailable)
+                routeOperationMessage = navigationRuntime.Start(route, NavigationRoutePlanKind.TravelToStart).Message;
+            if (!canExecute || !travelAvailable)
+                ImGui.EndDisabled();
+
+            ImGui.SameLine();
+            if (ImGui.Button(navigationRuntime.IsPreviewing(route.Id) ? "Hide route" : "Show route"))
+            {
+                if (!navigationRuntime.IsPreviewing(route.Id) && !navigationLibrary.Current!.ShowWorldPreview)
+                {
+                    NavigationLibrarySnapshot preferences = navigationLibrary.Current!;
+                    navigationLibrary.UpdatePreferences(
+                        preferences.RecordingIntervalSeconds,
+                        preferences.MinimumPointDistance,
+                        showWorldPreview: true,
+                        preferences.ShowPointNumbers,
+                        preferences.ShowLiveNavigationPath);
+                }
+                routeOperationMessage = navigationRuntime.TogglePreview(route, showPointNumbers).Message;
+            }
+        }
+
+        if (executionStatus.RouteId == route.Id && executionStatus.State != NavigationRouteExecutionState.Idle)
+        {
+            Vector4 executionColor = executionStatus.State switch
+            {
+                NavigationRouteExecutionState.Running => NexusTheme.Green,
+                NavigationRouteExecutionState.Completed => NexusTheme.Green,
+                NavigationRouteExecutionState.Blocked => NexusTheme.Amber,
+                NavigationRouteExecutionState.AwaitingAcknowledgement => NexusTheme.Amber,
+                _ => NexusTheme.Red,
+            };
+            TextWrapped(executionColor, executionStatus.Message);
+        }
+    }
+
+    private void DrawInlineRecordingAndDisplaySettings()
+    {
+        if (navigationLibrary.Current is not { } snapshot)
+            return;
+
+        if (ImGui.CollapsingHeader("Recording options"))
+        {
+            float interval = snapshot.RecordingIntervalSeconds;
+            float spacing = snapshot.MinimumPointDistance;
+            bool changed = false;
+            ImGui.SetNextItemWidth(220);
+            changed |= ImGui.SliderFloat("Capture interval", ref interval, 0.2f, 5f, "%.1f sec");
+            ImGui.SetNextItemWidth(220);
+            changed |= ImGui.SliderFloat("Minimum point spacing", ref spacing, 0.1f, 10f, "%.1f y");
+            if (changed)
+                routeOperationMessage = navigationLibrary.UpdatePreferences(
+                    interval, spacing, snapshot.ShowWorldPreview,
+                    snapshot.ShowPointNumbers, snapshot.ShowLiveNavigationPath).Message;
+        }
+
+        if (ImGui.CollapsingHeader("Display options"))
+        {
+            bool worldPreview = snapshot.ShowWorldPreview;
+            bool pointNumbers = snapshot.ShowPointNumbers;
+            bool liveNavigationPath = snapshot.ShowLiveNavigationPath;
+            bool changed = ImGui.Checkbox("Show saved route", ref worldPreview);
+            changed |= ImGui.Checkbox("Show point numbers", ref pointNumbers);
+            changed |= ImGui.Checkbox("Show live navigation path", ref liveNavigationPath);
+            if (changed)
+            {
+                routeOperationMessage = navigationLibrary.UpdatePreferences(
+                    snapshot.RecordingIntervalSeconds, snapshot.MinimumPointDistance,
+                    worldPreview, pointNumbers, liveNavigationPath).Message;
+                if (!worldPreview)
+                    navigationRuntime.ClearPreview();
+                else if (selectedRouteId is { } routeId)
+                    navigationRuntime.RefreshPreview(routeId);
+            }
+        }
     }
 
     private void DrawBuiltInVendorTemplates()
@@ -1128,70 +1177,6 @@ internal sealed class NexusWindow : Window
         EndPanel();
     }
 
-    private void DrawNavigationActivationSafety()
-    {
-        NavigationActivationAssessment assessment = navigationActivation.Assess();
-        NavigationAuthorityStatus authority = navigationActivation.AuthorityStatus;
-        NavigationActivationBlocker[] displayedBlockers = assessment.Blockers
-            .Where(blocker => blocker.Code != "source-plugin-loaded")
-            .ToArray();
-        int readinessLines = (assessment.IsStopAvailable ? 1 : 0) +
-                             (assessment.IsManualOverrideAvailable ? 1 : 0) +
-                             (assessment.IsReloadReconciliationAvailable ? 1 : 0);
-        float height = MathF.Ceiling(
-            (ImGui.GetTextLineHeightWithSpacing() * ((displayedBlockers.Length * 2f) + 9f + (readinessLines * 2f))) +
-            (ImGui.GetStyle().WindowPadding.Y * 2f) + 12f);
-        BeginPanel("ACTIVATION SAFETY", height);
-        NexusTheme.StatusDot(authority.IsActive ? NexusTheme.Green : NexusTheme.Amber,
-            authority.IsActive
-                ? "Nexus ownership active — guarded route controls available"
-                : "Staging only — execution blocked");
-        TextWrapped(NexusTheme.Muted,
-            "Static preview is non-moving. Travel and playback require every safety gate and explicit Nexus ownership.");
-        string sourceState = assessment.IsSourcePluginLoaded
-            ? "VieriNavPlotter is loaded and is the current navigation owner."
-            : assessment.IsSourcePluginInstalled
-                ? "VieriNavPlotter is installed but not loaded; Nexus may own navigation after explicit approval."
-                : "VieriNavPlotter is not installed; Nexus may own navigation after explicit approval.";
-        TextWrapped(NexusTheme.Muted, sourceState);
-        if (assessment.IsStopAvailable)
-            TextWrapped(NexusTheme.Green,
-                "• Verified Stop is connected; ownership releases only after movement is confirmed inactive.");
-        if (assessment.IsManualOverrideAvailable)
-            TextWrapped(NexusTheme.Green,
-                "• Manual movement yielding is connected; player movement input always takes priority.");
-        if (assessment.IsReloadReconciliationAvailable)
-            TextWrapped(NexusTheme.Green,
-                "• Reload recovery and the lease watchdog are connected; stale movement intent is stopped, never replayed.");
-        foreach (NavigationActivationBlocker blocker in displayedBlockers)
-            TextWrapped(NexusTheme.Muted, $"• {blocker.Message}");
-
-        ImGui.Spacing();
-        TextWrapped(authority.IsActive ? NexusTheme.Green : NexusTheme.Muted, authority.Message);
-        if (authority.IsActive)
-        {
-            if (ImGui.Button("Return Nexus navigation to staging", new Vector2(-1, 0)))
-                navigationActivation.ReturnAuthorityToStaging();
-        }
-        else
-        {
-            if (!authority.CanApprove)
-                ImGui.BeginDisabled();
-            if (ImGui.Button("Approve Nexus navigation ownership", new Vector2(-1, 0)) &&
-                authority.CanApprove)
-            {
-                navigationActivation.ApproveAuthority();
-            }
-            if (!authority.CanApprove)
-                ImGui.EndDisabled();
-            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip(authority.CanApprove
-                    ? "Activates Nexus navigation authority for this session. No route starts automatically."
-                    : authority.Message);
-        }
-        EndPanel();
-    }
-
     private void DrawNavigationDiagnostics()
     {
         NavigationDiagnosticsSnapshot diagnostics = navigationDiagnostics.Current;
@@ -1266,33 +1251,6 @@ internal sealed class NexusWindow : Window
                     $"{(scenario.Passed ? "✓" : "!")} {scenario.Name}: {scenario.Detail}");
             }
         }
-        EndPanel();
-    }
-
-    private void DrawNavigationRecovery()
-    {
-        NavigationRecoveryStatus recovery = navigationRecovery.Current;
-        if (!recovery.IsRequired)
-            return;
-
-        float height = MathF.Ceiling(
-            (ImGui.GetTextLineHeightWithSpacing() * 9f) +
-            (ImGui.GetStyle().WindowPadding.Y * 2f) + 16f);
-        BeginPanel("STOPPED INTENT CHECKPOINT", height);
-        NexusTheme.StatusDot(recovery.CanAcknowledge ? NexusTheme.Amber : NexusTheme.Red,
-            recovery.CanAcknowledge ? "Ready for explicit acknowledgement" : "Waiting for safe acknowledgement");
-        TextWrapped(NexusTheme.Muted, recovery.Message);
-        TextWrapped(NexusTheme.Muted,
-            "Acknowledgement only clears the stopped checkpoint. It cannot resume or replay movement and does not approve Nexus authority.");
-        if (!recovery.CanAcknowledge)
-            ImGui.BeginDisabled();
-        if (ImGui.Button("Acknowledge stopped intent (no replay)", new Vector2(-1, 0)) &&
-            recovery.CanAcknowledge)
-        {
-            navigationRecovery.Acknowledge(Environment.TickCount64);
-        }
-        if (!recovery.CanAcknowledge)
-            ImGui.EndDisabled();
         EndPanel();
     }
 

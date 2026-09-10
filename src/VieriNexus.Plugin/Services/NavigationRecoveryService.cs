@@ -28,4 +28,10 @@ internal sealed class NavigationRecoveryService(
             manualMovement.QuietPeriod);
         return Current;
     }
+
+    internal NavigationRecoveryStatus PrepareForExplicitStart(long now)
+    {
+        NavigationRecoveryStatus observed = Update(now);
+        return observed.CanAcknowledge ? Acknowledge(now) : observed;
+    }
 }

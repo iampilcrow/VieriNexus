@@ -48,7 +48,7 @@ public sealed class NavigationSuiteTravelCoordinator(
             return Set(NavigationRouteExecutionState.Blocked, plan, false, false, plan.Code, plan.Message);
         if (!authorityActive())
             return Set(NavigationRouteExecutionState.Blocked, plan, false, false,
-                "navigation-authority-required", "Approve Nexus navigation ownership before dispatching suite travel.");
+                "navigation-authority-required", "Nexus navigation is not ready while VieriNavPlotter or another movement owner is active.");
         if (!executionAllowed())
             return Set(NavigationRouteExecutionState.Blocked, plan, false, false,
                 "character-execution-blocked", "Character automation or manual-movement safety currently blocks route execution.");

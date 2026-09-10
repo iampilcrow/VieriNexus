@@ -136,7 +136,8 @@ public sealed class Plugin : IDalamudPlugin
             navigationPreview,
             navigationLivePath,
             navigationRecording,
-            navigationLibrary);
+            navigationLibrary,
+            navigationRecovery);
         navigationDiagnostics = new NavigationDiagnosticsService(
             dependencyService,
             resourceLeases,
@@ -158,7 +159,7 @@ public sealed class Plugin : IDalamudPlugin
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration,
-            navigationLibrary, navigationActivation, navigationDiagnostics, navigationRecovery,
+            navigationLibrary, navigationActivation, navigationDiagnostics,
             navigationRuntime, moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
 

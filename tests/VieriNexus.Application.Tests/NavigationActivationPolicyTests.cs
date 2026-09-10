@@ -31,7 +31,7 @@ public sealed class NavigationActivationPolicyTests
     }
 
     [Fact]
-    public void CompletePrerequisitesStillRequireExplicitApproval()
+    public void CompletePrerequisitesAreReadyWithoutManualApproval()
     {
         NavigationActivationAssessment waiting = NavigationActivationPolicy.Evaluate(Inputs());
         NavigationActivationAssessment approved = NavigationActivationPolicy.Evaluate(Inputs() with
@@ -39,8 +39,8 @@ public sealed class NavigationActivationPolicyTests
             ExplicitActivationApproved = true,
         });
 
-        Assert.Equal(NavigationActivationState.AwaitingExplicitApproval, waiting.State);
-        Assert.False(waiting.CanActivate);
+        Assert.Equal(NavigationActivationState.ReadyForActivation, waiting.State);
+        Assert.True(waiting.CanActivate);
         Assert.True(waiting.IsStopAvailable);
         Assert.True(waiting.IsManualOverrideAvailable);
         Assert.True(waiting.IsReloadReconciliationAvailable);

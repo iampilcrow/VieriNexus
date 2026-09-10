@@ -56,17 +56,21 @@ public sealed class NavigationRouteExecutionCoordinatorTests
     }
 
     [Fact]
-    public void ExplicitStopCreatesNoReplayCheckpoint()
+    public void ExplicitStopCompletesCheckpointAndCanRestartImmediately()
     {
         SetupState setup = Setup();
         setup.Execution.Start(Plan(), DateTimeOffset.UtcNow);
 
         NavigationRouteExecutionStatus stopped = setup.Execution.Stop(DateTimeOffset.UtcNow);
 
-        Assert.Equal(NavigationRouteExecutionState.AwaitingAcknowledgement, stopped.State);
-        Assert.Equal(NavigationExecutionIntentState.AwaitingExplicitResume, setup.Store.Current!.State);
+        Assert.Equal(NavigationRouteExecutionState.Completed, stopped.State);
+        Assert.Equal(NavigationExecutionIntentState.Completed, setup.Store.Current!.State);
         Assert.Equal(1, setup.Provider.StopRequests);
         Assert.Empty(setup.Leases.Snapshot());
+
+        NavigationRouteExecutionStatus restarted = setup.Execution.Start(Plan(), DateTimeOffset.UtcNow.AddSeconds(1));
+        Assert.Equal(NavigationRouteExecutionState.Running, restarted.State);
+        Assert.Equal(2, setup.Provider.StartRequests);
     }
 
     [Fact]

@@ -197,6 +197,20 @@ public sealed class NavigationExecutionSafetyCoordinator
             "shutdown-stopped",
             "Plugin shutdown stopped navigation; the saved intent will not replay after reload.");
 
+    public NavigationExecutionSafetyStatus StopByUser(DateTimeOffset now)
+    {
+        NavigationExecutionSafetyStatus stopped = InterruptExecution(
+            now,
+            "route-user-stopped",
+            "Route stopped by the user.");
+        if (stopped.State == NavigationExecutionSafetyState.AwaitingExplicitResume &&
+            AcknowledgeInterruptedIntent(now))
+        {
+            return Ready("route-user-stopped", "Route stopped. It can be started again whenever you are ready.");
+        }
+        return stopped;
+    }
+
     public NavigationExecutionSafetyStatus InterruptExecution(
         DateTimeOffset now,
         string confirmedCode = "execution-stopped",
