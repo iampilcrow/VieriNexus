@@ -74,4 +74,4 @@
 
 ## Next implementation gate
 
-After live acceptance of the 0.1.0.32 bounded gear-readiness transaction, continue moving exact shopping preview/approval and equipment policy into Nexus, then connect the next bounded stock-Questionable quest task. The custom categorized AutoDuty overlay remains a mandatory Nexus UI migration before the fork can retire.
+The 0.1.0.32 bounded gear-readiness transaction is live-accepted: Nexus bought gear, returned to the inn, and automatically started the planned duty. Continue moving exact shopping preview/approval and equipment policy into Nexus, then connect the next bounded stock-Questionable quest task. The custom categorized AutoDuty overlay remains a mandatory Nexus UI migration before the fork can retire.
