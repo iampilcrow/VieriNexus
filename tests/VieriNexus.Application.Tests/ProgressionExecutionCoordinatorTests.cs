@@ -567,6 +567,34 @@ public sealed class ProgressionExecutionCoordinatorTests
     }
 
     [Fact]
+    public void DutyOnlyGrandCompanyTargetOwnsDutyQueueAndNotNavigation()
+    {
+        FakeHuntingProvider hunt = new() { DutyOnly = true };
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(),
+            new ResourceLeaseManager(),
+            new FakeDutyProvider(),
+            gearProvider: null,
+            questProvider: null,
+            huntingProvider: hunt);
+
+        ProgressionActionResult started = coordinator.Start(
+            Draft() with
+            {
+                AllowDuties = false,
+                AllowJobQuests = false,
+                AllowSideQuests = false,
+                AllowHuntingLog = true,
+            },
+            Plan());
+
+        Assert.True(started.Success);
+        Assert.Contains(ResourceKind.DutyQueue, coordinator.State!.ActiveTask!.RequiredResources);
+        Assert.Contains(ResourceKind.UiInteraction, coordinator.State.ActiveTask.RequiredResources);
+        Assert.DoesNotContain(ResourceKind.Navigation, coordinator.State.ActiveTask.RequiredResources);
+    }
+
+    [Fact]
     public void StopDuringHuntingLogUsesHuntStopAndCancelsAfterInactivity()
     {
         FakeDutyProvider duty = new();
@@ -807,9 +835,18 @@ public sealed class ProgressionExecutionCoordinatorTests
         public int Required => Candidate.Required;
         public int StartCalls { get; private set; }
         public int StopCalls { get; private set; }
+        public bool DutyOnly { get; init; }
 
         public IReadOnlyList<ProgressionHuntingTargetCandidate> EligibleTargets(uint classJobId, int currentLevel) =>
-            IsComplete ? [] : [Candidate with { Killed = Killed }];
+            IsComplete
+                ? []
+                : [Candidate with
+                {
+                    Killed = Killed,
+                    Locations = DutyOnly
+                        ? [new HuntingLogLocation(0, 0, 1245, 0f, 0f)]
+                        : Candidate.Locations,
+                }];
 
         public ProgressionHuntingProviderObservation ObserveHunt(ProgressionHuntingTargetCandidate target) => new(
             Available,

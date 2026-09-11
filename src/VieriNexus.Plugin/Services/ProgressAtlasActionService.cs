@@ -20,9 +20,22 @@ internal sealed class ProgressAtlasActionService
 {
     private static readonly TimeSpan LeaseLifetime = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan OverallTimeout = TimeSpan.FromMinutes(20);
+    private static readonly TimeSpan QuestOverallTimeout = TimeSpan.FromHours(1);
     private static readonly TimeSpan InteractionTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan ProviderStartTimeout = TimeSpan.FromSeconds(45);
+    private static readonly ResourceKind[] QuestResources =
+    [
+        ResourceKind.Teleport,
+        ResourceKind.Movement,
+        ResourceKind.Navigation,
+        ResourceKind.Targeting,
+        ResourceKind.Combat,
+        ResourceKind.Rotation,
+        ResourceKind.UiInteraction,
+    ];
 
     private readonly ProgressAtlasService atlas;
+    private readonly ProgressionProviderService questProvider;
     private readonly NexusRouteTravelProvider travel;
     private readonly ResourceLeaseManager leases;
     private readonly IClientState clientState;
@@ -35,10 +48,13 @@ internal sealed class ProgressAtlasActionService
     private DateTimeOffset startedAt;
     private DateTimeOffset phaseStartedAt;
     private DateTimeOffset nextInteractionAt;
+    private bool providerStartObserved;
+    private string? pendingStopReason;
     private string message = "No Progress Atlas action is running.";
 
     internal ProgressAtlasActionService(
         ProgressAtlasService atlas,
+        ProgressionProviderService questProvider,
         NexusRouteTravelProvider travel,
         ResourceLeaseManager leases,
         IClientState clientState,
@@ -47,6 +63,7 @@ internal sealed class ProgressAtlasActionService
         ITargetManager targetManager)
     {
         this.atlas = atlas;
+        this.questProvider = questProvider;
         this.travel = travel;
         this.leases = leases;
         this.clientState = clientState;
@@ -65,6 +82,13 @@ internal sealed class ProgressAtlasActionService
 
     internal int RemainingFieldCurrents => atlas.AetherCurrentTargets.Count(target =>
         !ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId) && IsTerritoryAccessible(target.TerritoryId));
+
+    internal int ReadyAetherCurrentQuests => !clientState.IsLoggedIn || objectTable.LocalPlayer is null
+        ? 0
+        : questProvider.EligibleAetherCurrentQuests(atlas.AetherCurrentQuestTargets, objectTable.LocalPlayer.Level).Count;
+
+    internal int RemainingAetherCurrentQuests => atlas.AetherCurrentQuestTargets.Count(target =>
+        !ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId));
 
     internal int RemainingExplorationRegions => atlas.ExplorationTargets.Count(target =>
         !ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId) &&
@@ -126,6 +150,26 @@ internal sealed class ProgressAtlasActionService
             2.5f), out result);
     }
 
+    internal bool StartNextAetherCurrentQuest(out string result)
+    {
+        if (!clientState.IsLoggedIn || objectTable.LocalPlayer is null)
+        {
+            result = "Log into a character before starting an Aether Current quest.";
+            return false;
+        }
+
+        ProgressionQuestCandidate? quest = questProvider
+            .EligibleAetherCurrentQuests(atlas.AetherCurrentQuestTargets, objectTable.LocalPlayer.Level)
+            .FirstOrDefault();
+        if (quest is null)
+        {
+            result = "No accepted or currently unlockable Aether Current quest has a supported provider path.";
+            return false;
+        }
+
+        return StartQuest(quest, out result);
+    }
+
     internal bool StartNextExploration(out string result)
     {
         var candidates = atlas.ExplorationTargets
@@ -158,12 +202,34 @@ internal sealed class ProgressAtlasActionService
 
     internal bool Stop(out string result)
     {
-        travel.Stop();
+        if (phase == Phase.QuestStopping)
+        {
+            result = "Stop is already requested; Nexus is waiting for the quest provider to confirm inactivity.";
+            message = result;
+            return true;
+        }
+        if (phase == Phase.Questing)
+        {
+            if (!questProvider.TryStopQuest(out result))
+            {
+                message = $"Stop has not been confirmed: {result}";
+                return false;
+            }
+            pendingStopReason = "Progress Atlas action stopped. Nothing will replay automatically.";
+            phase = Phase.QuestStopping;
+            message = "Stop requested; Nexus is retaining ownership until the quest provider confirms it is inactive.";
+            result = message;
+            return true;
+        }
+        else
+            travel.Stop();
         ReleaseLease();
         if (objective?.DataId is > 0 && targetManager.Target?.BaseId == objective.DataId)
             targetManager.Target = null;
         objective = null;
         phase = Phase.Idle;
+        providerStartObserved = false;
+        pendingStopReason = null;
         message = "Progress Atlas action stopped. Nothing will replay automatically.";
         result = message;
         return true;
@@ -173,9 +239,17 @@ internal sealed class ProgressAtlasActionService
     {
         if (phase == Phase.Idle || objective is null)
             return;
-        if (now - startedAt >= OverallTimeout)
+        if (phase == Phase.QuestStopping)
         {
-            Fail("The Progress Atlas action exceeded its 20-minute safety limit.");
+            UpdateQuestStopping();
+            return;
+        }
+        TimeSpan timeout = phase == Phase.Questing ? QuestOverallTimeout : OverallTimeout;
+        if (now - startedAt >= timeout)
+        {
+            Fail(phase == Phase.Questing
+                ? "The Aether Current quest exceeded its one-hour safety limit."
+                : "The Progress Atlas action exceeded its 20-minute safety limit.");
             return;
         }
         if (lease is null || !lease.Heartbeat(LeaseLifetime))
@@ -183,12 +257,12 @@ internal sealed class ProgressAtlasActionService
             Fail("Progress Atlas ownership expired; Nexus stopped the action.");
             return;
         }
-        if (condition[ConditionFlag.InCombat])
+        if (phase != Phase.Questing && condition[ConditionFlag.InCombat])
         {
             Fail("Combat began during the Progress Atlas action; Nexus stopped travel and interaction.");
             return;
         }
-        if (IsComplete(objective))
+        if (phase != Phase.Questing && IsComplete(objective))
         {
             Complete();
             return;
@@ -200,6 +274,8 @@ internal sealed class ProgressAtlasActionService
                 UpdateTravel(now);
             else if (phase == Phase.Interacting)
                 UpdateInteraction(now);
+            else if (phase == Phase.Questing)
+                UpdateQuest();
             else
                 UpdateVerification(now);
         }
@@ -269,6 +345,122 @@ internal sealed class ProgressAtlasActionService
         message = $"Nexus started one exact Atlas objective: {selected.Title}.";
         result = message;
         return true;
+    }
+
+    private bool StartQuest(ProgressionQuestCandidate quest, out string result)
+    {
+        if (phase != Phase.Idle)
+        {
+            result = "Stop the current Progress Atlas action before starting another one.";
+            return false;
+        }
+        if (condition[ConditionFlag.InCombat] || condition[ConditionFlag.BoundByDuty] ||
+            condition[ConditionFlag.BoundByDuty56] || condition[ConditionFlag.BoundByDuty95])
+        {
+            result = "Aether Current quests cannot start during combat or a duty.";
+            return false;
+        }
+
+        string title = $"Complete {quest.Name}";
+        LeaseOwner owner = new(GoalId.New(), TaskId.New(), AttemptId.New(), 60, $"Progress Atlas: {title}");
+        if (!leases.TryAcquire(owner, QuestResources, LeaseLifetime, out lease, out ResourceLeaseSnapshot? blocking))
+        {
+            result = blocking is null
+                ? "Another Nexus action owns a required resource."
+                : $"Wait for {blocking.Owner.Reason} to finish.";
+            return false;
+        }
+
+        objective = new Objective(
+            AtlasActionKind.AetherCurrentQuest,
+            title,
+            quest.TerritoryId,
+            Vector3.Zero,
+            0,
+            quest.AetherCurrentId,
+            0,
+            0,
+            0,
+            quest);
+        ProgressionQuestStartResult start = questProvider.TryStartQuest(quest);
+        if (!start.Success)
+        {
+            ReleaseLease();
+            objective = null;
+            result = start.Message;
+            return false;
+        }
+
+        startedAt = DateTimeOffset.UtcNow;
+        phaseStartedAt = startedAt;
+        providerStartObserved = false;
+        phase = Phase.Questing;
+        message = start.Message;
+        result = message;
+        return true;
+    }
+
+    private void UpdateQuest()
+    {
+        ProgressionQuestCandidate quest = objective!.Quest
+            ?? throw new InvalidDataException("The active Atlas quest is missing its exact quest identity.");
+        ProgressionQuestProviderObservation observation = questProvider.ObserveQuest(quest.QuestId);
+        if (!observation.IsAvailable || observation.IsRunning is null)
+        {
+            Fail("The quest provider became unavailable; Nexus requested Stop and released Atlas ownership.");
+            return;
+        }
+
+        bool matching = string.Equals(observation.CurrentQuestId, quest.QuestId, StringComparison.Ordinal);
+        providerStartObserved |= observation.IsRunning == true && matching;
+        bool currentUnlocked = ProgressAtlasService.IsAetherCurrentUnlocked(quest.AetherCurrentId);
+        if ((observation.IsComplete == true || currentUnlocked) && observation.IsRunning == false)
+        {
+            Complete();
+            return;
+        }
+        if (observation.IsRunning == true && !matching)
+        {
+            Fail("The quest provider switched to different work; Nexus requested Stop instead of surrendering ownership.");
+            return;
+        }
+        if (observation.IsRunning == true)
+        {
+            message = $"{quest.Name} is running; Nexus is waiting for exact quest and Aether Current confirmation.";
+            return;
+        }
+        if (providerStartObserved)
+        {
+            Fail($"{quest.Name} stopped before its Aether Current was verified.");
+            return;
+        }
+        if (DateTimeOffset.UtcNow - phaseStartedAt >= ProviderStartTimeout)
+            Fail($"{quest.Name} did not start within 45 seconds.");
+    }
+
+    private void UpdateQuestStopping()
+    {
+        ProgressionQuestCandidate quest = objective!.Quest
+            ?? throw new InvalidDataException("The stopping Atlas quest is missing its exact quest identity.");
+        ProgressionQuestProviderObservation observation = questProvider.ObserveQuest(quest.QuestId);
+        if (!observation.IsAvailable || observation.IsRunning is null)
+        {
+            message = "Stop was requested; Nexus is retaining ownership until the quest provider becomes observable and inactive.";
+            return;
+        }
+        if (observation.IsRunning == true)
+        {
+            message = "Stop was requested; waiting for the quest provider to become inactive.";
+            return;
+        }
+
+        string stopped = pendingStopReason ?? "Progress Atlas quest stopped.";
+        ReleaseLease();
+        objective = null;
+        phase = Phase.Idle;
+        providerStartObserved = false;
+        pendingStopReason = null;
+        message = stopped;
     }
 
     private void UpdateTravel(DateTimeOffset now)
@@ -361,6 +553,7 @@ internal sealed class ProgressAtlasActionService
     {
         AtlasActionKind.Aetheryte => ProgressAtlasService.IsAetheryteUnlocked(value.CompletionId),
         AtlasActionKind.FieldAetherCurrent => ProgressAtlasService.IsAetherCurrentUnlocked(value.CompletionId),
+        AtlasActionKind.AetherCurrentQuest => ProgressAtlasService.IsAetherCurrentUnlocked(value.CompletionId),
         AtlasActionKind.Exploration => ProgressAtlasService.IsExplorationComplete(value.MapId, value.DiscoveryId),
         _ => false,
     };
@@ -373,15 +566,32 @@ internal sealed class ProgressAtlasActionService
         ReleaseLease();
         objective = null;
         phase = Phase.Idle;
+        providerStartObserved = false;
+        pendingStopReason = null;
         message = $"Verified complete: {completed}.";
     }
 
     private void Fail(string reason)
     {
-        travel.Stop();
+        if (phase == Phase.Questing)
+        {
+            if (!questProvider.TryStopQuest(out string stopMessage))
+            {
+                message = $"{reason} Stop is not yet confirmed: {stopMessage}";
+                return;
+            }
+            pendingStopReason = reason;
+            phase = Phase.QuestStopping;
+            message = $"{reason} Stop was requested; Nexus is retaining ownership until inactivity is confirmed.";
+            return;
+        }
+        else
+            travel.Stop();
         ReleaseLease();
         objective = null;
         phase = Phase.Idle;
+        providerStartObserved = false;
+        pendingStopReason = null;
         message = reason;
     }
 
@@ -400,12 +610,14 @@ internal sealed class ProgressAtlasActionService
         uint CompletionId,
         uint MapId,
         byte DiscoveryId,
-        float Tolerance);
+        float Tolerance,
+        ProgressionQuestCandidate? Quest = null);
 
     private enum AtlasActionKind
     {
         Aetheryte,
         FieldAetherCurrent,
+        AetherCurrentQuest,
         Exploration,
     }
 
@@ -415,5 +627,7 @@ internal sealed class ProgressAtlasActionService
         Travelling,
         Interacting,
         Verifying,
+        Questing,
+        QuestStopping,
     }
 }

@@ -33,6 +33,7 @@ public enum ProgressionQuestKind
 {
     ClassJobRole,
     GeneralSideQuest,
+    AetherCurrent,
 }
 
 public sealed record ProgressionQuestCandidate(
@@ -40,7 +41,9 @@ public sealed record ProgressionQuestCandidate(
     string Name,
     int RequiredLevel,
     bool IsAccepted,
-    ProgressionQuestKind Kind = ProgressionQuestKind.ClassJobRole);
+    ProgressionQuestKind Kind = ProgressionQuestKind.ClassJobRole,
+    uint TerritoryId = 0,
+    uint AetherCurrentId = 0);
 
 public sealed record ProgressionQuestStartResult(
     bool Success,
@@ -81,7 +84,12 @@ public sealed record ProgressionHuntingTargetCandidate(
     string TargetName,
     int Killed,
     int Required,
-    IReadOnlyList<HuntingLogLocation> Locations);
+    IReadOnlyList<HuntingLogLocation> Locations)
+{
+    public bool HasOpenWorldLocation => Locations.Any(location => location.IsOpenWorld);
+    public bool HasDutyLocation => Locations.Any(location => !location.IsOpenWorld && location.DutyTerritoryId != 0);
+    public bool IsDutyOnly => !HasOpenWorldLocation && HasDutyLocation;
+}
 
 public sealed record ProgressionHuntingProviderObservation(
     bool IsAvailable,
@@ -374,6 +382,15 @@ public sealed class ProgressionExecutionCoordinator
     [
         ResourceKind.Teleport,
         ResourceKind.Navigation,
+        ResourceKind.Targeting,
+        ResourceKind.Combat,
+        ResourceKind.Rotation,
+    ];
+    private static readonly ResourceKind[] DutyHuntingLogResources =
+    [
+        ResourceKind.DutyQueue,
+        ResourceKind.Teleport,
+        ResourceKind.UiInteraction,
         ResourceKind.Targeting,
         ResourceKind.Combat,
         ResourceKind.Rotation,
@@ -1118,16 +1135,21 @@ public sealed class ProgressionExecutionCoordinator
             target.Killed,
             target.Required,
             target.Locations);
+        ResourceKind[] requiredResources = target.IsDutyOnly
+            ? DutyHuntingLogResources
+            : HuntingLogResources;
         NexusTask task = new(
             taskId,
             State.Goal.Id,
             RunHuntingLogKind,
             1,
             $"Complete {target.TargetName}",
-            "Nexus selected one exact Hunting Log target and owns travel, targeting, combat, Stop, and kill verification.",
+            target.IsDutyOnly
+                ? "Nexus selected one exact Grand Company target and owns the single duty run, Stop, and kill verification."
+                : "Nexus selected one exact Hunting Log target and owns travel, targeting, combat, Stop, and kill verification.",
             HuntingLogCapability,
             huntingProvider.Id,
-            HuntingLogResources.ToHashSet(),
+            requiredResources.ToHashSet(),
             NexusTaskStatus.Ready,
             JsonSerializer.Serialize(payload),
             "Waiting to acquire Hunting Log resources.",
@@ -1153,7 +1175,7 @@ public sealed class ProgressionExecutionCoordinator
 
         LeaseOwner owner = new(State.Goal.Id, taskId, attemptId, State.Goal.Priority,
             $"Progression: Hunting Log target {target.TargetName}");
-        if (!leases.TryAcquire(owner, HuntingLogResources, LeaseLifetime, out activeLease,
+        if (!leases.TryAcquire(owner, requiredResources, LeaseLifetime, out activeLease,
                 out ResourceLeaseSnapshot? blocking))
         {
             string blocker = blocking is null ? "another task" : blocking.Owner.Reason;
@@ -1543,6 +1565,7 @@ public sealed class ProgressionExecutionCoordinator
     {
         ProgressionQuestKind.ClassJobRole => "Class/Job/Role quest",
         ProgressionQuestKind.GeneralSideQuest => "general side quest",
+        ProgressionQuestKind.AetherCurrent => "Aether Current quest",
         _ => "quest",
     };
 

@@ -25,6 +25,8 @@ public sealed record HuntingLogTargetProgress(
 {
     public bool IsComplete => Killed >= Required;
     public bool HasOpenWorldLocation => Locations.Any(location => location.IsOpenWorld);
+    public bool HasDutyLocation => Locations.Any(location => !location.IsOpenWorld && location.DutyTerritoryId != 0);
+    public bool IsDutyOnly => !HasOpenWorldLocation && HasDutyLocation;
 }
 
 public static class HuntingLogCandidatePolicy
@@ -38,10 +40,12 @@ public static class HuntingLogCandidatePolicy
         ArgumentNullException.ThrowIfNull(attempted);
 
         return targets
-            .Where(target => target.IsCurrentRank && !target.IsComplete && target.HasOpenWorldLocation)
+            .Where(target => target.IsCurrentRank && !target.IsComplete &&
+                             (target.HasOpenWorldLocation || target.HasDutyLocation))
             .Where(target => !attempted.Contains((target.LogKey, target.Rank, target.TaskIndex, target.MonsterIndex)))
             .OrderByDescending(target => target.Locations.Any(location =>
                 location.IsOpenWorld && location.TerritoryId == currentTerritoryId))
+            .ThenBy(target => target.IsDutyOnly ? 1 : 0)
             .ThenBy(target => target.LogKey >= 10_000 ? 1 : 0)
             .ThenBy(target => target.Rank)
             .ThenBy(target => target.TaskIndex)

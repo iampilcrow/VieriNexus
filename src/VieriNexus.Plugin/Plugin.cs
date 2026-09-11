@@ -170,8 +170,12 @@ public sealed class Plugin : IDalamudPlugin
             new NavigationSafetySimulator());
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
         progressAtlas = new ProgressAtlasService(DataManager, ClientState, PlayerState);
+        progressionProviders = new ProgressionProviderService(
+            PluginInterface, dependencyService, DataManager, PlayerState, ObjectTable,
+            ClientState, Condition, GameGui, navigationLibrary, suiteTravelProvider);
         progressAtlasActions = new ProgressAtlasActionService(
             progressAtlas,
+            progressionProviders,
             suiteTravelProvider,
             resourceLeases,
             ClientState,
@@ -181,6 +185,7 @@ public sealed class Plugin : IDalamudPlugin
         huntingLog = new NexusHuntingLogService(
             PluginInterface,
             progressAtlas,
+            progressionProviders,
             suiteTravelProvider,
             navigationStopProvider,
             dependencyService,
@@ -190,9 +195,6 @@ public sealed class Plugin : IDalamudPlugin
             TargetManager,
             Condition,
             CommandManager);
-        progressionProviders = new ProgressionProviderService(
-            PluginInterface, dependencyService, DataManager, PlayerState, ObjectTable,
-            ClientState, Condition, GameGui, navigationLibrary, suiteTravelProvider);
         progressionRuntime = new ProgressionRuntimeService(
             PluginInterface.GetPluginConfigDirectory(),
             resourceLeases,

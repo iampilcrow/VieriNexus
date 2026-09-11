@@ -28,6 +28,7 @@ internal sealed class ProgressAtlasService
     private readonly MapDiscoveryRegion[] mapDiscoveryRegions;
     private readonly AetheryteAtlasTarget[] aetheryteTargets;
     private readonly AetherCurrentAtlasTarget[] aetherCurrentTargets;
+    private readonly AetherCurrentQuestAtlasTarget[] aetherCurrentQuestTargets;
     private readonly HuntingLogCatalog huntingLogCatalog;
     private DateTimeOffset lastRefresh = DateTimeOffset.MinValue;
     private DateTimeOffset lastAchievementRequest = DateTimeOffset.MinValue;
@@ -71,6 +72,27 @@ internal sealed class ProgressAtlasService
             .Order()
             .ToArray();
         aetherCurrentTargets = LoadAetherCurrentTargets();
+        aetherCurrentQuestTargets = dataManager.GetExcelSheet<AetherCurrentCompFlgSet>()
+            .Where(row => row.RowId > 0 && row.Territory.IsValid)
+            .SelectMany(row => row.AetherCurrents
+                .Where(current => current.RowId > 0 && current.Value.Quest.RowId > 0)
+                .Select(current =>
+                {
+                    Quest quest = current.Value.Quest.Value;
+                    uint questId = quest.RowId & 0xFFFF;
+                    string name = quest.Name.ExtractText();
+                    return new AetherCurrentQuestAtlasTarget(
+                        current.RowId,
+                        questId,
+                        string.IsNullOrWhiteSpace(name) ? $"Quest {questId}" : name,
+                        quest.ClassJobLevel[0],
+                        row.Territory.RowId);
+                }))
+            .DistinctBy(target => target.QuestId)
+            .OrderBy(target => target.TerritoryId)
+            .ThenBy(target => target.RequiredLevel)
+            .ThenBy(target => target.QuestId)
+            .ToArray();
         achievementIds = dataManager.GetExcelSheet<SheetAchievement>()
             .Where(row => row.RowId > 0 && !row.Name.IsEmpty && row.AchievementCategory.RowId > 0)
             .Where(row => row.AchievementCategory.Value.AchievementKind.RowId != 9)
@@ -87,6 +109,7 @@ internal sealed class ProgressAtlasService
     internal IReadOnlyList<HuntingLogTargetProgress> HuntingTargets => huntingTargets;
     internal IReadOnlyList<AetheryteAtlasTarget> AetheryteTargets => aetheryteTargets;
     internal IReadOnlyList<AetherCurrentAtlasTarget> AetherCurrentTargets => aetherCurrentTargets;
+    internal IReadOnlyList<AetherCurrentQuestAtlasTarget> AetherCurrentQuestTargets => aetherCurrentQuestTargets;
     internal IReadOnlyList<MapDiscoveryRegion> ExplorationTargets => mapDiscoveryRegions;
 
     internal static unsafe bool IsAetheryteUnlocked(uint id)
@@ -433,6 +456,13 @@ internal sealed class ProgressAtlasService
     {
         internal Vector3 Position => new(X, Y, Z);
     }
+
+    internal sealed record AetherCurrentQuestAtlasTarget(
+        uint AetherCurrentId,
+        uint QuestId,
+        string QuestName,
+        int RequiredLevel,
+        uint TerritoryId);
 
     internal sealed record MapDiscoveryRegion(
         uint TerritoryId,

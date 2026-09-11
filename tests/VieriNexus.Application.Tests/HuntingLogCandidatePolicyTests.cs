@@ -19,7 +19,7 @@ public sealed class HuntingLogCandidatePolicyTests
     }
 
     [Fact]
-    public void SkipsCompleteDutyFutureRankAndAttemptedTargets()
+    public void SelectsDutyTargetAfterSkippingCompleteFutureRankAndAttemptedTargets()
     {
         HuntingLogTargetProgress complete = Target(1, 0, 0, 0, 140) with { Killed = 3 };
         HuntingLogTargetProgress duty = Target(1, 0, 1, 0, 0) with
@@ -34,7 +34,25 @@ public sealed class HuntingLogCandidatePolicyTests
             142,
             new HashSet<(uint, int, int, int)> { (1, 0, 3, 0) });
 
-        Assert.Null(selected);
+        Assert.Same(duty, selected);
+    }
+
+    [Fact]
+    public void PrefersReachableOpenWorldTargetBeforeDutyTarget()
+    {
+        HuntingLogTargetProgress duty = Target(10_001, 0, 0, 0, 0) with
+        {
+            Locations = [new HuntingLogLocation(0, 0, 1245, 0, 0)],
+        };
+        HuntingLogTargetProgress field = Target(10_001, 0, 1, 0, 141);
+
+        HuntingLogTargetProgress? selected = HuntingLogCandidatePolicy.SelectNext(
+            [duty, field],
+            141,
+            new HashSet<(uint, int, int, int)>());
+
+        Assert.Same(field, selected);
+        Assert.True(duty.IsDutyOnly);
     }
 
     private static HuntingLogTargetProgress Target(

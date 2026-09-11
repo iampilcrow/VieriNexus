@@ -26,8 +26,10 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
     private static readonly TimeSpan SearchTimeout = TimeSpan.FromSeconds(25);
     private static readonly TimeSpan CombatTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan CreditTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan DutyStartTimeout = TimeSpan.FromSeconds(45);
 
     private readonly ProgressAtlasService atlas;
+    private readonly ProgressionProviderService dutyProvider;
     private readonly NexusRouteTravelProvider travel;
     private readonly VnavmeshNavigationStopProvider navigation;
     private readonly DependencyService dependencies;
@@ -57,10 +59,15 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
     private string? previousPreset;
     private bool? previousClearOnCombatEnd;
     private bool? previousQuestBattles;
+    private ProgressionDutyCandidate? activeDuty;
+    private bool dutyStartObserved;
+    private string? pendingDutyStopReason;
+    private bool pendingDutyStopIsFailure;
 
     internal NexusHuntingLogService(
         IDalamudPluginInterface pluginInterface,
         ProgressAtlasService atlas,
+        ProgressionProviderService dutyProvider,
         NexusRouteTravelProvider travel,
         VnavmeshNavigationStopProvider navigation,
         DependencyService dependencies,
@@ -72,6 +79,7 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
         ICommandManager commandManager)
     {
         this.atlas = atlas;
+        this.dutyProvider = dutyProvider;
         this.travel = travel;
         this.navigation = navigation;
         this.dependencies = dependencies;
@@ -92,22 +100,26 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
 
     public ProviderId Id { get; } = new("vieri.nexus.hunting-log/v1");
 
-    internal bool IsReady => IsProviderReady(out _);
+    internal bool IsReady => IsOpenWorldProviderReady(out _) || dutyProvider.IsDutyProviderReady;
 
-    internal string ReadinessDetail => IsProviderReady(out string reason)
-        ? "Nexus owns Hunting Log selection and verification; stock Lifestream, vnavmesh, and Boss Mod supply narrow mechanics."
-        : reason;
+    internal string ReadinessDetail => IsReady
+        ? "Nexus owns Hunting Log selection and verification; stock travel, combat, and duty providers supply narrow mechanics."
+        : "Hunting Log needs either stock Lifestream, vnavmesh, and Boss Mod for field targets or stock AutoDuty for duty targets.";
 
     public IReadOnlyList<ProgressionHuntingTargetCandidate> EligibleTargets(uint classJobId, int currentLevel)
     {
-        if (!IsProviderReady(out _) || !clientState.IsLoggedIn || objectTable.LocalPlayer is null)
+        if (!IsReady || !clientState.IsLoggedIn || objectTable.LocalPlayer is null)
             return [];
 
         int grandCompanyRank = CurrentGrandCompanyRank();
         HuntingLogTargetProgress[] eligible = atlas.HuntingTargets
-            .Where(target => target.IsCurrentRank && !target.IsComplete && target.HasOpenWorldLocation)
+            .Where(target => target.IsCurrentRank && !target.IsComplete)
             .Where(target => currentLevel >= RequiredLevel(target))
             .Where(target => target.LogKey < 10_000 || grandCompanyRank >= RequiredGrandCompanyRank(target.Rank))
+            .Where(target =>
+                target.HasOpenWorldLocation && IsOpenWorldProviderReady(out _) ||
+                target.Locations.Any(location => !location.IsOpenWorld && location.DutyTerritoryId != 0 &&
+                    dutyProvider.EligibleDutyForTerritory(location.DutyTerritoryId, currentLevel) is not null))
             .ToArray();
         HuntingLogTargetProgress? selected = HuntingLogCandidatePolicy.SelectNext(
             eligible,
@@ -123,7 +135,14 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
         HuntingLogTargetProgress? progress = FindProgress(target);
         int killed = progress?.Killed ?? target.Killed;
         bool verifiedComplete = progress?.IsComplete == true;
-        bool providerReady = IsProviderReady(out string unavailable);
+        bool providerReady = phase is RunPhase.DutyRunning or RunPhase.DutyStopping
+            ? dutyProvider.IsDutyProviderReady
+            : IsOpenWorldProviderReady(out _);
+        string unavailable = phase is RunPhase.DutyRunning or RunPhase.DutyStopping
+            ? "The stock AutoDuty contract required by this Grand Company target is unavailable."
+            : IsOpenWorldProviderReady(out string openWorldUnavailable)
+                ? string.Empty
+                : openWorldUnavailable;
         // Once Nexus has synchronously stopped and cleared its own state, the coordinator can
         // safely confirm inactivity even if a provider disappeared. Readiness for a new run is
         // still reported separately through IsReady.
@@ -147,24 +166,32 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
             message = "Stop the current Hunting Log target before starting another one.";
             return false;
         }
-        if (!IsProviderReady(out message))
-            return false;
         if (condition[ConditionFlag.InCombat])
         {
             message = "Hunting Log travel cannot begin while already in combat.";
             return false;
         }
-        if (target.Locations.All(location => !location.IsOpenWorld))
+        HuntingLogLocation[] openWorldLocations = target.Locations.Where(location => location.IsOpenWorld).ToArray();
+        ProgressionDutyCandidate? duty = target.Locations
+            .Where(location => !location.IsOpenWorld && location.DutyTerritoryId != 0)
+            .Select(location => dutyProvider.EligibleDutyForTerritory(location.DutyTerritoryId,
+                checked((int)(objectTable.LocalPlayer?.Level ?? 0))))
+            .FirstOrDefault(candidate => candidate is not null);
+        bool useOpenWorld = openWorldLocations.Length > 0 && IsOpenWorldProviderReady(out _);
+        if (!useOpenWorld && duty is null)
         {
-            message = "This Hunting Log target is duty-only; the open-world executor cannot run it.";
+            message = target.IsDutyOnly
+                ? "The required duty is not unlocked or does not have a stock AutoDuty path."
+                : IsOpenWorldProviderReady(out string unavailable) ? "No runnable target location is available." : unavailable;
             return false;
         }
 
         try
         {
             activeTarget = target;
-            locations = target.Locations
-                .Where(location => location.IsOpenWorld)
+            activeDuty = duty;
+            dutyStartObserved = false;
+            locations = openWorldLocations
                 .OrderByDescending(location => location.TerritoryId == clientState.TerritoryType)
                 .ThenBy(location => location.TerritoryId)
                 .ThenBy(location => location.MapId)
@@ -175,6 +202,19 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
             failed = false;
             complete = false;
             engagedObjectId = 0;
+            if (!useOpenWorld)
+            {
+                if (!dutyProvider.TryStartDuty(activeDuty!.TerritoryId, out message))
+                {
+                    ResetToIdle(message, didFail: true);
+                    return false;
+                }
+                phase = RunPhase.DutyRunning;
+                phaseStartedAt = DateTimeOffset.UtcNow;
+                detail = $"Running {activeDuty.Name} once for exact Grand Company Hunting Log credit: {target.TargetName}.";
+                message = $"Nexus started one bounded duty for {target.TargetName}: {activeDuty.Name}.";
+                return true;
+            }
             CaptureBossModState();
             if (!StartTravelToCurrentLocation(out message))
             {
@@ -196,6 +236,26 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
 
     public bool TryStopHunt(out string message)
     {
+        if (phase == RunPhase.DutyStopping)
+        {
+            message = "Stop is already requested; Nexus is waiting for AutoDuty to confirm inactivity.";
+            detail = message;
+            return true;
+        }
+        if (phase == RunPhase.DutyRunning)
+        {
+            if (!dutyProvider.TryStopDuty(out message))
+            {
+                detail = $"Stop has not been confirmed: {message}";
+                return false;
+            }
+            pendingDutyStopReason = "Hunting Log work stopped. No target will be replayed.";
+            pendingDutyStopIsFailure = false;
+            phase = RunPhase.DutyStopping;
+            detail = "Stop requested; Nexus is retaining ownership until AutoDuty confirms inactivity.";
+            message = detail;
+            return true;
+        }
         CleanupProviders(restorePreset: true);
         ResetToIdle("Hunting Log work stopped. No target will be replayed.");
         message = detail;
@@ -207,8 +267,14 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
         if (phase == RunPhase.Idle || activeTarget is null)
             return;
 
+        if (phase == RunPhase.DutyStopping)
+        {
+            UpdateDutyStopping();
+            return;
+        }
+
         HuntingLogTargetProgress? progress = FindProgress(activeTarget);
-        if (progress?.IsComplete == true)
+        if (progress?.IsComplete == true && phase is not (RunPhase.DutyRunning or RunPhase.DutyStopping))
         {
             CleanupProviders(restorePreset: true);
             complete = true;
@@ -217,7 +283,15 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
             return;
         }
 
-        if (!IsProviderReady(out string unavailable))
+        bool providerReady = phase is RunPhase.DutyRunning or RunPhase.DutyStopping
+            ? dutyProvider.IsDutyProviderReady
+            : IsOpenWorldProviderReady(out _);
+        string unavailable = phase is RunPhase.DutyRunning or RunPhase.DutyStopping
+            ? "The stock AutoDuty contract became unavailable during Grand Company Hunting Log work."
+            : IsOpenWorldProviderReady(out string openWorldUnavailable)
+                ? string.Empty
+                : openWorldUnavailable;
+        if (!providerReady)
         {
             Fail(unavailable);
             return;
@@ -241,6 +315,9 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
                     break;
                 case RunPhase.WaitingForCredit:
                     UpdateCredit(now, progress);
+                    break;
+                case RunPhase.DutyRunning:
+                    UpdateDuty(now, progress);
                     break;
             }
         }
@@ -274,6 +351,59 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
         phase = RunPhase.Searching;
         phaseStartedAt = now;
         detail = $"Searching the known camp for {activeTarget!.TargetName}.";
+    }
+
+    private void UpdateDuty(DateTimeOffset now, HuntingLogTargetProgress? progress)
+    {
+        ProgressionDutyProviderObservation observation = dutyProvider.ObserveDuty();
+        if (!observation.IsAvailable || observation.IsStopped is null)
+        {
+            Fail("The stock duty provider became unavailable while Nexus retained ownership.");
+            return;
+        }
+
+        dutyStartObserved |= observation.IsStopped == false;
+        if (observation.IsStopped == false)
+        {
+            detail = $"{activeDuty!.Name} is running once for {activeTarget!.TargetName}; Nexus will verify the exact Hunting Log credit afterward.";
+            return;
+        }
+        if (!dutyStartObserved)
+        {
+            if (now - phaseStartedAt >= DutyStartTimeout)
+                Fail($"{activeDuty!.Name} did not start within 45 seconds.");
+            return;
+        }
+        if (progress?.IsComplete == true)
+        {
+            CleanupProviders(restorePreset: true);
+            complete = true;
+            phase = RunPhase.Idle;
+            detail = $"Verified {activeTarget!.TargetName} complete ({progress.Killed}/{progress.Required}) after {activeDuty!.Name}.";
+            return;
+        }
+
+        Fail($"{activeDuty!.Name} ended, but the game did not confirm all required {activeTarget!.TargetName} credit.");
+    }
+
+    private void UpdateDutyStopping()
+    {
+        ProgressionDutyProviderObservation observation = dutyProvider.ObserveDuty();
+        if (!observation.IsAvailable || observation.IsStopped is null)
+        {
+            detail = "Stop was requested; Nexus is retaining ownership until AutoDuty becomes observable and inactive.";
+            return;
+        }
+        if (observation.IsStopped == false)
+        {
+            detail = "Stop was requested; waiting for AutoDuty to become inactive.";
+            return;
+        }
+
+        string stopped = pendingDutyStopReason ?? "Grand Company Hunting Log duty stopped.";
+        bool didFail = pendingDutyStopIsFailure;
+        CleanupProviders(restorePreset: true);
+        ResetToIdle(stopped, didFail);
     }
 
     private void UpdateSearch(DateTimeOffset now)
@@ -465,6 +595,26 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
 
     private void Fail(string reason)
     {
+        if (phase == RunPhase.DutyStopping)
+        {
+            pendingDutyStopReason ??= reason;
+            pendingDutyStopIsFailure = true;
+            detail = $"{reason} Nexus is retaining ownership until AutoDuty confirms inactivity.";
+            return;
+        }
+        if (phase == RunPhase.DutyRunning)
+        {
+            if (!dutyProvider.TryStopDuty(out string stopMessage))
+            {
+                detail = $"{reason} Stop is not yet confirmed: {stopMessage}";
+                return;
+            }
+            pendingDutyStopReason = reason;
+            pendingDutyStopIsFailure = true;
+            phase = RunPhase.DutyStopping;
+            detail = $"{reason} Stop was requested; Nexus is retaining ownership until inactivity is confirmed.";
+            return;
+        }
         CleanupProviders(restorePreset: true);
         ResetToIdle(reason, didFail: true);
     }
@@ -477,6 +627,10 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
         detail = message;
         engagedObjectId = 0;
         activeTarget = null;
+        activeDuty = null;
+        dutyStartObserved = false;
+        pendingDutyStopReason = null;
+        pendingDutyStopIsFailure = false;
         locations = [];
         locationIndex = 0;
     }
@@ -499,7 +653,7 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
             candidate.TaskIndex == target.TaskIndex &&
             candidate.MonsterIndex == target.MonsterIndex);
 
-    private bool IsProviderReady(out string reason)
+    private bool IsOpenWorldProviderReady(out string reason)
     {
         try
         {
@@ -678,5 +832,7 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
         Approaching,
         Engaging,
         WaitingForCredit,
+        DutyRunning,
+        DutyStopping,
     }
 }

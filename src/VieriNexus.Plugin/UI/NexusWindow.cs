@@ -2023,6 +2023,18 @@ internal sealed class NexusWindow : Window
             (_, progressAtlasMessage) = start();
         }
         ImGui.EndDisabled();
+
+        if (category.Id == ProgressAtlasCategoryId.AetherCurrents)
+        {
+            int readyQuests = progressAtlasActions.ReadyAetherCurrentQuests;
+            ImGui.BeginDisabled(readyQuests == 0 || status.IsActive);
+            if (ImGui.Button($"Run next ready current quest ({readyQuests})###AtlasCurrentQuest"))
+                progressAtlasActions.StartNextAetherCurrentQuest(out progressAtlasMessage);
+            ImGui.EndDisabled();
+            if (readyQuests == 0 && progressAtlasActions.RemainingAetherCurrentQuests > 0)
+                TextWrapped(NexusTheme.Muted,
+                    $"{progressAtlasActions.RemainingAetherCurrentQuests} quest current(s) remain; the next one appears here when its level and prerequisites unlock.");
+        }
     }
 
     private void DrawHuntingLogAtlasTargets()

@@ -28,6 +28,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
     private readonly DependencyService dependencies;
     private readonly IDataManager dataManager;
+    private readonly IClientState clientState;
+    private readonly HashSet<uint> aetherCurrentQuestIds;
     private readonly ICallGateSubscriber<bool> codexIsRunning;
     private readonly ICallGateSubscriber<string?> codexCurrentQuest;
     private readonly ICallGateSubscriber<string, bool> codexStartSingleQuest;
@@ -63,6 +65,10 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private bool eligibleQuestCacheIncludesSideQuests;
     private string? eligibleQuestCacheProvider;
     private IReadOnlyList<ProgressionQuestCandidate> eligibleQuestCache = [];
+    private long eligibleAetherCurrentQuestCacheExpiresAt;
+    private string? eligibleAetherCurrentQuestCacheProvider;
+    private int eligibleAetherCurrentQuestCacheLevel;
+    private IReadOnlyList<ProgressionQuestCandidate> eligibleAetherCurrentQuestCache = [];
     private readonly Dictionary<string, HashSet<string>> unsupportedQuestIdsByProvider = [];
     private long nexusGearStartedSequence;
     private long nexusGearCompletedSequence;
@@ -81,6 +87,13 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     {
         this.dependencies = dependencies;
         this.dataManager = dataManager;
+        this.clientState = clientState;
+        aetherCurrentQuestIds = dataManager.GetExcelSheet<AetherCurrentCompFlgSet>()
+            .Where(row => row.RowId > 0)
+            .SelectMany(row => row.AetherCurrents)
+            .Where(current => current.RowId > 0 && current.Value.Quest.RowId > 0)
+            .Select(current => current.Value.Quest.RowId & 0xFFFF)
+            .ToHashSet();
         codexIsRunning = pluginInterface.GetIpcSubscriber<bool>("VieriCodex.IsRunning");
         codexCurrentQuest = pluginInterface.GetIpcSubscriber<string?>("VieriCodex.GetCurrentQuestId");
         codexStartSingleQuest = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.StartSingleQuest");
@@ -316,7 +329,72 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         return eligibleQuestCache;
     }
 
-    private static ProgressionQuestKind? ClassifyQuest(
+    internal IReadOnlyList<ProgressionQuestCandidate> EligibleAetherCurrentQuests(
+        IReadOnlyList<ProgressAtlasService.AetherCurrentQuestAtlasTarget> targets,
+        int currentLevel)
+    {
+        ProgressionProviderSelection selection = Snapshot().Questing;
+        if (!selection.IsReady)
+            return [];
+
+        long now = Environment.TickCount64;
+        string selectedProvider = selection.Selected!.Id.Value;
+        if (eligibleAetherCurrentQuestCacheLevel == currentLevel &&
+            eligibleAetherCurrentQuestCacheProvider == selectedProvider &&
+            now < eligibleAetherCurrentQuestCacheExpiresAt)
+            return eligibleAetherCurrentQuestCache;
+
+        HashSet<string> unsupported = unsupportedQuestIdsByProvider.GetValueOrDefault(selectedProvider) ?? [];
+        List<ProgressionQuestCandidate> candidates = [];
+        foreach (ProgressAtlasService.AetherCurrentQuestAtlasTarget target in targets
+                     .Where(target => target.RequiredLevel <= currentLevel)
+                     .Where(target => !ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId))
+                     .OrderByDescending(target => target.TerritoryId == clientState.TerritoryType)
+                     .ThenBy(target => target.RequiredLevel)
+                     .ThenBy(target => target.QuestId))
+        {
+            string questId = target.QuestId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (unsupported.Contains(questId))
+                continue;
+            try
+            {
+                if (InvokeQuestBool(selection, codexIsQuestComplete, questionableIsQuestComplete, questId))
+                    continue;
+                bool accepted = InvokeQuestBool(selection, codexIsQuestAccepted, questionableIsQuestAccepted, questId);
+                bool ready = InvokeQuestBool(selection, codexIsReadyToAcceptQuest,
+                    questionableIsReadyToAcceptQuest, questId);
+                bool locked = InvokeQuestBool(selection, codexIsQuestLocked, questionableIsQuestLocked, questId);
+                if (!accepted && (!ready || locked))
+                    continue;
+
+                candidates.Add(new ProgressionQuestCandidate(
+                    questId,
+                    target.QuestName,
+                    target.RequiredLevel,
+                    accepted,
+                    ProgressionQuestKind.AetherCurrent,
+                    target.TerritoryId,
+                    target.AetherCurrentId));
+            }
+            catch
+            {
+                // One temporarily unreadable quest must not hide other exact Aether Current work.
+            }
+        }
+
+        eligibleAetherCurrentQuestCacheLevel = currentLevel;
+        eligibleAetherCurrentQuestCacheProvider = selectedProvider;
+        eligibleAetherCurrentQuestCacheExpiresAt = now + 30_000;
+        eligibleAetherCurrentQuestCache = candidates
+            .OrderByDescending(candidate => candidate.IsAccepted)
+            .ThenByDescending(candidate => candidate.TerritoryId == clientState.TerritoryType)
+            .ThenBy(candidate => candidate.RequiredLevel)
+            .ThenBy(candidate => candidate.QuestId, StringComparer.Ordinal)
+            .ToArray();
+        return eligibleAetherCurrentQuestCache;
+    }
+
+    private ProgressionQuestKind? ClassifyQuest(
         Quest quest,
         uint classJobId,
         uint chapter,
@@ -328,6 +406,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
         bool isMainScenario = quest.JournalGenre.ValueNullable?.Icon == 61412;
         uint questId = quest.RowId & 0xFFFF;
+        if (aetherCurrentQuestIds.Contains(questId))
+            return null;
         bool sideQuest = GeneralSideQuestPolicy.IsGeneralSideQuest(
             questId,
             isMainScenario,
@@ -414,7 +494,10 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             string? current = InvokeQuestValue(selection, codexCurrentQuest, questionableCurrentQuest);
             bool complete = InvokeQuestBool(selection, codexIsQuestComplete, questionableIsQuestComplete, questId);
             if (complete)
+            {
                 eligibleQuestCacheExpiresAt = 0;
+                eligibleAetherCurrentQuestCacheExpiresAt = 0;
+            }
             return new(true, running, current, complete,
                 complete
                     ? "The selected quest is complete."
@@ -443,9 +526,12 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             bool accepted = selection.Selected!.Id == CodexProviderId
                 ? codexStartSingleQuest.InvokeFunc(quest.QuestId)
                 : questionableStartSingleQuest.InvokeFunc(quest.QuestId);
-            string kind = quest.Kind == ProgressionQuestKind.GeneralSideQuest
-                ? "general side quest"
-                : "Class / Job / Role quest";
+            string kind = quest.Kind switch
+            {
+                ProgressionQuestKind.GeneralSideQuest => "general side quest",
+                ProgressionQuestKind.AetherCurrent => "Aether Current quest",
+                _ => "Class / Job / Role quest",
+            };
             if (accepted)
                 return new(true, false,
                     $"Nexus asked {selection.Selected.DisplayName} to complete one exact {kind}, then return control for verification.");
@@ -454,6 +540,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 unsupportedQuestIdsByProvider[selection.Selected.Id.Value] = rejected = [];
             rejected.Add(quest.QuestId);
             eligibleQuestCacheExpiresAt = 0;
+            eligibleAetherCurrentQuestCacheExpiresAt = 0;
             return new(false, true,
                 $"{selection.Selected.DisplayName} has no path for {quest.Name}; Nexus skipped it and will choose another eligible activity.");
         }
@@ -547,6 +634,43 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         eligibleDutyCacheExpiresAt = now + 5_000;
         eligibleDutyCache = result;
         return result;
+    }
+
+    internal bool IsDutyProviderReady => Snapshot().Duties.IsReady &&
+                                         autoDutyContentHasPath.HasFunction &&
+                                         autoDutyIsStopped.HasFunction &&
+                                         autoDutyRun.HasAction &&
+                                         (autoDutySetLevelingMode.HasAction || autoDutySetConfig.HasAction) &&
+                                         autoDutyStop.HasAction;
+
+    internal unsafe ProgressionDutyCandidate? EligibleDutyForTerritory(uint territoryId, int currentLevel)
+    {
+        if (!IsDutyProviderReady || UIState.Instance() is null)
+            return null;
+
+        ContentFinderCondition? match = dataManager.GetExcelSheet<ContentFinderCondition>()
+            .FirstOrDefault(row => row.TerritoryType.RowId == territoryId &&
+                                   row.Content.RowId != 0 && row.ContentType.RowId == 2);
+        if (match is not { RowId: > 0 } row || row.ClassJobLevelRequired > currentLevel ||
+            row.ItemLevelRequired > CurrentItemLevel() || !UIState.IsInstanceContentUnlocked(row.Content.RowId))
+            return null;
+        try
+        {
+            if (!autoDutyContentHasPath.InvokeFunc(territoryId))
+                return null;
+        }
+        catch
+        {
+            return null;
+        }
+
+        string name = row.Name.ExtractText();
+        return new ProgressionDutyCandidate(
+            territoryId,
+            row.Content.RowId,
+            string.IsNullOrWhiteSpace(name) ? $"Duty {territoryId}" : name,
+            row.ClassJobLevelRequired,
+            checked((int)row.ItemLevelRequired));
     }
 
     internal ProgressionDutyProviderObservation ObserveDuty()
