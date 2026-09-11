@@ -3,7 +3,7 @@
 Working snapshot: 2026-09-11 (America/Chicago)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
 Current product version: `0.1.0.39`
-Current published release source before this workstream: `0.1.0.38`, commit `00a73be28cd387a34123f642ff027e5e153ec7b7`. Version 0.1.0.39 is the current release candidate. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current published release source: `0.1.0.39`, commit `1b2cbc100b933ee41848ae5a247515b10a846cd9`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -698,12 +698,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `00a73be28cd387a34123f642ff027e5e153ec7b7 Move safe operations into Nexus`.
+- Current released implementation commit: `1b2cbc100b933ee41848ae5a247515b10a846cd9 Run exact class job and role quests through Questionable`.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.38`. Dalamud API 15. This version is published and live through the production Dalamud feed.
+- Plugin project version: `0.1.0.39`. Dalamud API 15. This version is published and live through the production Dalamud feed.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -1128,7 +1128,7 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current production release before this workstream:** `0.1.0.38`; `0.1.0.39` is the current release candidate.
+- **Current production release:** `0.1.0.39`, source `1b2cbc100b933ee41848ae5a247515b10a846cd9`.
 - **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.39</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
@@ -1494,6 +1494,8 @@ Verification evidence for 0.1.0.36: Nexus source `7a90146cabf97fb067807c1f21467c
 Verification evidence for 0.1.0.37: Nexus source `105b27e74e5408121b18ee95d309e058978cb4da` and Daily Pilcrow release `cd525a53b9c0b07fa803d6f4fae88cd3da8c06bf` are pushed. All 202 Nexus tests, the zero-warning clean Nexus Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Production deployment `dpl_4ncXLH8rWboS6aP7KD45EqNVSebF` is Ready on `https://thedailypilcrow.com`. The live feed advertises VieriNexus 0.1.0.37; its public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `72DC7A831216F25DA411F113572D2740DE17E9C8F709B140CF6711A2CDE7091D` / `13927878F15BEED04F41FD148F140E6AB8579C57727F0A6318B52DC3EEE37AB9`. GitHub Actions Discord workflow `34561678803` completed successfully. The complete saved VieriAutoDuty profile and operations policy can now be backed up and imported transactionally into Nexus staging, and the optional compact Nexus overlay organizes only working controls under Goto, Gear, Inventory, and Extras. Native maintenance execution remains the next implementation slice, so the staged policies cannot cause duplicate automation. No special user-side retest is required for this preservation/UI release.
 
 Verification evidence for 0.1.0.38: Nexus source `00a73be28cd387a34123f642ff027e5e153ec7b7`, Daily Pilcrow release `fd9c2af18c32050161b267f714620e7ff538f99b`, and Daily Pilcrow documentation `c6fb97ff65e61d31809e40d2dee656295a780299` are pushed. All 208 Nexus tests, the zero-warning clean Nexus Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_8E6kFMwzVL6hSgxjpz9ciWhxLMtR` and final documentation deployment `dpl_ED9JryGXE46KLYKBR3bg9bxjihUG` are Ready on `https://thedailypilcrow.com`. The live feed advertises VieriNexus 0.1.0.38; its public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `CFA604F6C7C488737FC67EFB8ECEE352847B0CEF557D33D1B8EACFB14A498379` / `22B59BA1CC18C8AA94C097E496BE0073C2B2DD34189A5C6CAD4372443BA8D379`. GitHub Actions Discord workflow `34563867173` completed successfully. Nexus now owns independent operations working profiles, safe native maintenance, the striking-dummy menu/travel, global Stop coverage, and install-first local migration for every computer. Destructive maintenance/storage and in-duty withdrawal remain deliberately blocked and are the remaining AutoDuty migration boundary.
+
+Verification evidence for 0.1.0.39: Nexus source `1b2cbc100b933ee41848ae5a247515b10a846cd9` and Daily Pilcrow release `5091724368f0d4bbb1d8d0d46f7104705da0268b` are pushed. All 218 Nexus tests, the zero-warning clean Nexus Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Production deployment `dpl_2sKZgXGgwQG1h5QfEkSatYFj8hjo` is Ready on `https://thedailypilcrow.com`. The live feed advertises VieriNexus 0.1.0.39 exactly once; its public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `46A00C8BAD75D9CFF184C725911510BBB0379B4933EF79E74A29236A51559249` / `B30DF8C429702D2EF068FB9B68B85F2D5B56E6B8034D070E081AB36D95014565`. GitHub Actions Discord workflow `34591024542` completed successfully. Nexus now owns exact Class/Job/Role quest-family selection and the bounded pinned quest lifecycle while Questionable supplies the narrow quest mechanics. Hunting Log and general side quests remain intentionally unavailable pending their own Nexus-owned policies. Every additional computer must install Nexus and run **Migration > Set Up This Computer** before disabling predecessor plugins so its own local configurations can be preserved; current automated importers cover NavPlotter and AutoDuty operations, while the remaining predecessor-specific settings importers are still pending.
 
 ### 18.16 Release report format
 
