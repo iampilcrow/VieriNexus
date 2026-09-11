@@ -1872,7 +1872,7 @@ internal sealed class NexusWindow : Window
             }
             ImGui.TableNextColumn();
             bool huntingLog = draftConfiguration.AllowHuntingLog;
-            if (ImGui.Checkbox("Hunting Log (coming next)", ref huntingLog))
+            if (ImGui.Checkbox("Hunting Log", ref huntingLog))
             {
                 draftConfiguration.AllowHuntingLog = huntingLog;
                 changed = true;
@@ -1918,7 +1918,9 @@ internal sealed class NexusWindow : Window
                 progressionRuntime.CurrentMetrics.ItemLevel,
                 progressionRuntime.CurrentMetrics.Gil),
             providers.Questing,
-            providers.Duties);
+            providers.Duties,
+            progressionRuntime.IsHuntingLogReady,
+            progressionRuntime.HuntingLogReadinessDetail);
         DrawProgressionRuntime(plan, character, draftConfiguration);
         if (ImGui.CollapsingHeader("Provider details###ProgressionProviders"))
             DrawProgressionProviders(providers);
@@ -1970,9 +1972,9 @@ internal sealed class NexusWindow : Window
             EndAutoPanel();
         }
 
-        BeginAutoPanel("NEXT NEXUS-OWNED ATLAS SYSTEMS");
+        BeginAutoPanel("ATLAS EXECUTION");
         TextWrapped(NexusTheme.Muted,
-            "Hunting and Grand Company Logs are being connected to this same live completion model. Their target execution will use stock providers only for narrow movement and combat mechanics.");
+            "Hunting and Grand Company Logs use this same live completion model. When enabled in Progression, Nexus selects and verifies each exact target while stock Lifestream, vnavmesh, and Boss Mod provide only travel, pathing, and rotation mechanics.");
         EndAutoPanel();
     }
 
@@ -2046,15 +2048,20 @@ internal sealed class NexusWindow : Window
             int eligibleSideQuests = eligibleQuestList.Count(
                 quest => quest.Kind == ProgressionQuestKind.GeneralSideQuest);
             int eligibleQuests = eligibleQuestList.Count;
+            int eligibleHuntingTargets = draft.AllowHuntingLog
+                ? progressionRuntime.EligibleHuntingTargets(character.ClassJobId, character.Level).Count
+                : 0;
             BeginAutoPanel("START");
             bool hasExecutableStart = plan.IsExecutionConnected && progressionRuntime.IsGearReadinessReady &&
-                (eligibleQuests > 0 || draft.AllowDuties);
+                (eligibleQuests > 0 || eligibleHuntingTargets > 0 || eligibleDuties > 0);
             NexusTheme.StatusDot(hasExecutableStart ? NexusTheme.Green : NexusTheme.Amber,
                 hasExecutableStart
-                    ? $"Ready • {eligibleClassJobRoleQuests} Class/Job/Role • {eligibleSideQuests} side quest(s) • {eligibleDuties} duties"
-                    : plan.IsExecutionConnected
-                    ? "Nexus gear shopping is unavailable"
-                        : "No executable progression activity is ready");
+                    ? $"Ready • {eligibleClassJobRoleQuests} Class/Job/Role • {eligibleHuntingTargets} hunt target(s) • {eligibleSideQuests} side quest(s) • {eligibleDuties} duties"
+                    : !progressionRuntime.IsGearReadinessReady
+                        ? "Nexus gear shopping is unavailable"
+                        : plan.IsExecutionConnected
+                            ? "No eligible activity is ready for the current job and selected methods"
+                            : "No executable progression activity is ready");
             TextWrapped(NexusTheme.Muted,
                 "Nexus—not the provider—owns the level target, exact quest or duty selection, task history, Stop-after, verification, and replanning.");
             bool canStart = plan.IsValid && !plan.IsSatisfied && hasExecutableStart &&
@@ -2102,8 +2109,10 @@ internal sealed class NexusWindow : Window
             task.Status == NexusTaskStatus.Succeeded && task.Kind.Value == "vieri.duties.run-one/v1");
         int completedQuests = state.Tasks.Count(task =>
             task.Status == NexusTaskStatus.Succeeded && task.Kind.Value == "vieri.quest.run-one/v1");
+        int completedHunts = state.Tasks.Count(task =>
+            task.Status == NexusTaskStatus.Succeeded && task.Kind.Value == "vieri.hunting-log.complete-target/v1");
         ImGui.TextUnformatted(
-            $"Plan revision: {state.Goal.PlanRevision} • Quests: {completedQuests} • Duties: {completedDuties}");
+            $"Plan revision: {state.Goal.PlanRevision} • Quests: {completedQuests} • Hunt targets: {completedHunts} • Duties: {completedDuties}");
         if (activeTask is not null)
         {
             ImGui.TextColored(NexusTheme.Gold, activeTask.Title);
@@ -2221,7 +2230,7 @@ internal sealed class NexusWindow : Window
         if (plan.IsValid && !plan.IsSatisfied)
             TextWrapped(plan.IsExecutionConnected ? NexusTheme.Green : NexusTheme.Amber,
                 plan.IsExecutionConnected
-                    ? "Gear readiness, exact Class/Job/Role quests, general side quests, and duties run as separate verified activities. Nexus replans after each one."
+                    ? "Gear readiness, exact Class/Job/Role quests, Hunting Log targets, general side quests, and duties run as separate verified activities. Nexus replans after each one."
                     : "Planning is live, but no bounded provider lane is ready to execute.");
         EndAutoPanel();
     }

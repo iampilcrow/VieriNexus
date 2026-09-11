@@ -52,6 +52,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
     private readonly ProgressAtlasService progressAtlas;
+    private readonly NexusHuntingLogService huntingLog;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
     private readonly StrikingDummyTravelService strikingDummyTravel;
@@ -167,6 +168,19 @@ public sealed class Plugin : IDalamudPlugin
             new NavigationDiagnosticsMonitor(),
             new NavigationSafetySimulator());
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
+        progressAtlas = new ProgressAtlasService(DataManager, ClientState, PlayerState);
+        huntingLog = new NexusHuntingLogService(
+            PluginInterface,
+            progressAtlas,
+            suiteTravelProvider,
+            navigationStopProvider,
+            dependencyService,
+            ClientState,
+            PlayerState,
+            ObjectTable,
+            TargetManager,
+            Condition,
+            CommandManager);
         progressionProviders = new ProgressionProviderService(
             PluginInterface, dependencyService, DataManager, PlayerState, ObjectTable,
             ClientState, Condition, GameGui, navigationLibrary, suiteTravelProvider);
@@ -174,9 +188,9 @@ public sealed class Plugin : IDalamudPlugin
             PluginInterface.GetPluginConfigDirectory(),
             resourceLeases,
             progressionProviders,
+            huntingLog,
             DutyState,
             Log);
-        progressAtlas = new ProgressAtlasService(DataManager, ClientState, PlayerState);
         gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
         maintenanceRuntime = new NexusMaintenanceRuntimeService(
             resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager);
@@ -238,6 +252,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        huntingLog.Shutdown();
         maintenanceRuntime.Shutdown();
         strikingDummyTravel.Stop(out _);
         gearShoppingRuntime.Shutdown();
@@ -269,6 +284,7 @@ public sealed class Plugin : IDalamudPlugin
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
         progressionProviders.UpdateGearAdapter();
         progressAtlas.Update(DateTimeOffset.UtcNow);
+        huntingLog.Update(DateTimeOffset.UtcNow);
         gearShoppingRuntime.Update();
         maintenanceRuntime.Update(DateTimeOffset.UtcNow);
         strikingDummyTravel.Update(DateTimeOffset.UtcNow);

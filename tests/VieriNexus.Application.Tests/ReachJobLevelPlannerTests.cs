@@ -84,7 +84,7 @@ public sealed class ReachJobLevelPlannerTests
     }
 
     [Fact]
-    public void HuntingLogAloneRemainsBlockedUntilNativeSelectionIsConnected()
+    public void HuntingLogAloneIsBlockedWhenNativeProvidersAreUnavailable()
     {
         ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
             Draft(jobQuests: false, huntingLog: true, sideQuests: false, duties: false),
@@ -93,8 +93,25 @@ public sealed class ReachJobLevelPlannerTests
 
         Assert.False(plan.IsValid);
         Assert.False(plan.IsExecutionConnected);
-        Assert.Contains(plan.Issues, issue => issue.Code == "quest-methods-not-connected");
+        Assert.Contains(plan.Issues, issue => issue.Code == "hunting-log-not-ready");
         Assert.Contains(plan.Issues, issue => issue.Code == "no-provider-ready");
+    }
+
+    [Fact]
+    public void HuntingLogAloneIsExecutableThroughNexusOwnedProvider()
+    {
+        ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
+            Draft(jobQuests: false, huntingLog: true, sideQuests: false, duties: false),
+            Missing(ProgressionProviderRole.Questing),
+            Missing(ProgressionProviderRole.Duties),
+            huntingLogReady: true);
+
+        Assert.True(plan.IsValid);
+        Assert.True(plan.IsExecutionConnected);
+        ProgressionPlanStep step = Assert.Single(plan.Steps, step => step.Code == "complete-hunting-log-target");
+        Assert.Equal(new ProviderId("vieri.nexus.hunting-log/v1"), step.Provider);
+        Assert.Contains(ResourceKind.Teleport, step.Resources);
+        Assert.Contains(ResourceKind.Rotation, step.Resources);
     }
 
     [Fact]

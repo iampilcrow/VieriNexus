@@ -149,13 +149,16 @@ public static class ReachJobLevelPlanner
 
     private static readonly CapabilityId GearCapability = new("vieri.capability.gear.ensure-readiness/v1");
     private static readonly CapabilityId QuestCapability = new("vieri.capability.quest.run-supported/v1");
+    private static readonly CapabilityId HuntingLogCapability = new("vieri.capability.hunting-log.complete-target/v1");
     private static readonly CapabilityId DutyCapability = new("vieri.capability.duty.run/v1");
     private static readonly CapabilityId VerifyCapability = new("vieri.capability.progression.verify-level/v1");
 
     public static ReachJobLevelPlan Build(
         ReachJobLevelGoalDraft draft,
         ProgressionProviderSelection questing,
-        ProgressionProviderSelection duties)
+        ProgressionProviderSelection duties,
+        bool huntingLogReady = false,
+        string? huntingLogDetail = null)
     {
         List<ProgressionPlanIssue> issues = [];
         List<ProgressionPlanStep> steps = [];
@@ -198,15 +201,16 @@ public static class ReachJobLevelPlanner
         }
 
         bool questLaneReady = connectedQuestLaneRequested && questing.IsReady;
+        bool huntingLaneReady = draft.AllowHuntingLog && huntingLogReady;
         bool dutyLaneReady = dutyLaneRequested && duties.IsReady;
-        if (questLaneRequested && !questing.IsReady)
+        if (connectedQuestLaneRequested && !questing.IsReady)
             issues.Add(new(ProgressionPlanIssueSeverity.Warning, "quest-provider-unavailable", questing.Detail));
         if (dutyLaneRequested && !duties.IsReady)
             issues.Add(new(ProgressionPlanIssueSeverity.Warning, "duty-provider-unavailable", duties.Detail));
-        if (draft.AllowHuntingLog)
-            issues.Add(new(ProgressionPlanIssueSeverity.Warning, "quest-methods-not-connected",
-                "Hunting Log needs its Nexus-owned target/combat engine and is not delegated through the ordinary Questionable quest contract."));
-        if ((questLaneRequested || dutyLaneRequested) && !questLaneReady && !dutyLaneReady)
+        if (draft.AllowHuntingLog && !huntingLogReady)
+            issues.Add(new(ProgressionPlanIssueSeverity.Warning, "hunting-log-not-ready",
+                huntingLogDetail ?? "Hunting Log requires its Nexus-owned target engine plus stock Lifestream, vnavmesh, and BossMod."));
+        if ((questLaneRequested || dutyLaneRequested) && !questLaneReady && !huntingLaneReady && !dutyLaneReady)
             issues.Add(new(ProgressionPlanIssueSeverity.Blocker, "no-provider-ready",
                 "None of the enabled leveling methods currently has a compatible provider."));
 
@@ -255,6 +259,23 @@ public static class ReachJobLevelPlanner
                     ResourceKind.UiInteraction,
                 }));
         }
+        if (huntingLaneReady)
+        {
+            steps.Add(new ProgressionPlanStep(
+                "complete-hunting-log-target",
+                "Complete one Hunting Log target",
+                "Nexus selects and verifies one exact target while stock Lifestream, vnavmesh, and BossMod supply only travel, pathing, and rotation mechanics.",
+                HuntingLogCapability,
+                new ProviderId("vieri.nexus.hunting-log/v1"),
+                new HashSet<ResourceKind>
+                {
+                    ResourceKind.Teleport,
+                    ResourceKind.Navigation,
+                    ResourceKind.Targeting,
+                    ResourceKind.Combat,
+                    ResourceKind.Rotation,
+                }));
+        }
 
         if (dutyLaneReady)
         {
@@ -283,11 +304,11 @@ public static class ReachJobLevelPlanner
             null,
             new HashSet<ResourceKind>()));
 
-        bool executionConnected = questLaneReady || dutyLaneReady;
+        bool executionConnected = questLaneReady || huntingLaneReady || dutyLaneReady;
         issues.Add(new(ProgressionPlanIssueSeverity.Information,
             executionConnected ? "bounded-progression-connected" : "execution-not-connected",
             executionConnected
-                ? "Nexus can execute exact Class/Job/Role quests, general side quests, and duties as verified bounded activities, with Nexus-owned gear readiness between duty runs."
+                ? "Nexus can execute exact Class/Job/Role quests, Hunting Log targets, general side quests, and duties as verified bounded activities, with Nexus-owned gear readiness before each new activity pass."
                 : "This plan has no bounded provider task that Nexus can execute yet."));
         return new ReachJobLevelPlan(
             true,

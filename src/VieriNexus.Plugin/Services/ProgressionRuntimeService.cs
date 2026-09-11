@@ -14,6 +14,7 @@ internal sealed class ProgressionRuntimeService
     private readonly string stateDirectory;
     private readonly ResourceLeaseManager leases;
     private readonly ProgressionProviderService provider;
+    private readonly NexusHuntingLogService huntingLog;
     private readonly IPluginLog log;
     private readonly IDutyState dutyState;
     private ProgressionExecutionCoordinator? coordinator;
@@ -24,12 +25,14 @@ internal sealed class ProgressionRuntimeService
         string pluginConfigurationDirectory,
         ResourceLeaseManager leases,
         ProgressionProviderService provider,
+        NexusHuntingLogService huntingLog,
         IDutyState dutyState,
         IPluginLog log)
     {
         stateDirectory = Path.Combine(pluginConfigurationDirectory, "NexusData", "progression");
         this.leases = leases;
         this.provider = provider;
+        this.huntingLog = huntingLog;
         this.dutyState = dutyState;
         this.log = log;
         dutyState.DutyCompleted += OnDutyCompleted;
@@ -50,6 +53,14 @@ internal sealed class ProgressionRuntimeService
             classJobId, currentLevel, includeClassJobRole, includeGeneralSideQuests);
 
     internal bool IsGearReadinessReady => provider.IsGearReadinessReady;
+
+    internal bool IsHuntingLogReady => huntingLog.IsReady;
+
+    internal string HuntingLogReadinessDetail => huntingLog.ReadinessDetail;
+
+    internal IReadOnlyList<ProgressionHuntingTargetCandidate> EligibleHuntingTargets(
+        uint classJobId,
+        int currentLevel) => huntingLog.EligibleTargets(classJobId, currentLevel);
 
     internal ProgressionCharacterMetrics CurrentMetrics => provider.CharacterMetrics();
 
@@ -122,7 +133,8 @@ internal sealed class ProgressionRuntimeService
                 leases,
                 provider,
                 provider,
-                provider);
+                provider,
+                huntingLog);
         }
         catch (Exception ex)
         {

@@ -15,6 +15,8 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
     private readonly ICallGateSubscriber<Vector3, Vector3, bool, CancellationToken, Task<List<Vector3>>> pathfind;
     private readonly ICallGateSubscriber<float, object> setTolerance;
     private readonly ICallGateSubscriber<List<Vector3>> listWaypoints;
+    private readonly ICallGateSubscriber<Vector3, bool, float, Vector3?> pointOnFloor;
+    private readonly ICallGateSubscriber<Vector3, float, float, Vector3?> nearestPoint;
     private CancellationTokenSource? pathfindCancellation;
     private Task<List<Vector3>>? pathfindTask;
     private NavigationRoutePoint? pathfindDestination;
@@ -33,6 +35,8 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
             "vnavmesh.Nav.PathfindCancelable");
         setTolerance = pluginInterface.GetIpcSubscriber<float, object>("vnavmesh.Path.SetTolerance");
         listWaypoints = pluginInterface.GetIpcSubscriber<List<Vector3>>("vnavmesh.Path.ListWaypoints");
+        pointOnFloor = pluginInterface.GetIpcSubscriber<Vector3, bool, float, Vector3?>("vnavmesh.Query.Mesh.PointOnFloor");
+        nearestPoint = pluginInterface.GetIpcSubscriber<Vector3, float, float, Vector3?>("vnavmesh.Query.Mesh.NearestPoint");
     }
 
     public bool IsAvailable => dependencies.FindPlugin("vnavmesh").IsLoaded;
@@ -128,6 +132,16 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
             return [];
         }
     }
+
+    internal Vector3? PointOnFloor(Vector3 point, bool allowUnlandable = false, float halfExtent = 5f) =>
+        IsAvailable && pointOnFloor.HasFunction
+            ? pointOnFloor.InvokeFunc(point, allowUnlandable, halfExtent)
+            : null;
+
+    internal Vector3? NearestPoint(Vector3 point, float horizontalExtent = 100f, float verticalExtent = 1000f) =>
+        IsAvailable && nearestPoint.HasFunction
+            ? nearestPoint.InvokeFunc(point, horizontalExtent, verticalExtent)
+            : null;
 
     private void PumpPendingPathfind()
     {

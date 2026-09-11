@@ -71,6 +71,40 @@ public interface IProgressionQuestProvider
     bool TryStopQuest(out string message);
 }
 
+public sealed record ProgressionHuntingTargetCandidate(
+    uint LogKey,
+    string LogName,
+    int Rank,
+    int TaskIndex,
+    int MonsterIndex,
+    uint NameId,
+    string TargetName,
+    int Killed,
+    int Required,
+    IReadOnlyList<HuntingLogLocation> Locations);
+
+public sealed record ProgressionHuntingProviderObservation(
+    bool IsAvailable,
+    bool? IsBusy,
+    bool IsComplete,
+    bool HasFailed,
+    int Killed,
+    int Required,
+    string Detail);
+
+public interface IProgressionHuntingProvider
+{
+    ProviderId Id { get; }
+
+    IReadOnlyList<ProgressionHuntingTargetCandidate> EligibleTargets(uint classJobId, int currentLevel);
+
+    ProgressionHuntingProviderObservation ObserveHunt(ProgressionHuntingTargetCandidate target);
+
+    bool TryStartHunt(ProgressionHuntingTargetCandidate target, out string message);
+
+    bool TryStopHunt(out string message);
+}
+
 public sealed record ProgressionGearProviderObservation(
     bool IsAvailable,
     bool? IsBusy,
@@ -122,6 +156,18 @@ public sealed record ProgressionQuestTaskPayload(
     int StartingLevel,
     int RequiredLevel,
     ProgressionQuestKind Kind = ProgressionQuestKind.ClassJobRole);
+
+public sealed record ProgressionHuntingTaskPayload(
+    uint LogKey,
+    string LogName,
+    int Rank,
+    int TaskIndex,
+    int MonsterIndex,
+    uint NameId,
+    string TargetName,
+    int StartingKilled,
+    int Required,
+    IReadOnlyList<HuntingLogLocation> Locations);
 
 public sealed record ProgressionGoalState(
     int SchemaVersion,
@@ -290,9 +336,11 @@ public sealed class ProgressionExecutionCoordinator
     private static readonly GoalKind ReachJobLevelKind = new("vieri.progression.reach-job-level/v1");
     private static readonly TaskKind EnsureGearKind = new("vieri.gear.ensure-readiness/v1");
     private static readonly TaskKind RunQuestKind = new("vieri.quest.run-one/v1");
+    private static readonly TaskKind RunHuntingLogKind = new("vieri.hunting-log.complete-target/v1");
     private static readonly TaskKind RunDutyKind = new("vieri.duties.run-one/v1");
     private static readonly CapabilityId GearCapability = new("vieri.capability.gear.ensure-readiness/v1");
     private static readonly CapabilityId QuestCapability = new("vieri.capability.quest.run-supported/v1");
+    private static readonly CapabilityId HuntingLogCapability = new("vieri.capability.hunting-log.complete-target/v1");
     private static readonly CapabilityId DutyCapability = new("vieri.capability.duty.run/v1");
     private static readonly TimeSpan LeaseLifetime = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ProviderStartTimeout = TimeSpan.FromSeconds(45);
@@ -322,12 +370,21 @@ public sealed class ProgressionExecutionCoordinator
         ResourceKind.Rotation,
         ResourceKind.UiInteraction,
     ];
+    private static readonly ResourceKind[] HuntingLogResources =
+    [
+        ResourceKind.Teleport,
+        ResourceKind.Navigation,
+        ResourceKind.Targeting,
+        ResourceKind.Combat,
+        ResourceKind.Rotation,
+    ];
 
     private readonly IProgressionGoalStore store;
     private readonly ResourceLeaseManager leases;
     private readonly IProgressionDutyProvider provider;
     private readonly IProgressionGearProvider? gearProvider;
     private readonly IProgressionQuestProvider? questProvider;
+    private readonly IProgressionHuntingProvider? huntingProvider;
     private readonly Func<DateTimeOffset> utcNow;
     private ResourceLeaseHandle? activeLease;
     private DateTimeOffset? providerStartRequestedAt;
@@ -341,6 +398,7 @@ public sealed class ProgressionExecutionCoordinator
         IProgressionDutyProvider provider,
         IProgressionGearProvider? gearProvider = null,
         IProgressionQuestProvider? questProvider = null,
+        IProgressionHuntingProvider? huntingProvider = null,
         Func<DateTimeOffset>? utcNow = null)
     {
         this.store = store;
@@ -348,6 +406,7 @@ public sealed class ProgressionExecutionCoordinator
         this.provider = provider;
         this.gearProvider = gearProvider;
         this.questProvider = questProvider;
+        this.huntingProvider = huntingProvider;
         this.utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
         State = store.Load();
         ReconcileLoadedState();
@@ -361,8 +420,10 @@ public sealed class ProgressionExecutionCoordinator
             return new(false, "Wait for the current character to finish loading.");
         if (!plan.IsValid || plan.IsSatisfied)
             return new(false, plan.Summary);
-        if (!draft.AllowDuties && (!(draft.AllowJobQuests || draft.AllowSideQuests) || questProvider is null))
-            return new(false, "Enable Class/Job/Role quests, general side quests, or Duties with a compatible provider before starting.");
+        bool questEnabled = (draft.AllowJobQuests || draft.AllowSideQuests) && questProvider is not null;
+        bool huntingEnabled = draft.AllowHuntingLog && huntingProvider is not null;
+        if (!draft.AllowDuties && !questEnabled && !huntingEnabled)
+            return new(false, "Enable Class/Job/Role quests, Hunting Log, general side quests, or Duties with a compatible provider before starting.");
         if (State?.Goal.Status is GoalStatus.Active)
             return new(false, "A Progression goal is already active.");
         if (State?.Goal.Status is GoalStatus.Paused or GoalStatus.Blocked)
@@ -376,8 +437,12 @@ public sealed class ProgressionExecutionCoordinator
             draft.CurrentLevel,
             draft.AllowJobQuests,
             draft.AllowSideQuests);
-        if (duty is null && quest is null && gearProvider is null)
-            return new(false, "No eligible quest or leveling duty is currently available.");
+        ProgressionHuntingTargetCandidate? hunt = SelectHuntingTarget(
+            draft.ClassJobId,
+            draft.CurrentLevel,
+            draft.AllowHuntingLog);
+        if (duty is null && quest is null && hunt is null && gearProvider is null)
+            return new(false, "No eligible quest, Hunting Log target, or leveling duty is currently available.");
 
         DateTimeOffset now = utcNow();
         GoalId goalId = GoalId.New();
@@ -409,8 +474,10 @@ public sealed class ProgressionExecutionCoordinator
             gearProvider is null
                 ? quest is not null
                     ? $"Preparing the quest {quest.Name}."
-                    : $"Preparing one bounded run of {duty!.Name}."
-                : "Preparing a Nexus-owned gear-readiness check before the next duty.");
+                    : hunt is not null
+                        ? $"Preparing the Hunting Log target {hunt.TargetName}."
+                        : $"Preparing one bounded run of {duty!.Name}."
+                : "Preparing a Nexus-owned gear-readiness check before the next activity.");
         State = new ProgressionGoalState(
             ProgressionGoalState.CurrentSchemaVersion,
             goal,
@@ -423,7 +490,7 @@ public sealed class ProgressionExecutionCoordinator
             now);
         Save();
         return gearProvider is null
-            ? StartNextActivity(desired, draft.CurrentLevel, quest, duty)
+            ? StartNextActivity(desired, draft.CurrentLevel, quest, hunt, duty)
             : StartGearReadiness(draft.CurrentLevel, draft.MinimumGilReserve,
                 draft.CurrentItemLevel, draft.CurrentGil);
     }
@@ -505,12 +572,12 @@ public sealed class ProgressionExecutionCoordinator
             Failure = requested ? null : new TaskFailure(
                 FailureKind.DependencyUnavailable,
                 "provider-stop-unavailable",
-                "Nexus could not confirm that the duty provider stopped.",
+                "Nexus could not confirm that the activity provider stopped.",
                 message,
                 true),
         });
         UpdateGoal(requested ? GoalStatus.Active : GoalStatus.Blocked,
-            requested ? "Stopping the Nexus-owned duty before cancelling the goal." :
+            requested ? "Stopping the Nexus-owned activity before cancelling the goal." :
                 "Stop could not be confirmed. Do not start other automated work yet.");
         return new(requested, message);
     }
@@ -598,6 +665,12 @@ public sealed class ProgressionExecutionCoordinator
         if (task.Kind == RunQuestKind)
         {
             UpdateQuestWork(task, world);
+            return;
+        }
+
+        if (task.Kind == RunHuntingLogKind)
+        {
+            UpdateHuntingLogWork(task, world);
             return;
         }
 
@@ -955,12 +1028,15 @@ public sealed class ProgressionExecutionCoordinator
         ReachJobLevelDesiredState desired,
         int currentLevel,
         ProgressionQuestCandidate? quest,
+        ProgressionHuntingTargetCandidate? hunt,
         ProgressionDutyCandidate? duty) =>
         quest is not null
             ? StartNextQuest(currentLevel, quest)
-            : duty is not null
-                ? StartNextDuty(currentLevel, duty)
-                : BlockNoActivity(desired);
+            : hunt is not null
+                ? StartNextHuntingLog(currentLevel, hunt)
+                : duty is not null
+                    ? StartNextDuty(currentLevel, duty)
+                    : BlockNoActivity(desired);
 
     private ProgressionActionResult StartNextActivity(ReachJobLevelDesiredState desired, int currentLevel)
     {
@@ -971,6 +1047,13 @@ public sealed class ProgressionExecutionCoordinator
             desired.AllowSideQuests);
         if (quest is not null)
             return StartNextQuest(currentLevel, quest);
+
+        ProgressionHuntingTargetCandidate? hunt = SelectHuntingTarget(
+            desired.ClassJobId,
+            currentLevel,
+            desired.AllowHuntingLog);
+        if (hunt is not null)
+            return StartNextHuntingLog(currentLevel, hunt);
 
         ProgressionDutyCandidate? duty = desired.AllowDuties
             ? LevelingDutyPolicy.SelectHighest(provider.EligibleDuties(currentLevel), currentLevel)
@@ -984,10 +1067,11 @@ public sealed class ProgressionExecutionCoordinator
     private ProgressionActionResult BlockNoActivity(ReachJobLevelDesiredState desired)
     {
         bool anyQuest = desired.AllowJobQuests || desired.AllowSideQuests;
-        string reason = anyQuest && desired.AllowDuties
-            ? "No eligible supported quest or unlocked leveling duty is currently available."
-            : anyQuest
-                ? "No eligible supported quest is currently available for the selected methods."
+        bool anyOpenWorld = anyQuest || desired.AllowHuntingLog;
+        string reason = anyOpenWorld && desired.AllowDuties
+            ? "No eligible supported quest, Hunting Log target, or unlocked leveling duty is currently available."
+            : anyOpenWorld
+                ? "No eligible supported quest or Hunting Log target is currently available for the selected methods."
                 : "No unlocked leveling duty currently meets the job, item-level, and provider-path requirements.";
         UpdateGoal(GoalStatus.Blocked, reason, incrementPlanRevision: true);
         return new(false, reason);
@@ -1004,6 +1088,227 @@ public sealed class ProgressionExecutionCoordinator
             .ThenBy(candidate => candidate.RequiredLevel)
             .ThenBy(candidate => candidate.QuestId, StringComparer.Ordinal)
             .FirstOrDefault();
+
+    private ProgressionHuntingTargetCandidate? SelectHuntingTarget(
+        uint classJobId,
+        int currentLevel,
+        bool includeHuntingLog) =>
+        includeHuntingLog
+            ? huntingProvider?.EligibleTargets(classJobId, currentLevel).FirstOrDefault()
+            : null;
+
+    private ProgressionActionResult StartNextHuntingLog(
+        int currentLevel,
+        ProgressionHuntingTargetCandidate target)
+    {
+        if (State is null || huntingProvider is null)
+            return new(false, "The Hunting Log provider is unavailable.");
+
+        DateTimeOffset now = utcNow();
+        TaskId taskId = TaskId.New();
+        AttemptId attemptId = AttemptId.New();
+        ProgressionHuntingTaskPayload payload = new(
+            target.LogKey,
+            target.LogName,
+            target.Rank,
+            target.TaskIndex,
+            target.MonsterIndex,
+            target.NameId,
+            target.TargetName,
+            target.Killed,
+            target.Required,
+            target.Locations);
+        NexusTask task = new(
+            taskId,
+            State.Goal.Id,
+            RunHuntingLogKind,
+            1,
+            $"Complete {target.TargetName}",
+            "Nexus selected one exact Hunting Log target and owns travel, targeting, combat, Stop, and kill verification.",
+            HuntingLogCapability,
+            huntingProvider.Id,
+            HuntingLogResources.ToHashSet(),
+            NexusTaskStatus.Ready,
+            JsonSerializer.Serialize(payload),
+            "Waiting to acquire Hunting Log resources.",
+            null);
+
+        State = State with
+        {
+            Tasks = [.. State.Tasks.TakeLast(99), task],
+            ActiveTaskId = taskId,
+            StopAfterCurrentDuty = false,
+            ProviderStartObserved = false,
+            DutyEntryObserved = false,
+            DutyCompletionObserved = false,
+            Goal = State.Goal with
+            {
+                UpdatedAt = now,
+                Status = GoalStatus.Active,
+                StatusDetail = $"Preparing Hunting Log target {target.TargetName}.",
+            },
+            UpdatedAtUtc = now,
+        };
+        Save();
+
+        LeaseOwner owner = new(State.Goal.Id, taskId, attemptId, State.Goal.Priority,
+            $"Progression: Hunting Log target {target.TargetName}");
+        if (!leases.TryAcquire(owner, HuntingLogResources, LeaseLifetime, out activeLease,
+                out ResourceLeaseSnapshot? blocking))
+        {
+            string blocker = blocking is null ? "another task" : blocking.Owner.Reason;
+            FailTask(task, FailureKind.ResourceConflict, "hunting-log-resource-conflict",
+                $"The Hunting Log target is waiting because {blocker} owns a required resource.", null, true);
+            return new(false, State!.Goal.StatusDetail!);
+        }
+
+        ReplaceTask(task with
+        {
+            Status = NexusTaskStatus.Acquiring,
+            StatusDetail = "Resources acquired; starting Nexus-owned travel to the selected Hunting Log target.",
+        });
+        Save();
+
+        if (!huntingProvider.TryStartHunt(target, out string message))
+        {
+            FailTask(State.ActiveTask!, FailureKind.DependencyUnavailable, "hunting-log-start-rejected",
+                "Nexus could not start the selected Hunting Log target.", message, true);
+            return new(false, message);
+        }
+
+        providerStartRequestedAt = now;
+        State = State with
+        {
+            Goal = State.Goal with { StatusDetail = message, UpdatedAt = now },
+            UpdatedAtUtc = now,
+        };
+        Save();
+        return new(true, message);
+    }
+
+    private void UpdateHuntingLogWork(NexusTask task, ProgressionWorldObservation world)
+    {
+        if (huntingProvider is null)
+        {
+            BeginFailureStop(task, FailureKind.DependencyUnavailable, "hunting-log-provider-unavailable",
+                "The Hunting Log provider is unavailable.", true);
+            return;
+        }
+
+        ProgressionHuntingTaskPayload payload = JsonSerializer.Deserialize<ProgressionHuntingTaskPayload>(task.PayloadJson)
+            ?? throw new InvalidDataException("The Hunting Log task payload is empty.");
+        ProgressionHuntingTargetCandidate target = new(
+            payload.LogKey,
+            payload.LogName,
+            payload.Rank,
+            payload.TaskIndex,
+            payload.MonsterIndex,
+            payload.NameId,
+            payload.TargetName,
+            payload.StartingKilled,
+            payload.Required,
+            payload.Locations);
+        ProgressionHuntingProviderObservation observation = huntingProvider.ObserveHunt(target);
+        if (!observation.IsAvailable || observation.IsBusy is null)
+        {
+            BeginFailureStop(task, FailureKind.DependencyUnavailable, "hunting-log-provider-unavailable",
+                "A Hunting Log provider became unavailable. Nexus is retaining ownership until inactivity is confirmed.", true);
+            return;
+        }
+
+        if (observation.HasFailed)
+        {
+            FailTask(task, FailureKind.TransientExternal, "hunting-log-provider-failed",
+                "The selected Hunting Log target could not be completed safely.", observation.Detail, true);
+            return;
+        }
+
+        bool started = State!.ProviderStartObserved || observation.IsBusy == true;
+        if (started != State.ProviderStartObserved)
+            State = State with { ProviderStartObserved = started, UpdatedAtUtc = utcNow() };
+
+        if (observation.IsComplete && observation.IsBusy == false)
+        {
+            CompleteHuntingLog(task, world, payload, observation.Killed);
+            return;
+        }
+
+        if (task.Status == NexusTaskStatus.Acquiring)
+        {
+            if (observation.IsBusy == true)
+            {
+                ReplaceTask(task with
+                {
+                    Status = NexusTaskStatus.Running,
+                    StatusDetail = observation.Detail,
+                });
+                Save();
+                return;
+            }
+
+            if (providerStartRequestedAt is { } requestedAt && utcNow() - requestedAt >= ProviderStartTimeout)
+                FailTask(task, FailureKind.TransientExternal, "hunting-log-start-timeout",
+                    "The selected Hunting Log target did not start in time.", observation.Detail, true);
+            return;
+        }
+
+        if (observation.IsBusy == true)
+        {
+            if (task.StatusDetail != observation.Detail)
+            {
+                ReplaceTask(task with { Status = NexusTaskStatus.Running, StatusDetail = observation.Detail });
+                Save();
+            }
+            return;
+        }
+
+        FailTask(task, FailureKind.TransientExternal, "hunting-log-ended-without-credit",
+            "Hunting Log work stopped before the selected target was complete.", observation.Detail, true);
+    }
+
+    private void CompleteHuntingLog(
+        NexusTask task,
+        ProgressionWorldObservation world,
+        ProgressionHuntingTaskPayload payload,
+        int killed)
+    {
+        if (killed < payload.Required)
+        {
+            FailTask(task, FailureKind.PreconditionChanged, "hunting-log-credit-unverified",
+                "The target stopped without the required Hunting Log credit.", null, true);
+            return;
+        }
+
+        ReplaceTask(task with
+        {
+            Status = NexusTaskStatus.Succeeded,
+            StatusDetail = $"Verified {payload.TargetName} complete ({killed}/{payload.Required}).",
+            Failure = null,
+        });
+        ReleaseLease();
+        State = State! with { ActiveTaskId = null, ProviderStartObserved = false };
+
+        ReachJobLevelDesiredState desired = ReadDesiredState();
+        if (world.Level >= desired.TargetLevel)
+        {
+            MarkGoalSatisfied(world.Level);
+            return;
+        }
+
+        if (State.StopAfterCurrentDuty)
+        {
+            State = State with { StopAfterCurrentDuty = false };
+            UpdateGoal(GoalStatus.Paused,
+                $"Current activity complete at level {world.Level}. Resume when you want Nexus to continue.",
+                incrementPlanRevision: true);
+            return;
+        }
+
+        UpdateGoal(GoalStatus.Active,
+            $"Verified {payload.TargetName}; selecting the next bounded activity.",
+            incrementPlanRevision: true);
+        StartNextActivity(desired, world.Level);
+    }
 
     private ProgressionActionResult StartNextQuest(int currentLevel, ProgressionQuestCandidate quest)
     {
@@ -1549,6 +1854,28 @@ public sealed class ProgressionExecutionCoordinator
             return new(quest.IsAvailable, quest.IsRunning is null ? null : !quest.IsRunning.Value, quest.Detail);
         }
 
+        if (task?.Kind == RunHuntingLogKind)
+        {
+            if (huntingProvider is null)
+                return new(false, null, "The Hunting Log provider is unavailable.");
+            ProgressionHuntingTaskPayload? payload = JsonSerializer.Deserialize<ProgressionHuntingTaskPayload>(task.PayloadJson);
+            if (payload is null)
+                return new(false, null, "The Hunting Log task payload is unavailable.");
+            ProgressionHuntingTargetCandidate target = new(
+                payload.LogKey,
+                payload.LogName,
+                payload.Rank,
+                payload.TaskIndex,
+                payload.MonsterIndex,
+                payload.NameId,
+                payload.TargetName,
+                payload.StartingKilled,
+                payload.Required,
+                payload.Locations);
+            ProgressionHuntingProviderObservation hunt = huntingProvider.ObserveHunt(target);
+            return new(hunt.IsAvailable, hunt.IsBusy is null ? null : !hunt.IsBusy.Value, hunt.Detail);
+        }
+
         ProgressionDutyProviderObservation duty = provider.Observe();
         return new(duty.IsAvailable, duty.IsStopped, duty.Detail);
     }
@@ -1573,6 +1900,16 @@ public sealed class ProgressionExecutionCoordinator
                 return false;
             }
             return questProvider.TryStopQuest(out message);
+        }
+
+        if (task?.Kind == RunHuntingLogKind)
+        {
+            if (huntingProvider is null)
+            {
+                message = "The Hunting Log Stop contract is unavailable.";
+                return false;
+            }
+            return huntingProvider.TryStopHunt(out message);
         }
 
         return provider.TryStop(out message);

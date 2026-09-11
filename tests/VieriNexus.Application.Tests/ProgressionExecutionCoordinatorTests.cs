@@ -524,6 +524,81 @@ public sealed class ProgressionExecutionCoordinatorTests
         Assert.Equal(1, quest.StopCalls);
     }
 
+    [Fact]
+    public void HuntingLogTargetRunsAsExactOwnedTaskAndRequiresVerifiedCredit()
+    {
+        FakeHuntingProvider hunt = new();
+        ResourceLeaseManager leases = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(),
+            leases,
+            new FakeDutyProvider(),
+            gearProvider: null,
+            questProvider: null,
+            huntingProvider: hunt);
+
+        ProgressionActionResult started = coordinator.Start(
+            Draft() with
+            {
+                AllowDuties = false,
+                AllowJobQuests = false,
+                AllowSideQuests = false,
+                AllowHuntingLog = true,
+            },
+            Plan());
+
+        Assert.True(started.Success);
+        Assert.Equal("vieri.hunting-log.complete-target/v1", coordinator.State!.ActiveTask!.Kind.Value);
+        Assert.Contains(ResourceKind.Teleport, coordinator.State.ActiveTask.RequiredResources);
+        Assert.Contains(ResourceKind.Rotation, coordinator.State.ActiveTask.RequiredResources);
+        Assert.Equal(1, hunt.StartCalls);
+
+        coordinator.Update(World(90, false));
+        Assert.Equal(NexusTaskStatus.Running, coordinator.State.ActiveTask!.Status);
+
+        hunt.Killed = hunt.Required;
+        hunt.IsComplete = true;
+        hunt.IsBusy = false;
+        coordinator.Update(World(92, false));
+
+        Assert.Equal(NexusTaskStatus.Succeeded, coordinator.State!.Tasks.Single().Status);
+        Assert.Equal(GoalStatus.Satisfied, coordinator.State.Goal.Status);
+        Assert.Empty(leases.Snapshot());
+    }
+
+    [Fact]
+    public void StopDuringHuntingLogUsesHuntStopAndCancelsAfterInactivity()
+    {
+        FakeDutyProvider duty = new();
+        FakeHuntingProvider hunt = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(),
+            new ResourceLeaseManager(),
+            duty,
+            gearProvider: null,
+            questProvider: null,
+            huntingProvider: hunt);
+        coordinator.Start(
+            Draft() with
+            {
+                AllowDuties = false,
+                AllowJobQuests = false,
+                AllowSideQuests = false,
+                AllowHuntingLog = true,
+            },
+            Plan());
+        coordinator.Update(World(90, false));
+
+        ProgressionActionResult stopped = coordinator.StopNow();
+        coordinator.Update(World(90, false));
+
+        Assert.True(stopped.Success);
+        Assert.Equal(1, hunt.StopCalls);
+        Assert.Equal(0, duty.StopCalls);
+        Assert.Equal(GoalStatus.Cancelled, coordinator.State!.Goal.Status);
+        Assert.Null(coordinator.State.ActiveTask);
+    }
+
     private static ReachJobLevelGoalDraft Draft(int targetLevel = 92) => new(
         Character,
         41,
@@ -705,6 +780,59 @@ public sealed class ProgressionExecutionCoordinatorTests
         {
             StopCalls++;
             message = Available ? "quest stop requested" : "missing quest";
+            return Available;
+        }
+    }
+
+    private sealed class FakeHuntingProvider : IProgressionHuntingProvider
+    {
+        private static readonly ProgressionHuntingTargetCandidate Candidate = new(
+            1,
+            "Lancer Hunting Log",
+            0,
+            0,
+            0,
+            123,
+            "Little Ladybug",
+            0,
+            3,
+            [new HuntingLogLocation(134, 13, 0, 20f, 20f)]);
+
+        public ProviderId Id { get; } = new("provider.hunting-test/v1");
+        public bool Available { get; set; } = true;
+        public bool IsBusy { get; set; }
+        public bool IsComplete { get; set; }
+        public bool HasFailed { get; set; }
+        public int Killed { get; set; }
+        public int Required => Candidate.Required;
+        public int StartCalls { get; private set; }
+        public int StopCalls { get; private set; }
+
+        public IReadOnlyList<ProgressionHuntingTargetCandidate> EligibleTargets(uint classJobId, int currentLevel) =>
+            IsComplete ? [] : [Candidate with { Killed = Killed }];
+
+        public ProgressionHuntingProviderObservation ObserveHunt(ProgressionHuntingTargetCandidate target) => new(
+            Available,
+            Available ? IsBusy : null,
+            IsComplete,
+            HasFailed,
+            Killed,
+            Required,
+            IsBusy ? "hunting" : "idle");
+
+        public bool TryStartHunt(ProgressionHuntingTargetCandidate target, out string message)
+        {
+            StartCalls++;
+            IsBusy = Available;
+            message = Available ? "hunt started" : "hunt unavailable";
+            return Available;
+        }
+
+        public bool TryStopHunt(out string message)
+        {
+            StopCalls++;
+            IsBusy = false;
+            message = Available ? "hunt stopped" : "hunt unavailable";
             return Available;
         }
     }
