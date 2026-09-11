@@ -12,6 +12,8 @@ internal sealed class NexusOperationsOverlay : Window
     private readonly NavigationRouteRuntimeService navigation;
     private readonly GearShoppingRuntimeService gear;
     private readonly ProgressionRuntimeService progression;
+    private readonly NexusMaintenanceRuntimeService maintenance;
+    private readonly StrikingDummyTravelService strikingDummies;
     private readonly Action<string> openPage;
     private string message = string.Empty;
 
@@ -20,6 +22,8 @@ internal sealed class NexusOperationsOverlay : Window
         NavigationRouteRuntimeService navigation,
         GearShoppingRuntimeService gear,
         ProgressionRuntimeService progression,
+        NexusMaintenanceRuntimeService maintenance,
+        StrikingDummyTravelService strikingDummies,
         Action<string> openPage)
         : base("Nexus Operations###VieriNexusOperations",
             ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.AlwaysAutoResize)
@@ -28,6 +32,8 @@ internal sealed class NexusOperationsOverlay : Window
         this.navigation = navigation;
         this.gear = gear;
         this.progression = progression;
+        this.maintenance = maintenance;
+        this.strikingDummies = strikingDummies;
         this.openPage = openPage;
         RespectCloseHotkey = false;
         IsOpen = true;
@@ -53,14 +59,18 @@ internal sealed class NexusOperationsOverlay : Window
             not NavigationRouteExecutionState.Completed and not NavigationRouteExecutionState.Failed;
         bool gearActive = gear.Status.IsActive;
         bool progressionActive = progression.State?.Goal.Status == VieriNexus.Domain.GoalStatus.Active;
-        bool anyActive = navigationActive || gearActive || progressionActive;
+        bool maintenanceActive = maintenance.Status.IsActive;
+        bool dummyTravelActive = strikingDummies.Status.IsActive;
+        bool anyActive = navigationActive || gearActive || progressionActive || maintenanceActive || dummyTravelActive;
 
         if (anyActive)
         {
             if (ImGui.Button("Stop"))
             {
                 navigation.Stop();
+                strikingDummies.Stop(out _);
                 gear.Stop();
+                maintenance.Stop(out _);
                 progression.StopNow();
                 message = "Stop requested for every Nexus-owned operation.";
             }
@@ -71,6 +81,25 @@ internal sealed class NexusOperationsOverlay : Window
         if (ImGui.BeginPopup("NexusGoto"))
         {
             if (ImGui.Selectable("Saved routes")) Open("Routes & Navigation");
+            if (ImGui.BeginMenu("Striking dummies"))
+            {
+                foreach (IGrouping<string, StrikingDummyDestination> expansion in
+                         StrikingDummyCatalog.Destinations.GroupBy(item => item.Expansion))
+                {
+                    if (!ImGui.BeginMenu(expansion.Key))
+                        continue;
+                    foreach (StrikingDummyDestination destination in expansion)
+                    {
+                        if (ImGui.Selectable($"{destination.DisplayLocation} — Lv. {destination.Levels}"))
+                        {
+                            ImGui.CloseCurrentPopup();
+                            strikingDummies.Start(destination, out message);
+                        }
+                    }
+                    ImGui.EndMenu();
+                }
+                ImGui.EndMenu();
+            }
             ImGui.EndPopup();
         }
 
@@ -85,8 +114,37 @@ internal sealed class NexusOperationsOverlay : Window
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Inventory"))
-            openPage("Gear & Inventory");
+        CategoryButton("Inventory", "NexusInventory");
+        if (ImGui.BeginPopup("NexusInventory"))
+        {
+            if (maintenance.HasWorkingProfile && ImGui.Selectable("Run enabled maintenance"))
+            {
+                ImGui.CloseCurrentPopup();
+                maintenance.StartConfigured(out message);
+            }
+            if (maintenance.HasWorkingProfile && ImGui.Selectable("Self-repair"))
+            {
+                ImGui.CloseCurrentPopup();
+                maintenance.Start(NexusMaintenanceOperation.Repair, out message);
+            }
+            if (maintenance.HasWorkingProfile && ImGui.Selectable("Extract materia"))
+            {
+                ImGui.CloseCurrentPopup();
+                maintenance.Start(NexusMaintenanceOperation.ExtractMateria, out message);
+            }
+            if (maintenance.HasWorkingProfile && ImGui.Selectable("Register collectibles"))
+            {
+                ImGui.CloseCurrentPopup();
+                maintenance.StartRegistrations(out message);
+            }
+            if (maintenance.HasWorkingProfile && ImGui.Selectable("Open coffers"))
+            {
+                ImGui.CloseCurrentPopup();
+                maintenance.Start(NexusMaintenanceOperation.OpenCoffers, out message);
+            }
+            if (ImGui.Selectable("Gear & Inventory page")) Open("Gear & Inventory");
+            ImGui.EndPopup();
+        }
 
         ImGui.SameLine();
         CategoryButton("Extras", "NexusExtras");
@@ -110,6 +168,8 @@ internal sealed class NexusOperationsOverlay : Window
             return;
 
         string status = gearActive ? gear.Status.Message :
+            maintenanceActive ? maintenance.Status.Message :
+            dummyTravelActive ? strikingDummies.Status.Message :
             navigationActive ? navigation.Status.Message :
             progressionActive ? progression.State!.ActiveTask?.StatusDetail ?? progression.State.ActiveTask?.Title ?? progression.State.Goal.Title :
             message;

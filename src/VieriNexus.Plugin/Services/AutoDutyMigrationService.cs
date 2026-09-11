@@ -1,3 +1,4 @@
+using System.Text.Json;
 using VieriNexus.Application;
 
 namespace VieriNexus.Services;
@@ -15,6 +16,7 @@ internal sealed class AutoDutyMigrationService
     private readonly LegacyConfigurationInventory inventory;
     private readonly AutoDutyMigrationImporter importer = new();
     private readonly TransactionalMigrationStore store = new();
+    private readonly FileOperationsProfileStore workingStore;
     private readonly string dataRoot;
     private string? cachedSourcePath;
     private DateTime cachedWriteTimeUtc;
@@ -22,6 +24,7 @@ internal sealed class AutoDutyMigrationService
     private string message = "Review the source before importing.";
     private MigrationReceipt? lastReceipt;
     private AutoDutyMigrationSnapshot? stagedSnapshot;
+    private AutoDutyMigrationSnapshot? workingSnapshot;
 
     internal AutoDutyMigrationService(
         LegacyConfigurationInventory inventory,
@@ -30,11 +33,24 @@ internal sealed class AutoDutyMigrationService
     {
         this.inventory = inventory;
         dataRoot = Path.Combine(pluginConfigDirectory, "NexusData");
+        workingStore = new FileOperationsProfileStore(Path.Combine(dataRoot, "operations-profiles.v1.json"));
+        try
+        {
+            workingSnapshot = workingStore.Load()?.Snapshot;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+        {
+            message = "The prior Nexus operations working copy could not be verified; the staged import remains available for recovery.";
+        }
         if (persistedReceiptId is { } receiptId)
             Recover(receiptId);
     }
 
     internal AutoDutyMigrationSnapshot? StagedSnapshot => Volatile.Read(ref stagedSnapshot);
+    internal AutoDutyMigrationSnapshot? WorkingSnapshot => Volatile.Read(ref workingSnapshot);
+    internal bool HasWorkingProfiles => WorkingSnapshot is not null;
+    internal AutoDutyProfileSnapshot? ProfileFor(ulong characterId) =>
+        OperationsProfilePolicy.Resolve(WorkingSnapshot, characterId);
 
     internal AutoDutyMigrationStatus Status()
     {
@@ -80,16 +96,23 @@ internal sealed class AutoDutyMigrationService
         {
             lastReceipt = result.Receipt;
             Volatile.Write(ref stagedSnapshot, status.Preview.Snapshot);
+            if (!TryPromote(status.Preview.Snapshot, result.Receipt!.Id))
+                return SetMessage(result with { Message = result.Message + " The Nexus working copy could not be written; re-import before disabling VieriAutoDuty." });
         }
         return SetMessage(result);
     }
 
     internal MigrationWriteResult Rollback(Guid receiptId)
     {
+        AutoDutyMigrationSnapshot? priorWorking = WorkingSnapshot;
         MigrationWriteResult result = store.Rollback(TransactionalMigrationStore.ReceiptPath(
             Path.Combine(dataRoot, "receipts"), receiptId));
         if (result.Success)
         {
+            if (workingStore.Rollback(receiptId))
+                Volatile.Write(ref workingSnapshot, workingStore.Load()?.Snapshot);
+            else
+                Volatile.Write(ref workingSnapshot, priorWorking);
             lastReceipt = null;
             Volatile.Write(ref stagedSnapshot, null);
         }
@@ -107,6 +130,23 @@ internal sealed class AutoDutyMigrationService
         {
             lastReceipt = result.Receipt;
             Volatile.Write(ref stagedSnapshot, result.Snapshot);
+            if (WorkingSnapshot is null && result.Snapshot is not null)
+                TryPromote(result.Snapshot, receiptId);
+        }
+    }
+
+    private bool TryPromote(AutoDutyMigrationSnapshot snapshot, Guid receiptId)
+    {
+        try
+        {
+            workingStore.Save(new OperationsProfileLibrary(1, receiptId, snapshot));
+            Volatile.Write(ref workingSnapshot, snapshot);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+        {
+            message = "The staged operations import is verified, but its Nexus working copy could not be written.";
+            return false;
         }
     }
 

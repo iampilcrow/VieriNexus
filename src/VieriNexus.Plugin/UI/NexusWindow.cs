@@ -41,6 +41,7 @@ internal sealed class NexusWindow : Window
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
+    private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
     private readonly ModuleRegistry modules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
@@ -59,6 +60,8 @@ internal sealed class NexusWindow : Window
     private GearUpgradePreview? gearUpgradePreview;
     private readonly HashSet<int> selectedGearUpgradeSlots = [];
     private string gearShoppingMessage = string.Empty;
+    private string maintenanceMessage = string.Empty;
+    private string migrationQuickStartMessage = string.Empty;
 
     internal NexusWindow(
         Plugin plugin,
@@ -73,6 +76,7 @@ internal sealed class NexusWindow : Window
         ProgressionProviderService progressionProviders,
         ProgressionRuntimeService progressionRuntime,
         GearShoppingRuntimeService gearShoppingRuntime,
+        NexusMaintenanceRuntimeService maintenanceRuntime,
         ModuleRegistry modules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
@@ -90,6 +94,7 @@ internal sealed class NexusWindow : Window
         this.progressionProviders = progressionProviders;
         this.progressionRuntime = progressionRuntime;
         this.gearShoppingRuntime = gearShoppingRuntime;
+        this.maintenanceRuntime = maintenanceRuntime;
         this.modules = modules;
         this.world = world;
         this.logo = logo;
@@ -360,6 +365,8 @@ internal sealed class NexusWindow : Window
         ImGui.TextWrapped("Discovery is read-only. A supported import first creates a timestamped source backup, validates into staging, then commits Nexus-owned data atomically. Existing plugins remain installed and authoritative.");
         ImGui.Spacing();
 
+        DrawMigrationQuickStart();
+
         foreach (var source in legacyInventory.Scan())
         {
             if (source.Id == "navplotter")
@@ -389,6 +396,90 @@ internal sealed class NexusWindow : Window
         ImGui.TextColored(NexusTheme.Green, "Discord credentials and channel identifiers have not been touched.");
         ImGui.TextWrapped("The Communications migration will copy encrypted values transactionally on the same computer, verify them, and retain the original VieriLink configuration as rollback data. Each user imports only their own local configuration.");
         EndPanel();
+    }
+
+    private void DrawMigrationQuickStart()
+    {
+        NavigationMigrationStatus navigationStatus = navigationMigration.Status();
+        AutoDutyMigrationStatus operationsStatus = autoDutyMigration.Status();
+        bool navigationReady = navigationStatus.Preview?.CanImport == true;
+        bool operationsReady = operationsStatus.Preview?.CanImport == true;
+        bool navigationPrepared = navigationStatus.LastReceipt is not null && navigationLibrary.HasWorkingLibrary;
+        bool operationsPrepared = operationsStatus.LastReceipt is not null && autoDutyMigration.HasWorkingProfiles;
+        bool needsNavigation = navigationReady && !navigationPrepared;
+        bool needsOperations = operationsReady && !operationsPrepared;
+        bool blocked = (navigationStatus.SourceFound && !navigationReady && !navigationPrepared) ||
+                       (operationsStatus.SourceFound && !operationsReady && !operationsPrepared);
+        bool foundAnything = navigationStatus.SourceFound || operationsStatus.SourceFound ||
+                             navigationPrepared || operationsPrepared;
+
+        BeginAutoPanel("SET UP THIS COMPUTER");
+        if (blocked && !needsNavigation && !needsOperations)
+        {
+            NexusTheme.StatusDot(NexusTheme.Red,
+                "A detected settings source needs attention in its detailed Migration card");
+        }
+        else if (!needsNavigation && !needsOperations)
+        {
+            NexusTheme.StatusDot(foundAnything ? NexusTheme.Green : NexusTheme.Amber,
+                foundAnything
+                    ? "Every currently supported Vieri settings source on this computer is prepared"
+                    : "No currently supported Vieri settings source was detected on this computer");
+        }
+        else
+        {
+            NexusTheme.StatusDot(NexusTheme.Cyan,
+                $"Detected {(needsNavigation ? 1 : 0) + (needsOperations ? 1 : 0)} supported settings source(s) ready to prepare");
+            TextWrapped(NexusTheme.Muted,
+                "This uses only this player's local Dalamud settings, keeps timestamped backups, verifies the imported data, and creates Nexus working copies. Leave the old Vieri products installed until their replacement cards are green.");
+            if (ImGui.Button("Back up and prepare detected settings", new Vector2(ButtonWidth("Back up and prepare detected settings"), 0)))
+            {
+                List<string> results = [];
+                if (needsNavigation)
+                {
+                    if (navigationStatus.LastReceipt is not null)
+                    {
+                        results.Add(navigationLibrary.CreateWorkingCopy().Message);
+                    }
+                    else
+                    {
+                        MigrationWriteResult imported = navigationMigration.Import();
+                        results.Add(imported.Message);
+                        if (imported.Success && imported.Receipt is { } receipt)
+                        {
+                            LegacyImportState state = plugin.Configuration.ForLegacyImport("navplotter");
+                            state.Reviewed = state.Imported = true;
+                            state.SourceVersion = "routes-v1";
+                            state.ImportedAt = receipt.CreatedAtUtc;
+                            state.ReceiptId = receipt.Id;
+                            state.ImportedItemCount = navigationStatus.Preview!.Snapshot!.Routes.Count;
+                            if (!navigationLibrary.HasWorkingLibrary)
+                                results.Add(navigationLibrary.CreateWorkingCopy().Message);
+                        }
+                    }
+                }
+                if (needsOperations)
+                {
+                    MigrationWriteResult imported = autoDutyMigration.Import();
+                    results.Add(imported.Message);
+                    if (imported.Success && imported.Receipt is { } receipt)
+                    {
+                        LegacyImportState state = plugin.Configuration.ForLegacyImport("autoduty");
+                        state.Reviewed = state.Imported = true;
+                        state.SourceVersion = "operations-v1";
+                        state.ImportedAt = receipt.CreatedAtUtc;
+                        state.ReceiptId = receipt.Id;
+                        state.ImportedItemCount = operationsStatus.Preview!.Snapshot!.Profiles.Count;
+                    }
+                }
+                plugin.Save();
+                plugin.ApplyPendingOperationsProfile();
+                migrationQuickStartMessage = string.Join(" ", results);
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(migrationQuickStartMessage))
+            TextWrapped(NexusTheme.Green, migrationQuickStartMessage);
+        EndAutoPanel();
     }
 
     private void DrawAutoDutyMigration()
@@ -444,6 +535,7 @@ internal sealed class NexusWindow : Window
                 state.ReadyForActivation = false;
                 state.Activated = false;
                 plugin.Save();
+                plugin.ApplyPendingOperationsProfile();
             }
         }
         if (!canImport)
@@ -473,7 +565,7 @@ internal sealed class NexusWindow : Window
 
         TextWrapped(staged ? NexusTheme.Green : NexusTheme.Muted, operationMessage);
         TextWrapped(NexusTheme.Muted, staged
-            ? "Verified staging only • source configuration remains unchanged • Nexus actions activate only as each owned executor lands"
+            ? "Verified staging plus a separate Nexus working copy • source configuration remains unchanged • only native Nexus actions can use it"
             : "Import creates an exact source backup and does not enable duplicate automation.");
         EndPanel();
     }
@@ -1541,6 +1633,8 @@ internal sealed class NexusWindow : Window
                 : NexusTheme.Cyan, gearShoppingMessage);
         EndAutoPanel();
 
+        DrawNativeMaintenance();
+
         if (gearUpgradePreview is not { } currentPreview)
             return;
 
@@ -1665,6 +1759,50 @@ internal sealed class NexusWindow : Window
             ImGui.EndDisabled();
         TextWrapped(NexusTheme.Muted,
             "Approval is single-use. Any character, job, equipment, item, quantity, or price change requires a fresh preview.");
+        EndAutoPanel();
+    }
+
+    private void DrawNativeMaintenance()
+    {
+        NexusMaintenanceStatus status = maintenanceRuntime.Status;
+        AutoDutyProfileSnapshot? profile = maintenanceRuntime.CurrentProfile;
+        BeginAutoPanel("MAINTENANCE");
+        NexusTheme.StatusDot(
+            status.IsActive ? NexusTheme.Cyan : profile is not null ? NexusTheme.Green : NexusTheme.Amber,
+            status.IsActive
+                ? status.Message
+                : profile is not null
+                    ? $"Nexus profile: {profile.Name}"
+                    : "Import operations settings on the Migration page");
+        TextWrapped(NexusTheme.Muted,
+            "Nexus now runs self-repair, materia extraction, card/minion/orchestrion registration, and eligible coffers directly. AutoDuty is not called for these actions.");
+
+        if (status.IsActive)
+        {
+            if (ImGui.Button("Stop maintenance"))
+                maintenanceRuntime.Stop(out maintenanceMessage);
+        }
+        else if (profile is not null)
+        {
+            if (ImGui.Button("Run enabled maintenance"))
+                maintenanceRuntime.StartConfigured(out maintenanceMessage);
+            SameLineIfFits("Self-repair");
+            if (ImGui.Button("Self-repair"))
+                maintenanceRuntime.Start(NexusMaintenanceOperation.Repair, out maintenanceMessage);
+            SameLineIfFits("Extract materia");
+            if (ImGui.Button("Extract materia"))
+                maintenanceRuntime.Start(NexusMaintenanceOperation.ExtractMateria, out maintenanceMessage);
+
+            if (ImGui.Button("Register collectibles"))
+                maintenanceRuntime.StartRegistrations(out maintenanceMessage);
+            SameLineIfFits("Open coffers");
+            if (ImGui.Button("Open coffers"))
+                maintenanceRuntime.Start(NexusMaintenanceOperation.OpenCoffers, out maintenanceMessage);
+        }
+        if (!string.IsNullOrWhiteSpace(maintenanceMessage))
+            TextWrapped(NexusTheme.Cyan, maintenanceMessage);
+        TextWrapped(NexusTheme.Muted,
+            "Selling, desynthesis, Grand Company turn-ins, and storage remain blocked until their destructive-item review and verification layer is native.");
         EndAutoPanel();
     }
 
@@ -2075,7 +2213,7 @@ internal sealed class NexusWindow : Window
             {
                 "navigation" => (NexusTheme.Green, "Live"),
                 "progression" => (NexusTheme.Green, "Bounded duty execution"),
-                "gear" => (NexusTheme.Green, "Preview and approval live"),
+                "gear" => (NexusTheme.Green, "Gear transactions and safe maintenance live"),
                 _ => (NexusTheme.Amber, "Migration staged"),
             };
             NexusTheme.StatusDot(color, status);
@@ -2151,6 +2289,12 @@ internal sealed class NexusWindow : Window
 
     private static float ButtonWidth(string label) =>
         MathF.Ceiling(ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f) + 2f);
+
+    private static void SameLineIfFits(string nextLabel)
+    {
+        if (ImGui.GetContentRegionAvail().X >= ButtonWidth(nextLabel) + ImGui.GetStyle().ItemSpacing.X)
+            ImGui.SameLine();
+    }
 
     private static void TextWrapped(Vector4 color, string text)
     {

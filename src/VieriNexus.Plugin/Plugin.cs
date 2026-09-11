@@ -52,6 +52,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
+    private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
+    private readonly StrikingDummyTravelService strikingDummyTravel;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -174,6 +176,10 @@ public sealed class Plugin : IDalamudPlugin
             DutyState,
             Log);
         gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
+        maintenanceRuntime = new NexusMaintenanceRuntimeService(
+            resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager);
+        strikingDummyTravel = new StrikingDummyTravelService(
+            PluginInterface, ClientState, Condition, DataManager, AetheryteList, navigationRuntime);
         worldObserver = new WorldSnapshotObserver(
             ClientState,
             PlayerState,
@@ -188,7 +194,7 @@ public sealed class Plugin : IDalamudPlugin
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
             navigationLibrary, navigationActivation, navigationDiagnostics,
-            navigationRuntime, progressionProviders, progressionRuntime, gearShoppingRuntime,
+            navigationRuntime, progressionProviders, progressionRuntime, gearShoppingRuntime, maintenanceRuntime,
             moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
         operationsOverlay = new NexusOperationsOverlay(
@@ -196,6 +202,8 @@ public sealed class Plugin : IDalamudPlugin
             navigationRuntime,
             gearShoppingRuntime,
             progressionRuntime,
+            maintenanceRuntime,
+            strikingDummyTravel,
             page =>
             {
                 Configuration.SelectedPage = page;
@@ -227,6 +235,8 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        maintenanceRuntime.Shutdown();
+        strikingDummyTravel.Stop(out _);
         gearShoppingRuntime.Shutdown();
         progressionRuntime.Shutdown();
         navigationRuntime.Shutdown();
@@ -256,6 +266,8 @@ public sealed class Plugin : IDalamudPlugin
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
         progressionProviders.UpdateGearAdapter();
         gearShoppingRuntime.Update();
+        maintenanceRuntime.Update(DateTimeOffset.UtcNow);
+        strikingDummyTravel.Update(DateTimeOffset.UtcNow);
         progressionRuntime.Update(
             worldStore.Current.Character.Value,
             Condition[ConditionFlag.BoundByDuty] ||
@@ -282,6 +294,7 @@ public sealed class Plugin : IDalamudPlugin
         if (!sessionInitialized)
         {
             sessionInitialized = true;
+            ApplyPendingOperationsProfile();
             if (!Configuration.FirstRunComplete || Configuration.OpenOnLogin)
             {
                 Configuration.SelectedPage = Configuration.FirstRunComplete ? "Home" : "Dependencies";
@@ -346,10 +359,19 @@ public sealed class Plugin : IDalamudPlugin
                 mainWindow.IsOpen = true;
                 break;
             case "stop":
-                if (progressionRuntime.State is { Goal.Status: GoalStatus.Active, ActiveTask: not null })
-                    ChatGui.Print($"[VieriNexus] {progressionRuntime.StopNow().Message}");
-                else
-                    ChatGui.Print($"[VieriNexus] {navigationRuntime.Stop().Message}");
+                bool stoppedAny = false;
+                stoppedAny |= maintenanceRuntime.Stop(out _);
+                stoppedAny |= strikingDummyTravel.Stop(out _);
+                if (gearShoppingRuntime.Status.IsActive)
+                    stoppedAny |= gearShoppingRuntime.Stop().Success;
+                if (progressionRuntime.State is { Goal.Status: GoalStatus.Active })
+                    stoppedAny |= progressionRuntime.StopNow().Success;
+                if (navigationRuntime.Status.IsActive)
+                {
+                    navigationRuntime.Stop();
+                    stoppedAny = true;
+                }
+                ChatGui.Print($"[VieriNexus] {(stoppedAny ? "Stop requested for every active Nexus operation." : "No Nexus operation is active.")}");
                 break;
             case "home":
             case "splash":
@@ -362,6 +384,23 @@ public sealed class Plugin : IDalamudPlugin
                 mainWindow.Toggle();
                 break;
         }
+    }
+
+    internal void ApplyPendingOperationsProfile()
+    {
+        AutoDutyMigrationStatus status = autoDutyMigration.Status();
+        if (status.LastReceipt is not { } receipt ||
+            (Configuration.AppliedOperationsReceiptId == receipt.Id &&
+             Configuration.AppliedOperationsCharacterId == PlayerState.ContentId) ||
+            autoDutyMigration.ProfileFor(PlayerState.ContentId) is not { } profile)
+            return;
+        Configuration.ShowOperationsOverlay = profile.Overlay.ShowOverlay;
+        Configuration.LockOperationsOverlay = profile.Overlay.LockPosition;
+        Configuration.OperationsOverlayTransparent = profile.Overlay.TransparentBackground;
+        Configuration.ShowOperationsStatus = profile.Overlay.ShowDutyStatus || profile.Overlay.ShowActionStatus;
+        Configuration.AppliedOperationsReceiptId = receipt.Id;
+        Configuration.AppliedOperationsCharacterId = PlayerState.ContentId;
+        Save();
     }
 
     private void RunNamedRoute(string nameOrId, bool previewOnly)
