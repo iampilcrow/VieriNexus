@@ -3,7 +3,7 @@
 Working snapshot: 2026-09-10 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
 Current product version: `0.1.0.34`
-Current published release source: `0.1.0.33`, commit `e24082af7e70abf3b2a4d4ddadf89f87f61ebb05`. Version `0.1.0.34` is the current release candidate. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current published release source: `0.1.0.34`, commit `89e79634c6aeb5deceb255fb32faa3451d667e8b`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -689,12 +689,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `e24082af7e70abf3b2a4d4ddadf89f87f61ebb05 Move gear shopping approval into Nexus`.
+- Current released implementation commit: `89e79634c6aeb5deceb255fb32faa3451d667e8b Move gear candidate ranking into Nexus`.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.34`. Dalamud API 15. Publication is the current release step.
+- Plugin project version: `0.1.0.34`. Dalamud API 15. The release is published and publicly verified.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -1062,7 +1062,7 @@ Do not execute these as part of recovery. The next normal development thread sho
 1. Treat the Nexus-owned Routes provider and the 0.1.0.31 bounded Progression duty lifecycle as accepted. Do not repeat their focused tests unless a concrete regression touches them.
 2. Treat the complete 0.1.0.32 gear-readiness transaction as accepted: Nexus bought gear, returned to the inn, and started the planned duty automatically. Do not repeat this gate unless a concrete regression touches shopping, equipment, travel, or Progression handoff.
 3. Treat the 0.1.0.33 Nexus Shop for Upgrades UI, exact single-use approval, spending floor, full resource lease, and Stop as accepted by the valid live zero-upgrade MCH result. Do not rerun the accepted automatic Progression transaction.
-4. Publish 0.1.0.34 and confirm one refresh still returns the correct live result through Nexus-owned role scoring, per-slot ranking, EXP protection, and two-handed/off-hand policy.
+4. Confirm one 0.1.0.34 refresh still returns the correct live result through Nexus-owned role scoring, per-slot ranking, EXP protection, and two-handed/off-hand policy. No purchase is required when the valid result remains zero.
 5. Move vendor-band/catalog discovery plus low-level purchase/equipment/gearset/displaced-item mechanics into Nexus, preserving vendor-route safeguards. The current Vieri adapter is temporary mechanics, not permanent policy ownership.
 6. Preserve and continue rebuilding the custom VieriAutoDuty categorized overlay, striking-dummy menu, and useful duty controls/status as Nexus-owned UI. Do not substitute stock AutoDuty's overlay.
 7. Then connect the next bounded stock-Questionable quest/progression task rather than returning to Routes. Continue keeping stock Questionable and stock AutoDuty behind narrow capability-versioned provider adapters, and never load stock AutoDuty beside the Vieri fork during migration because both use the same `AutoDuty` identity.
@@ -1464,6 +1464,8 @@ Verification evidence for 0.1.0.31: Nexus source `dcc0235b01db2ea142cfa1e65cc5ab
 Verification evidence for 0.1.0.32: Nexus source `85b47df77301bc27593a8ae692a686def09a41c0`, Daily Pilcrow release `e9e4c3c0903c765b1cd201307f3c97e1e8c796dd`, and Daily Pilcrow verification docs `bf5e9795984540db66e887649a083b7a337c9d5b` are pushed. All 177 Nexus tests, the zero-warning clean Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_HvpYkZzJVeywURdNbzuY1WeJ1aUk` and final documentation deployment `dpl_3yYdENLLVTub96TMvVCqtDFahgJW` are Ready. The live feed advertises VieriNexus 0.1.0.32 exactly once; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `254F91403C8840E3A16FCE46DAAE322E877C603B2C9AA5F633676CAB465AEB20` / `626416EA184DA43EA5FC316149235B0C1809E3009C7A034FB56F59721BA3727E`. GitHub Actions Discord workflow `34534482568` completed successfully. The user then accepted the complete live transaction: Nexus bought gear, returned to the inn, and automatically started the planned duty. The 0.1.0.32 acceptance gate is complete.
 
 Verification evidence for 0.1.0.33: Nexus source `e24082af7e70abf3b2a4d4ddadf89f87f61ebb05`, VieriAutoDuty source `d0c422cdf668817fd59c77c11e5303a040d283db`, Daily Pilcrow release `d8a842c0b29f214f8c2095c8368808cdbb4f9425`, and Daily Pilcrow verification docs `0d47c5b4c7e3da945949b251529498c3c640409e` are pushed. All 186 Nexus tests, the zero-warning clean Nexus Release build, all 342 VieriAutoDuty tests, its unchanged 32-warning upstream/dependency build baseline, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_H8nmhDQ3BMDZAcG2CYFotV31cNgk` and final documentation deployment `dpl_GwZyqrrBokZ61wxPLCFsLEQtULNU` are Ready on the canonical aliases. The live feed advertises VieriNexus 0.1.0.33 and VieriAutoDuty 1.0.0.441; all four public runtime/source downloads return HTTP 200 as valid ZIPs and match their local SHA-256 values. Nexus runtime/source hashes are `EF10AB9D982AAB01D866EE02BED9F26E1CC9A91DB7F42AD3CAF605C342A3BF03` / `1577F20DCA1E6A172656450FC9B5A724AC9EBD363BB241B7C86B2BCE2A2488A5`; AutoDuty runtime/source hashes are `C473092425647461C933BEDA6497175839DC69DC05D99F2BB554A0750456639B` / `50674EA8CD46DA9CC7C4BB3795899A6B56821D7CF69B918823FA4E96732D656D`. GitHub Actions Discord workflow `34544115950` completed successfully. The focused user-side gate is one Gear & Inventory preview and either one approved purchase or a valid no-upgrade result; accepted Routes, bounded-duty, and automatic gear-readiness gates should not be repeated.
+
+Verification evidence for 0.1.0.34: Nexus source `89e79634c6aeb5deceb255fb32faa3451d667e8b`, VieriAutoDuty source `0a81501e7f00d682ad66211080fb2a2f1ae92fe0`, and Daily Pilcrow release `0bb070d86e119a5ef1f8c155f574d04af2b0dc31` are pushed. All 191 Nexus tests, the zero-warning clean Nexus Release build, all 342 VieriAutoDuty tests, its unchanged 32-warning upstream/dependency build baseline, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Production deployment `dpl_D1jHitvFTb6SKCCPLfCnGvnbz7Lo` is Ready on the canonical aliases. The live feed advertises VieriNexus 0.1.0.34 and VieriAutoDuty 1.0.0.442; all four public runtime/source downloads return HTTP 200 as valid ZIPs and match their local SHA-256 values. Nexus runtime/source hashes are `FC90241965071A56BF6F7E2DE38E5D1823F243D5CD5B245B08E1AE13F08D6CA8` / `9818C085332BA337831D6779AC074D8F7BEC6521433469F94805B369EDFDC2B0`; AutoDuty runtime/source hashes are `523ABEAADA2988ACAD98F98B059E32B804E3EB897D08FBED3513EF2A1823BA96` / `11D2925529BAE73FD1C0CDC2565FF96553542DF61AE46E4C2C7AB45BF62956FD`. GitHub Actions Discord workflow `34553375434` completed successfully. The user's 0.1.0.33 `Found 0 verified upgrade option(s) for MCH.` result is accepted; the focused 0.1.0.34 gate is one refresh proving the same answer now comes through Nexus-owned role-aware ranking. No purchase, Routes, duty, or automatic Progression retest is required.
 
 ### 18.16 Release report format
 
