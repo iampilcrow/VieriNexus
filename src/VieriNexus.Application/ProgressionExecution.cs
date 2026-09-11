@@ -362,7 +362,7 @@ public sealed class ProgressionExecutionCoordinator
         if (!plan.IsValid || plan.IsSatisfied)
             return new(false, plan.Summary);
         if (!draft.AllowDuties && (!(draft.AllowJobQuests || draft.AllowSideQuests) || questProvider is null))
-            return new(false, "Enable Class / Job / Role quests, general side quests, or Duties with a compatible provider before starting.");
+            return new(false, "Enable Class/Job/Role quests, general side quests, or Duties with a compatible provider before starting.");
         if (State?.Goal.Status is GoalStatus.Active)
             return new(false, "A Progression goal is already active.");
         if (State?.Goal.Status is GoalStatus.Paused or GoalStatus.Blocked)
@@ -1236,7 +1236,7 @@ public sealed class ProgressionExecutionCoordinator
 
     private static string QuestKindName(ProgressionQuestKind kind) => kind switch
     {
-        ProgressionQuestKind.ClassJobRole => "Class / Job / Role quest",
+        ProgressionQuestKind.ClassJobRole => "Class/Job/Role quest",
         ProgressionQuestKind.GeneralSideQuest => "general side quest",
         _ => "quest",
     };

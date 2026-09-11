@@ -26,7 +26,9 @@ public sealed record CharacterSnapshot(
     string Name,
     uint ClassJobId,
     int Level,
-    bool IsInCombat);
+    bool IsInCombat,
+    string ClassJobName = "",
+    string ClassJobAbbreviation = "");
 
 public sealed record ProviderHealthSnapshot(
     ProviderId Id,

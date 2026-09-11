@@ -31,7 +31,9 @@ internal sealed class WorldSnapshotObserver(
                 player.Name.ToString(),
                 player.ClassJob.RowId,
                 player.Level,
-                condition[ConditionFlag.InCombat]), capturedAt);
+                condition[ConditionFlag.InCombat],
+                player.ClassJob.Value.Name.ExtractText(),
+                player.ClassJob.Value.Abbreviation.ExtractText()), capturedAt);
 
         store.Publish(new WorldSnapshot(
             Interlocked.Increment(ref revision),

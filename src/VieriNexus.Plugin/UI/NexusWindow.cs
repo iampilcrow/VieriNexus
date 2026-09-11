@@ -17,6 +17,7 @@ internal sealed class NexusWindow : Window
         ("OVERVIEW", "Overview", "Control Center"),
         ("OVERVIEW", "Automation", "Automation"),
         ("OVERVIEW", "Progression", "Progression"),
+        ("OVERVIEW", "Progress Atlas", "Atlas"),
         ("OVERVIEW", "Queue", "Queue"),
         ("MODULES", "Combat", "Combat"),
         ("MODULES", "Gear & Inventory", "Gear"),
@@ -40,6 +41,7 @@ internal sealed class NexusWindow : Window
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
+    private readonly ProgressAtlasService progressAtlas;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
     private readonly ModuleRegistry modules;
@@ -75,6 +77,7 @@ internal sealed class NexusWindow : Window
         NavigationRouteRuntimeService navigationRuntime,
         ProgressionProviderService progressionProviders,
         ProgressionRuntimeService progressionRuntime,
+        ProgressAtlasService progressAtlas,
         GearShoppingRuntimeService gearShoppingRuntime,
         NexusMaintenanceRuntimeService maintenanceRuntime,
         ModuleRegistry modules,
@@ -93,6 +96,7 @@ internal sealed class NexusWindow : Window
         this.navigationRuntime = navigationRuntime;
         this.progressionProviders = progressionProviders;
         this.progressionRuntime = progressionRuntime;
+        this.progressAtlas = progressAtlas;
         this.gearShoppingRuntime = gearShoppingRuntime;
         this.maintenanceRuntime = maintenanceRuntime;
         this.modules = modules;
@@ -181,6 +185,7 @@ internal sealed class NexusWindow : Window
             case "Home": DrawHome(); break;
             case "Overview": DrawOverview(); break;
             case "Progression": DrawProgression(); break;
+            case "Progress Atlas": DrawProgressAtlas(); break;
             case "Gear & Inventory": DrawGearAndInventory(); break;
             case "Routes & Navigation": DrawRoutesAndNavigation(); break;
             case "Dependencies": DrawDependencies(); break;
@@ -253,7 +258,7 @@ internal sealed class NexusWindow : Window
             ImGui.TableNextColumn();
             var snapshot = world.Current;
             var character = snapshot.Character.Value;
-            StatusCard("CHARACTER", character?.Name ?? "Waiting", character is null ? "No character snapshot" : $"Level {character.Level} • Job {character.ClassJobId}", character is null ? NexusTheme.Muted : NexusTheme.Cyan);
+            StatusCard("CHARACTER", character?.Name ?? "Waiting", character is null ? "No character snapshot" : $"Level {character.Level} • {ClassJobDisplay.Label(character)}", character is null ? NexusTheme.Muted : NexusTheme.Cyan);
             ImGui.EndTable();
         }
 
@@ -1835,7 +1840,7 @@ internal sealed class NexusWindow : Window
 
         BeginAutoPanel("REACH JOB LEVEL");
         NexusTheme.StatusDot(NexusTheme.Cyan,
-            $"{character.Name} • Job {character.ClassJobId} • Level {character.Level}");
+            $"{character.Name} • {ClassJobDisplay.Label(character)} • Level {character.Level}");
         TextWrapped(NexusTheme.Muted,
             "This first goal follows the job you are currently playing. Job switching joins the queue after its ownership contract is migrated.");
 
@@ -1853,7 +1858,7 @@ internal sealed class NexusWindow : Window
         {
             ImGui.TableNextColumn();
             bool jobQuests = draftConfiguration.AllowJobQuests;
-            if (ImGui.Checkbox("Class / Job / Role quests", ref jobQuests))
+            if (ImGui.Checkbox("Class/Job/Role Quests", ref jobQuests))
             {
                 draftConfiguration.AllowJobQuests = jobQuests;
                 changed = true;
@@ -1919,6 +1924,54 @@ internal sealed class NexusWindow : Window
             DrawProgressionProviders(providers);
         if (ImGui.CollapsingHeader("Plan details###ProgressionPlan"))
             DrawProgressionPlan(plan);
+    }
+
+    private void DrawProgressAtlas()
+    {
+        PageHeading("Progress Atlas", "Your character's completion, read directly from current game data by Nexus.");
+
+        CharacterSnapshot? character = world.Current.Character.Value;
+        ProgressAtlasSnapshot snapshot = progressAtlas.Current;
+        BeginAutoPanel("CHARACTER PROGRESS");
+        if (character is null || !snapshot.IsCharacterAvailable)
+        {
+            NexusTheme.StatusDot(NexusTheme.Muted, "Waiting for the current character");
+            TextWrapped(NexusTheme.Muted, "Log in to load this character's Progress Atlas.");
+            EndAutoPanel();
+            return;
+        }
+
+        NexusTheme.StatusDot(NexusTheme.Cyan,
+            $"{character.Name} • {ClassJobDisplay.Label(character)} • Level {character.Level}");
+        TextWrapped(NexusTheme.Muted,
+            "This data belongs to Nexus and remains available after VieriCodex is disabled.");
+        EndAutoPanel();
+
+        foreach (ProgressAtlasCategorySnapshot category in snapshot.Categories)
+        {
+            BeginAutoPanel(category.Name.ToUpperInvariant());
+            if (!category.IsLoaded)
+            {
+                NexusTheme.StatusDot(NexusTheme.Amber, category.Detail);
+                TextWrapped(NexusTheme.Muted, $"Known total: {category.Total:N0}");
+                EndAutoPanel();
+                continue;
+            }
+
+            string completion = category.Total == 0
+                ? "No current game-data entries"
+                : $"{category.Completed:N0} of {category.Total:N0} complete • {category.Remaining:N0} remaining";
+            NexusTheme.StatusDot(category.Remaining == 0 ? NexusTheme.Green : NexusTheme.Cyan, completion);
+            ImGui.ProgressBar(category.Completion, new Vector2(-1, 22),
+                category.Total == 0 ? "—" : $"{category.Completion:P0}");
+            TextWrapped(NexusTheme.Muted, category.Detail);
+            EndAutoPanel();
+        }
+
+        BeginAutoPanel("NEXT NEXUS-OWNED ATLAS SYSTEMS");
+        TextWrapped(NexusTheme.Muted,
+            "Hunting and Grand Company Logs plus world exploration are being connected to this same live completion model. Their target execution will use stock providers only for narrow movement and combat mechanics.");
+        EndAutoPanel();
     }
 
     private void DrawProgressionRuntime(
@@ -2127,7 +2180,7 @@ internal sealed class NexusWindow : Window
         if (plan.IsValid && !plan.IsSatisfied)
             TextWrapped(plan.IsExecutionConnected ? NexusTheme.Green : NexusTheme.Amber,
                 plan.IsExecutionConnected
-                    ? "Gear readiness, exact Class / Job / Role quests, general side quests, and duties run as separate verified activities. Nexus replans after each one."
+                    ? "Gear readiness, exact Class/Job/Role quests, general side quests, and duties run as separate verified activities. Nexus replans after each one."
                     : "Planning is live, but no bounded provider lane is ready to execute.");
         EndAutoPanel();
     }

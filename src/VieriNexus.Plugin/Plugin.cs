@@ -51,6 +51,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly AutoDutyMigrationService autoDutyMigration;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
+    private readonly ProgressAtlasService progressAtlas;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
     private readonly StrikingDummyTravelService strikingDummyTravel;
@@ -175,6 +176,7 @@ public sealed class Plugin : IDalamudPlugin
             progressionProviders,
             DutyState,
             Log);
+        progressAtlas = new ProgressAtlasService(DataManager, ClientState);
         gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
         maintenanceRuntime = new NexusMaintenanceRuntimeService(
             resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager);
@@ -194,7 +196,8 @@ public sealed class Plugin : IDalamudPlugin
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
             navigationLibrary, navigationActivation, navigationDiagnostics,
-            navigationRuntime, progressionProviders, progressionRuntime, gearShoppingRuntime, maintenanceRuntime,
+            navigationRuntime, progressionProviders, progressionRuntime, progressAtlas,
+            gearShoppingRuntime, maintenanceRuntime,
             moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
         operationsOverlay = new NexusOperationsOverlay(
@@ -222,7 +225,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Subcommands: progression, routes, play <name>, preview <name>, stop, home, dependencies, migration.",
+            HelpMessage = "Open VieriNexus. Subcommands: progression, atlas, routes, play <name>, preview <name>, stop, home, dependencies, migration.",
         });
         CommandManager.AddHandler(ShortCommand, new CommandInfo(OnCommand)
         {
@@ -265,6 +268,7 @@ public sealed class Plugin : IDalamudPlugin
         navigationRecovery.Update(now);
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
         progressionProviders.UpdateGearAdapter();
+        progressAtlas.Update(DateTimeOffset.UtcNow);
         gearShoppingRuntime.Update();
         maintenanceRuntime.Update(DateTimeOffset.UtcNow);
         strikingDummyTravel.Update(DateTimeOffset.UtcNow);
@@ -356,6 +360,10 @@ public sealed class Plugin : IDalamudPlugin
                 break;
             case "progression":
                 Configuration.SelectedPage = "Progression";
+                mainWindow.IsOpen = true;
+                break;
+            case "atlas":
+                Configuration.SelectedPage = "Progress Atlas";
                 mainWindow.IsOpen = true;
                 break;
             case "stop":

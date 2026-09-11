@@ -236,7 +236,7 @@ public static class ReachJobLevelPlanner
         {
             string[] methods =
             [
-                .. (draft.AllowJobQuests ? new[] { "Class / Job / Role quests" } : Array.Empty<string>()),
+                .. (draft.AllowJobQuests ? new[] { "Class/Job/Role quests" } : Array.Empty<string>()),
                 .. (draft.AllowSideQuests ? new[] { "general side quests" } : Array.Empty<string>()),
             ];
             steps.Add(new ProgressionPlanStep(
@@ -287,7 +287,7 @@ public static class ReachJobLevelPlanner
         issues.Add(new(ProgressionPlanIssueSeverity.Information,
             executionConnected ? "bounded-progression-connected" : "execution-not-connected",
             executionConnected
-                ? "Nexus can execute exact Class / Job / Role quests, general side quests, and duties as verified bounded activities, with Nexus-owned gear readiness between duty runs."
+                ? "Nexus can execute exact Class/Job/Role quests, general side quests, and duties as verified bounded activities, with Nexus-owned gear readiness between duty runs."
                 : "This plan has no bounded provider task that Nexus can execute yet."));
         return new ReachJobLevelPlan(
             true,
