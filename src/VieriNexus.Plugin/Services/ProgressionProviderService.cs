@@ -45,7 +45,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly ICallGateSubscriber<int, string> vieriAutoDutyProgression;
     private readonly ICallGateSubscriber<bool> vieriAutoDutyGearBusy;
     private readonly ICallGateSubscriber<string> vieriAutoDutyStartGear;
-    private readonly ICallGateSubscriber<string> vieriAutoDutyGetGearPreview;
+    private readonly ICallGateSubscriber<string> vieriAutoDutyGetGearCandidateSnapshot;
     private readonly ICallGateSubscriber<string, string> vieriAutoDutyStartApprovedGear;
     private readonly ICallGateSubscriber<string, string, string> vieriAutoDutyCommand;
     private readonly ICallGateSubscriber<object, bool> autoDutyPushConfigOverrides;
@@ -78,7 +78,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         vieriAutoDutyProgression = pluginInterface.GetIpcSubscriber<int, string>("AutoDuty.StartProgressionLeveling");
         vieriAutoDutyGearBusy = pluginInterface.GetIpcSubscriber<bool>("AutoDuty.IsGearReadinessBusy");
         vieriAutoDutyStartGear = pluginInterface.GetIpcSubscriber<string>("AutoDuty.StartGearReadiness");
-        vieriAutoDutyGetGearPreview = pluginInterface.GetIpcSubscriber<string>("AutoDuty.GetGearUpgradePreview");
+        vieriAutoDutyGetGearCandidateSnapshot = pluginInterface.GetIpcSubscriber<string>("AutoDuty.GetGearUpgradeCandidateSnapshot");
         vieriAutoDutyStartApprovedGear = pluginInterface.GetIpcSubscriber<string, string>("AutoDuty.StartApprovedGearShopping");
         vieriAutoDutyCommand = pluginInterface.GetIpcSubscriber<string, string, string>("AutoDuty.ExecuteVieriCommand");
         autoDutyPushConfigOverrides = pluginInterface.GetIpcSubscriber<object, bool>("AutoDuty.PushConfigOverrides");
@@ -122,7 +122,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     internal bool IsGearReadinessReady => GearContractReady() && IsVieriAutoDutyActive();
 
     internal bool IsGearShoppingPreviewReady => IsVieriAutoDutyActive() &&
-        vieriAutoDutyGetGearPreview.HasFunction && vieriAutoDutyStartApprovedGear.HasFunction &&
+        vieriAutoDutyGetGearCandidateSnapshot.HasFunction && vieriAutoDutyStartApprovedGear.HasFunction &&
         vieriAutoDutyGearBusy.HasFunction && autoDutyIsStopped.HasFunction &&
         autoDutyPushConfigOverrides.HasFunction && autoDutyPopConfigOverrides.HasFunction;
 
@@ -426,18 +426,18 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
         try
         {
-            preview = JsonSerializer.Deserialize<GearUpgradePreview>(
-                vieriAutoDutyGetGearPreview.InvokeFunc(), GearJsonOptions);
-            if (preview is null || preview.SchemaVersion != GearUpgradePreview.CurrentSchemaVersion)
+            GearUpgradeSnapshot? snapshot = JsonSerializer.Deserialize<GearUpgradeSnapshot>(
+                vieriAutoDutyGetGearCandidateSnapshot.InvokeFunc(), GearJsonOptions);
+            if (snapshot is null || snapshot.SchemaVersion != GearUpgradeSnapshot.CurrentSchemaVersion)
             {
-                preview = null;
-                message = "The gear provider returned an unsupported preview. Update both VieriNexus and VieriAutoDuty.";
+                message = "The gear provider returned an unsupported live scan. Update both VieriNexus and VieriAutoDuty.";
                 return false;
             }
 
+            preview = GearUpgradeCandidatePolicy.BuildPreview(snapshot);
             message = preview.UnavailableReason ??
                       $"Found {preview.Slots.Count(slot => slot.Replacement is not null)} verified upgrade option(s) for {preview.Job}.";
-            return true;
+            return string.IsNullOrWhiteSpace(preview.UnavailableReason);
         }
         catch (Exception ex)
         {

@@ -2,6 +2,47 @@ using VieriNexus.Domain;
 
 namespace VieriNexus.Application;
 
+public sealed record GearCurrentSlot(
+    int SlotKey,
+    string Name,
+    string CurrentEquipment,
+    uint CurrentItemId,
+    uint CurrentItemLevel,
+    bool ActiveExperienceBonus,
+    bool IsMainHand = false,
+    bool IsOffHand = false,
+    bool IsRing = false);
+
+public sealed record GearUpgradeCandidate(
+    int SlotKey,
+    uint ItemId,
+    string Name,
+    uint ItemLevel,
+    byte EquipLevel,
+    uint UnitPrice,
+    string Vendor,
+    int Quantity,
+    int OwnedCopies,
+    int PrimaryStat,
+    bool IsMainHand = false,
+    bool IsOffHand = false,
+    bool IsTwoHandedMainHand = false);
+
+public sealed record GearUpgradeSnapshot(
+    int SchemaVersion,
+    ulong CharacterId,
+    ulong EquipmentSignature,
+    string Job,
+    short Level,
+    byte VendorLevel,
+    IReadOnlyList<GearCurrentSlot> Slots,
+    IReadOnlyList<GearUpgradeCandidate> Candidates,
+    bool CurrentMainHandIsTwoHanded = false,
+    string? UnavailableReason = null)
+{
+    public const int CurrentSchemaVersion = 1;
+}
+
 public sealed record GearUpgradeReplacement(
     uint ItemId,
     string Name,
@@ -54,6 +95,100 @@ public sealed record GearShoppingApprovalResult(
     string Message,
     GearShoppingApproval? Approval = null,
     ulong EstimatedCost = 0);
+
+/// <summary>
+/// Selects the exact live gil-vendor replacement for each equipment slot. The temporary provider
+/// supplies raw equipment/catalog facts; Nexus owns role scoring, two-handed weapon handling,
+/// EXP-item protection, upgrade comparison, and the final preview presented for approval.
+/// </summary>
+public static class GearUpgradeCandidatePolicy
+{
+    public static GearUpgradePreview BuildPreview(GearUpgradeSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (snapshot.SchemaVersion != GearUpgradeSnapshot.CurrentSchemaVersion)
+            return Unavailable(snapshot, "The gear scan uses an unsupported format. Update both VieriNexus and VieriAutoDuty.");
+        if (!string.IsNullOrWhiteSpace(snapshot.UnavailableReason))
+            return Unavailable(snapshot, snapshot.UnavailableReason);
+        if (snapshot.CharacterId == 0 || snapshot.EquipmentSignature == 0)
+            return Unavailable(snapshot, "The gear scan is not tied to a verified character and equipment snapshot.");
+        if (snapshot.Slots.GroupBy(slot => slot.SlotKey).Any(group => group.Count() != 1))
+            return Unavailable(snapshot, "The gear scan contains duplicate equipment slots. Refresh before shopping.");
+
+        Dictionary<int, GearUpgradeCandidate> selected = snapshot.Candidates
+            .Where(IsComplete)
+            .GroupBy(candidate => candidate.SlotKey)
+            .Select(group => SelectBest(group))
+            .Where(candidate => candidate is not null)
+            .ToDictionary(candidate => candidate!.SlotKey, candidate => candidate!);
+        if (snapshot.Slots.Count(slot => slot.IsMainHand) > 1 ||
+            selected.Values.Count(candidate => candidate.IsMainHand) > 1)
+            return Unavailable(snapshot, "The gear scan contains conflicting main-hand data. Refresh before shopping.");
+
+        GearCurrentSlot? currentMainHand = snapshot.Slots.FirstOrDefault(slot => slot.IsMainHand);
+        GearUpgradeCandidate? plannedMainHand = selected.Values.FirstOrDefault(candidate => candidate.IsMainHand);
+        bool plannedMainHandIsTwoHanded = plannedMainHand?.IsTwoHandedMainHand ??
+                                          (currentMainHand is not null && snapshot.CurrentMainHandIsTwoHanded);
+
+        List<GearUpgradeSlot> slots = [];
+        foreach (GearCurrentSlot slot in snapshot.Slots)
+        {
+            selected.TryGetValue(slot.SlotKey, out GearUpgradeCandidate? candidate);
+            if (slot.IsOffHand && plannedMainHandIsTwoHanded)
+                candidate = null;
+
+            bool recommended = candidate is not null &&
+                !slot.ActiveExperienceBonus &&
+                candidate.ItemLevel > slot.CurrentItemLevel &&
+                (candidate.Quantity > 0 || candidate.OwnedCopies > 0);
+            GearUpgradeReplacement? replacement = recommended
+                ? new(candidate!.ItemId, candidate.Name, candidate.ItemLevel, candidate.EquipLevel,
+                    candidate.UnitPrice, candidate.Vendor, candidate.Quantity, candidate.OwnedCopies)
+                : null;
+            slots.Add(new GearUpgradeSlot(slot.SlotKey, slot.Name, slot.CurrentEquipment,
+                slot.ActiveExperienceBonus, recommended, replacement));
+        }
+
+        return new GearUpgradePreview(
+            GearUpgradePreview.CurrentSchemaVersion,
+            snapshot.CharacterId,
+            snapshot.EquipmentSignature,
+            snapshot.Job,
+            snapshot.Level,
+            snapshot.VendorLevel,
+            slots);
+    }
+
+    private static GearUpgradeCandidate? SelectBest(IEnumerable<GearUpgradeCandidate> candidates)
+    {
+        GearUpgradeCandidate[] available = candidates.ToArray();
+        if (available.Length == 0)
+            return null;
+
+        IEnumerable<GearUpgradeCandidate> suitable = available.Any(candidate => candidate.PrimaryStat > 0)
+            ? available.Where(candidate => candidate.PrimaryStat > 0)
+            : available;
+        return suitable.OrderByDescending(candidate => candidate.ItemLevel)
+            .ThenByDescending(candidate => candidate.PrimaryStat)
+            .ThenBy(candidate => candidate.UnitPrice)
+            .First();
+    }
+
+    private static bool IsComplete(GearUpgradeCandidate candidate) =>
+        candidate.ItemId != 0 && candidate.UnitPrice != 0 && candidate.Quantity >= 0 &&
+        candidate.OwnedCopies >= 0 && !string.IsNullOrWhiteSpace(candidate.Name) &&
+        !string.IsNullOrWhiteSpace(candidate.Vendor);
+
+    private static GearUpgradePreview Unavailable(GearUpgradeSnapshot snapshot, string? reason) => new(
+        GearUpgradePreview.CurrentSchemaVersion,
+        snapshot.CharacterId,
+        snapshot.EquipmentSignature,
+        snapshot.Job,
+        snapshot.Level,
+        snapshot.VendorLevel,
+        [],
+        reason ?? "The live gear scan is unavailable.");
+}
 
 /// <summary>
 /// Nexus-owned approval boundary for manual gear shopping. A provider may describe live candidates,
