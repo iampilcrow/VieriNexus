@@ -704,7 +704,7 @@ public sealed class ProgressionExecutionCoordinator
             EnsureGearKind,
             1,
             "Check and equip gear upgrades",
-            "Nexus owns the spending floor and transaction while the migration provider performs the approved vendor/equip mechanics.",
+            "Nexus owns the complete vendor trip, exact purchases, equipment verification, cleanup, and spending floor.",
             GearCapability,
             gearProvider.Id,
             GearResources.ToHashSet(),
@@ -837,6 +837,12 @@ public sealed class ProgressionExecutionCoordinator
 
         ProgressionGearTaskPayload payload = JsonSerializer.Deserialize<ProgressionGearTaskPayload>(task.PayloadJson)
             ?? throw new InvalidDataException("The gear-readiness task payload is empty.");
+        if (observation.CompletedSequence <= payload.BaselineCompletedSequence)
+        {
+            FailTask(task, FailureKind.TransientExternal, "gear-transaction-not-completed",
+                "Nexus gear shopping ended before the approved transaction completed.", observation.Detail, true);
+            return;
+        }
         int minimumAllowedGil = Math.Min(payload.StartingGil, payload.MinimumGilReserve);
         if (world.Gil < minimumAllowedGil)
         {

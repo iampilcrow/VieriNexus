@@ -88,23 +88,56 @@ public sealed class ManualGearShoppingCoordinatorTests
         Assert.Empty(leases.Snapshot());
     }
 
+    [Fact]
+    public void InactiveProviderWithoutCompletionSequenceIsReportedAsFailure()
+    {
+        ResourceLeaseManager leases = new();
+        FakeProvider provider = new();
+        ManualGearShoppingCoordinator coordinator = new(leases, provider);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        coordinator.Start(Approval(), now);
+        coordinator.Update(now.AddSeconds(1));
+
+        provider.EndWithoutCompletion("Exact purchase was not confirmed.");
+        coordinator.Update(now.AddSeconds(2));
+
+        Assert.Equal(ManualGearShoppingState.Failed, coordinator.Status.State);
+        Assert.Contains("not confirmed", coordinator.Status.Message);
+        Assert.Empty(leases.Snapshot());
+    }
+
     private static GearShoppingApproval Approval() => new(
         1, 10, 20, 1_000_000, [new(3, 100, 5_000, 1)]);
 
     private sealed class FakeProvider : IManualGearShoppingProvider
     {
+        private bool busy;
         public ProviderId Id { get; } = new("fake");
         public bool Available { get; set; } = true;
-        public bool Busy { get; set; }
+        public bool Busy
+        {
+            get => busy;
+            set
+            {
+                if (busy && !value)
+                    CompletedSequence++;
+                busy = value;
+            }
+        }
         public bool StopLeavesBusy { get; set; }
         public int StartCalls { get; private set; }
+        public long StartedSequence { get; private set; }
+        public long CompletedSequence { get; private set; }
+        public string Detail { get; private set; } = "Provider state.";
 
         public ProgressionGearProviderObservation Observe() =>
-            new(Available, Busy, 0, 0, 0, 0, 0, Available ? "Provider state." : "Unavailable.");
+            new(Available, Busy, StartedSequence, CompletedSequence, 0, 0, 0,
+                Available ? Detail : "Unavailable.");
 
         public bool TryStart(GearShoppingApproval approval, out string message)
         {
             StartCalls++;
+            StartedSequence++;
             Busy = true;
             message = "Started.";
             return true;
@@ -116,6 +149,12 @@ public sealed class ManualGearShoppingCoordinatorTests
                 Busy = false;
             message = "Stop requested.";
             return true;
+        }
+
+        public void EndWithoutCompletion(string message)
+        {
+            busy = false;
+            Detail = message;
         }
     }
 }

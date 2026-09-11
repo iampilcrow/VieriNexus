@@ -140,7 +140,9 @@ internal sealed unsafe class NexusGearCatalogService(
                         BaseParam(item, primaryStat),
                         mainHand,
                         offHand,
-                        mainHand && IsTwoHanded(item)));
+                        mainHand && IsTwoHanded(item),
+                        vendor.DataId,
+                        vendor.TerritoryId));
                 }
             }
 

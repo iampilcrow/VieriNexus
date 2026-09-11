@@ -1393,8 +1393,8 @@ internal sealed class NexusWindow : Window
                     : "Log into a character to inspect gear upgrades");
         TextWrapped(NexusTheme.Muted,
             progressionProviders.IsGearShoppingExecutionReady
-                ? "Nexus reads the live equipment and vendor catalogs, selects upgrades, and owns the exact approval and gil floor. VieriAutoDuty temporarily performs only the physical shop and equip actions."
-                : "Nexus reads the live equipment and vendor catalogs directly. Shopping actions remain unavailable until the temporary VieriAutoDuty mechanics adapter is enabled.");
+                ? "Nexus owns this entire transaction: live vendor lookup, route travel, exact purchases, verified equipping, gearset update, and displaced-item cleanup."
+                : "Nexus reads the live equipment and vendor catalogs directly. Shopping actions require a logged-in character and vnavmesh.");
         if (!shoppingStatus.IsActive && shoppingStatus.State is not ManualGearShoppingState.Idle)
             TextWrapped(shoppingStatus.State == ManualGearShoppingState.Completed ? NexusTheme.Green : NexusTheme.Red,
                 shoppingStatus.Message);
@@ -1708,7 +1708,7 @@ internal sealed class NexusWindow : Window
                 hasExecutableStart
                     ? $"Ready to verify gear, then run one duty at a time • {eligible} currently eligible"
                     : plan.IsExecutionConnected
-                        ? "The temporary gear-readiness contract is unavailable"
+                    ? "Nexus gear shopping is unavailable"
                         : "No executable duty lane is ready");
             TextWrapped(NexusTheme.Muted,
                 "Nexus—not the provider—owns the level target, task history, Stop, Last Run, verification, and decision to schedule another duty.");

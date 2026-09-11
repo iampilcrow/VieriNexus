@@ -80,6 +80,22 @@ public sealed class GearUpgradeCandidatePolicyTests
             .UnavailableReason);
     }
 
+    [Fact]
+    public void PreservesExactVendorIdentityThroughPreview()
+    {
+        GearUpgradeCandidate candidate = Candidate(3, 200, 150, 5_000, 10) with
+        {
+            VendorDataId = 1027243,
+            VendorTerritoryId = 819,
+        };
+
+        GearUpgradeReplacement replacement = Assert.Single(GearUpgradeCandidatePolicy.BuildPreview(Snapshot(
+            [Slot(3, "Body", 100, 1)], [candidate])).Slots).Replacement!;
+
+        Assert.Equal(1027243u, replacement.VendorDataId);
+        Assert.Equal(819u, replacement.VendorTerritoryId);
+    }
+
     private static GearUpgradeSnapshot Snapshot(
         IReadOnlyList<GearCurrentSlot> slots,
         IReadOnlyList<GearUpgradeCandidate> candidates) => new(

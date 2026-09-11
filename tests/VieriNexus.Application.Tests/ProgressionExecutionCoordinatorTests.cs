@@ -60,6 +60,25 @@ public sealed class ProgressionExecutionCoordinatorTests
     }
 
     [Fact]
+    public void GearProviderFailureCannotBeMisreportedAsACompletedTransaction()
+    {
+        FakeDutyProvider duty = new();
+        FakeGearProvider gear = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), duty, gear);
+        coordinator.Start(Draft() with { CurrentItemLevel = 640, CurrentGil = 1_500_000 }, Plan());
+
+        gear.IsBusy = true;
+        coordinator.Update(World(90, false) with { ItemLevel = 640, Gil = 1_500_000 });
+        gear.EndWithoutCompletion();
+        coordinator.Update(World(90, false) with { ItemLevel = 640, Gil = 1_500_000 });
+
+        Assert.Equal(GoalStatus.Blocked, coordinator.State!.Goal.Status);
+        Assert.Equal("gear-transaction-not-completed", coordinator.State.Tasks.Single().Failure!.Code);
+        Assert.Empty(duty.StartedTerritories);
+    }
+
+    [Fact]
     public void StopDuringGearReadinessUsesGearStopAndNeverCallsDutyStop()
     {
         FakeDutyProvider duty = new();
@@ -447,18 +466,30 @@ public sealed class ProgressionExecutionCoordinatorTests
 
     private sealed class FakeGearProvider : IProgressionGearProvider
     {
+        private bool isBusy;
         public ProviderId Id { get; } = new("provider.gear-test/v1");
         public bool Available { get; set; } = true;
-        public bool IsBusy { get; set; }
+        public bool IsBusy
+        {
+            get => isBusy;
+            set
+            {
+                if (isBusy && !value)
+                    CompletedSequence++;
+                isBusy = value;
+            }
+        }
         public int ItemsPurchased { get; set; }
         public int StopCalls { get; private set; }
         public List<int> StartedGilFloors { get; } = [];
+        public long StartedSequence { get; private set; }
+        public long CompletedSequence { get; private set; }
 
         public ProgressionGearProviderObservation ObserveGearReadiness() => new(
             Available,
             Available ? IsBusy : null,
-            IsBusy ? 1 : 0,
-            IsBusy ? 0 : 1,
+            StartedSequence,
+            CompletedSequence,
             640,
             650,
             ItemsPurchased,
@@ -472,6 +503,7 @@ public sealed class ProgressionExecutionCoordinatorTests
                 return false;
             }
             StartedGilFloors.Add(minimumGilReserve);
+            StartedSequence++;
             message = "started gear";
             return true;
         }
@@ -482,5 +514,7 @@ public sealed class ProgressionExecutionCoordinatorTests
             message = Available ? "gear stop requested" : "missing gear";
             return Available;
         }
+
+        public void EndWithoutCompletion() => isBusy = false;
     }
 }

@@ -69,6 +69,22 @@ public sealed class GearShoppingApprovalPolicyTests
         Assert.Equal(0, Assert.Single(result.Approval!.Lines).Quantity);
     }
 
+    [Fact]
+    public void ApprovalPinsTheExactVendorAndTerritory()
+    {
+        GearUpgradeSlot slot = Slot(3, "Body", 200, 8_000, 1, recommended: true) with
+        {
+            Replacement = new GearUpgradeReplacement(
+                200, "Upgrade", 415, 78, 8_000, "Vendor — Area", 1, 0, 1027243, 819),
+        };
+
+        GearShoppingApprovalLine line = Assert.Single(GearShoppingApprovalPolicy.Build(
+            Preview(slot), [3], 2_000_000, 1_000_000).Approval!.Lines);
+
+        Assert.Equal(1027243u, line.VendorDataId);
+        Assert.Equal(819u, line.VendorTerritoryId);
+    }
+
     private static GearUpgradePreview Preview(params GearUpgradeSlot[] slots) => new(
         GearUpgradePreview.CurrentSchemaVersion,
         123,

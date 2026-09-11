@@ -26,7 +26,9 @@ public sealed record GearUpgradeCandidate(
     int PrimaryStat,
     bool IsMainHand = false,
     bool IsOffHand = false,
-    bool IsTwoHandedMainHand = false);
+    bool IsTwoHandedMainHand = false,
+    uint VendorDataId = 0,
+    uint VendorTerritoryId = 0);
 
 public sealed record GearUpgradeSnapshot(
     int SchemaVersion,
@@ -51,7 +53,9 @@ public sealed record GearUpgradeReplacement(
     uint UnitPrice,
     string Vendor,
     int Quantity,
-    int OwnedCopies);
+    int OwnedCopies,
+    uint VendorDataId = 0,
+    uint VendorTerritoryId = 0);
 
 public sealed record GearUpgradeSlot(
     int SlotKey,
@@ -78,7 +82,9 @@ public sealed record GearShoppingApprovalLine(
     int SlotKey,
     uint ItemId,
     uint MaximumUnitPrice,
-    int Quantity);
+    int Quantity,
+    uint VendorDataId = 0,
+    uint VendorTerritoryId = 0);
 
 public sealed record GearShoppingApproval(
     int SchemaVersion,
@@ -182,7 +188,8 @@ public static class GearUpgradeCandidatePolicy
                 (candidate.Quantity > 0 || candidate.OwnedCopies > 0);
             GearUpgradeReplacement? replacement = recommended
                 ? new(candidate!.ItemId, candidate.Name, candidate.ItemLevel, candidate.EquipLevel,
-                    candidate.UnitPrice, candidate.Vendor, candidate.Quantity, candidate.OwnedCopies)
+                    candidate.UnitPrice, candidate.Vendor, candidate.Quantity, candidate.OwnedCopies,
+                    candidate.VendorDataId, candidate.VendorTerritoryId)
                 : null;
             slots.Add(new GearUpgradeSlot(slot.SlotKey, slot.Name, slot.CurrentEquipment,
                 slot.ActiveExperienceBonus, recommended, replacement));
@@ -278,7 +285,9 @@ public static class GearShoppingApprovalPolicy
                 slot.SlotKey,
                 replacement.ItemId,
                 replacement.UnitPrice,
-                replacement.Quantity));
+                replacement.Quantity,
+                replacement.VendorDataId,
+                replacement.VendorTerritoryId));
         }
 
         ulong spendable = (ulong)Math.Max(0, currentGil - reserve);
@@ -350,6 +359,7 @@ public sealed class ManualGearShoppingCoordinator
     private readonly ResourceLeaseManager leases;
     private readonly IManualGearShoppingProvider provider;
     private ResourceLeaseHandle? activeLease;
+    private long baselineCompletedSequence;
 
     public ManualGearShoppingCoordinator(ResourceLeaseManager leases, IManualGearShoppingProvider provider)
     {
@@ -370,6 +380,7 @@ public sealed class ManualGearShoppingCoordinator
             return new(false, observation.Detail);
         if (observation.IsBusy != false)
             return new(false, "The gear provider is already doing work that Nexus does not own.");
+        baselineCompletedSequence = observation.CompletedSequence;
 
         LeaseOwner owner = new(GoalId.New(), TaskId.New(), AttemptId.New(), 50,
             "Gear & Inventory: approved manual shopping");
@@ -430,10 +441,15 @@ public sealed class ManualGearShoppingCoordinator
         }
 
         bool stopped = Status.State == ManualGearShoppingState.Stopping;
+        bool completed = observation.CompletedSequence > baselineCompletedSequence;
         ReleaseLease();
         Status = new(
-            stopped ? ManualGearShoppingState.Idle : ManualGearShoppingState.Completed,
-            stopped ? "Manual gear shopping stopped." : "Approved gear shopping and equipment verification completed.",
+            stopped ? ManualGearShoppingState.Idle : completed
+                ? ManualGearShoppingState.Completed
+                : ManualGearShoppingState.Failed,
+            stopped ? "Manual gear shopping stopped." : completed
+                ? "Approved gear shopping and equipment verification completed."
+                : observation.Detail,
             now);
     }
 
