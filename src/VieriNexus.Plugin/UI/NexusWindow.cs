@@ -65,6 +65,7 @@ internal sealed class NexusWindow : Window
     private readonly HashSet<int> selectedGearUpgradeSlots = [];
     private string gearShoppingMessage = string.Empty;
     private string maintenanceMessage = string.Empty;
+    private NexusItemTransactionPreview? protectedSalePreview;
     private string migrationQuickStartMessage = string.Empty;
 
     internal NexusWindow(
@@ -1784,7 +1785,7 @@ internal sealed class NexusWindow : Window
                     ? $"Nexus profile: {profile.Name}"
                     : "Import operations settings on the Migration page");
         TextWrapped(NexusTheme.Muted,
-            "Nexus now runs self-repair, materia extraction, card/minion/orchestrion registration, and eligible coffers directly. AutoDuty is not called for these actions.");
+            "Nexus owns maintenance order, item protection, resource locking, Stop, timeouts, and completion. AutoRetainer is used only for Grand Company mechanics; Glamour Log is used only for eligible storage mechanics. AutoDuty is not called.");
 
         if (status.IsActive)
         {
@@ -1807,11 +1808,56 @@ internal sealed class NexusWindow : Window
             SameLineIfFits("Open coffers");
             if (ImGui.Button("Open coffers"))
                 maintenanceRuntime.Start(NexusMaintenanceOperation.OpenCoffers, out maintenanceMessage);
+
+            if (ImGui.Button("Desynthesize eligible items"))
+                maintenanceRuntime.Start(NexusMaintenanceOperation.Desynthesize, out maintenanceMessage);
+            SameLineIfFits("Grand Company turn-ins");
+            if (ImGui.Button("Grand Company turn-ins"))
+                maintenanceRuntime.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out maintenanceMessage);
+
+            if (ImGui.Button("Entrust eligible storage items"))
+            {
+                AutoDutyMaintenancePolicy storagePolicy = profile.Maintenance;
+                NexusMaintenanceOperation operation = storagePolicy.EntrustArmoire
+                    ? NexusMaintenanceOperation.EntrustArmoire
+                    : NexusMaintenanceOperation.EntrustGlamourChest;
+                maintenanceRuntime.Start(operation, out maintenanceMessage);
+            }
+
+            if (ImGui.Button(protectedSalePreview is null ? "Review protected selling" : "Refresh protected selling"))
+            {
+                protectedSalePreview = maintenanceRuntime.PreviewProtectedSelling();
+                maintenanceMessage = protectedSalePreview.Summary;
+            }
         }
         if (!string.IsNullOrWhiteSpace(maintenanceMessage))
             TextWrapped(NexusTheme.Cyan, maintenanceMessage);
-        TextWrapped(NexusTheme.Muted,
-            "Selling, desynthesis, Grand Company turn-ins, and storage remain blocked until their destructive-item review and verification layer is native.");
+        if (!status.IsActive && protectedSalePreview is { } sale)
+        {
+            ImGui.Spacing();
+            ImGui.TextColored(NexusTheme.Gold, "PROTECTED SELLING REVIEW");
+            TextWrapped(sale.Items.Count == 0 ? NexusTheme.Muted : NexusTheme.Amber, sale.Summary);
+            foreach (NexusInventoryItemSnapshot item in sale.Items.Take(20))
+                ImGui.BulletText($"{item.Name} ×{item.Quantity} — {item.VendorPrice:N0} gil each");
+            if (sale.Items.Count > 20)
+                TextWrapped(NexusTheme.Muted, $"…and {sale.Items.Count - 20} more exact slot(s).");
+            bool canApprove = sale.Items.Count > 0;
+            if (!canApprove)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Approve exact list at open NPC shop", new Vector2(-1, 0)))
+            {
+                maintenanceRuntime.StartApprovedSelling(sale.Signature, out maintenanceMessage);
+                protectedSalePreview = null;
+            }
+            if (!canApprove)
+                ImGui.EndDisabled();
+            TextWrapped(NexusTheme.Muted,
+                "EXP-bonus equipment, collectables, gearset items, tradeable zero-spiritbond gear, and anything that changes after review are always rejected.");
+        }
+
+        if (profile?.Maintenance.InDutyMaintenance == true)
+            TextWrapped(NexusTheme.Amber,
+                $"In-duty withdrawal policy is preserved at {profile.Maintenance.InDutyDurabilityPercent}% durability plus configured inventory pressure. It remains inactive until stock AutoDuty exposes a safe leave/resume contract; Nexus will not pretend Stop alone withdrew from a duty.");
         EndAutoPanel();
     }
 

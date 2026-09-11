@@ -31,6 +31,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
     [PluginService] internal static IDutyState DutyState { get; private set; } = null!;
+    [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
 
     internal Configuration Configuration { get; }
 
@@ -204,7 +205,8 @@ public sealed class Plugin : IDalamudPlugin
             Log);
         gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
         maintenanceRuntime = new NexusMaintenanceRuntimeService(
-            resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager);
+            resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager,
+            PluginInterface, GameInteropProvider);
         strikingDummyTravel = new StrikingDummyTravelService(
             PluginInterface, ClientState, Condition, DataManager, AetheryteList, navigationRuntime);
         worldObserver = new WorldSnapshotObserver(

@@ -142,6 +142,18 @@ internal sealed class NexusOperationsOverlay : Window
                 ImGui.CloseCurrentPopup();
                 maintenance.Start(NexusMaintenanceOperation.OpenCoffers, out message);
             }
+            if (maintenance.HasWorkingProfile && ImGui.Selectable("Desynthesize eligible items"))
+            {
+                ImGui.CloseCurrentPopup();
+                maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
+            }
+            if (maintenance.HasWorkingProfile && ImGui.Selectable("Grand Company turn-ins"))
+            {
+                ImGui.CloseCurrentPopup();
+                maintenance.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out message);
+            }
+            if (maintenance.HasWorkingProfile && ImGui.Selectable("Review protected selling"))
+                Open("Gear & Inventory");
             if (ImGui.Selectable("Gear & Inventory page")) Open("Gear & Inventory");
             ImGui.EndPopup();
         }

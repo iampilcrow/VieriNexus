@@ -1,8 +1,12 @@
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Plugin;
+using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
+using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
@@ -19,12 +23,16 @@ internal sealed record NexusMaintenanceStatus(
     int TotalOperations);
 
 /// <summary>
-/// Native, bounded maintenance that does not call AutoDuty. Destructive selling, desynthesis,
-/// turn-ins, and storage are intentionally kept outside this engine until their review/verification
-/// contracts are implemented; this engine owns the safe inventory-use and self-service actions.
+/// Nexus-owned maintenance orchestration. Item selection and verification remain in Nexus; narrow
+/// stock providers are used only for mechanics they already expose (GC turn-ins and collection storage).
 /// </summary>
 internal sealed unsafe class NexusMaintenanceRuntimeService
 {
+    private delegate void SellItemDelegate(uint inventorySlot, InventoryType inventoryType, uint unknown);
+
+    [Signature("48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 8B F2 8B E9")]
+    private SellItemDelegate sellItem = null!;
+
     private static readonly InventoryType[] Bags =
     [
         InventoryType.Inventory1, InventoryType.Inventory2,
@@ -40,6 +48,11 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
     private readonly ICondition condition;
     private readonly IGameGui gameGui;
     private readonly IDataManager dataManager;
+    private readonly ICallGateSubscriber<bool> autoRetainerBusy;
+    private readonly ICallGateSubscriber<object> autoRetainerTurnIn;
+    private readonly ICallGateSubscriber<object> autoRetainerAbort;
+    private readonly ICallGateSubscriber<bool> glamourLogBusy;
+    private readonly ICallGateSubscriber<bool> glamourLogEntrust;
     private readonly Queue<NexusMaintenanceOperation> queue = [];
     private readonly Dictionary<uint, int> skippedQuantities = [];
     private ResourceLeaseHandle? lease;
@@ -59,6 +72,14 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
     private DateTimeOffset pendingItemStartedAt;
     private string message = "No Nexus maintenance is running.";
     private ulong characterId;
+    private bool providerStarted;
+    private bool sawProviderBusy;
+    private Queue<NexusInventoryItemSnapshot> approvedSale = [];
+    private NexusInventoryItemSnapshot? pendingSale;
+    private NexusItemTransactionPreview? latestSalePreview;
+    private AgentSalvage.SalvageItemCategory desynthCategory;
+    private bool desynthCategoryInitialized;
+    private bool stopRequested;
 
     internal NexusMaintenanceRuntimeService(
         ResourceLeaseManager leases,
@@ -67,7 +88,9 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         IObjectTable objectTable,
         ICondition condition,
         IGameGui gameGui,
-        IDataManager dataManager)
+        IDataManager dataManager,
+        IDalamudPluginInterface pluginInterface,
+        IGameInteropProvider gameInteropProvider)
     {
         this.leases = leases;
         this.profiles = profiles;
@@ -76,6 +99,12 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         this.condition = condition;
         this.gameGui = gameGui;
         this.dataManager = dataManager;
+        autoRetainerBusy = pluginInterface.GetIpcSubscriber<bool>("PluginState.IsBusy");
+        autoRetainerTurnIn = pluginInterface.GetIpcSubscriber<object>("AutoRetainer.GC.EnqueueInitiation");
+        autoRetainerAbort = pluginInterface.GetIpcSubscriber<object>("PluginState.AbortAllTasks");
+        glamourLogBusy = pluginInterface.GetIpcSubscriber<bool>("GlamourLog.IsBusy");
+        glamourLogEntrust = pluginInterface.GetIpcSubscriber<bool>("GlamourLog.EntrustAll");
+        gameInteropProvider.InitializeFromAttributes(this);
     }
 
     internal NexusMaintenanceStatus Status => new(
@@ -84,6 +113,37 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
     internal AutoDutyProfileSnapshot? CurrentProfile => profiles.ProfileFor(playerState.ContentId);
 
     internal bool HasWorkingProfile => CurrentProfile is not null;
+
+    internal NexusItemTransactionPreview PreviewProtectedSelling()
+    {
+        AutoDutyMaintenancePolicy? selectedPolicy = CurrentProfile?.Maintenance;
+        latestSalePreview = ItemTransactionPolicy.CreateSellPreview(
+            ReadBagSnapshot(), selectedPolicy?.ProtectGearsetsFromSelling != false);
+        return latestSalePreview;
+    }
+
+    internal bool StartApprovedSelling(string signature, out string result)
+    {
+        AutoDutyMaintenancePolicy? selectedPolicy = CurrentProfile?.Maintenance;
+        if (selectedPolicy is null)
+        {
+            result = "Import operations settings on the Migration page before approving protected selling.";
+            return false;
+        }
+        NexusItemTransactionPreview current = ItemTransactionPolicy.CreateSellPreview(
+            ReadBagSnapshot(), selectedPolicy.ProtectGearsetsFromSelling);
+        if (latestSalePreview is null || latestSalePreview.Items.Count == 0 ||
+            !string.Equals(signature, latestSalePreview.Signature, StringComparison.Ordinal) ||
+            !string.Equals(signature, current.Signature, StringComparison.Ordinal))
+        {
+            result = "The protected-selling preview changed. Review the exact items again before approving.";
+            latestSalePreview = current;
+            return false;
+        }
+        approvedSale = new Queue<NexusInventoryItemSnapshot>(current.Items);
+        latestSalePreview = null;
+        return Start([NexusMaintenanceOperation.Sell], selectedPolicy, out result);
+    }
 
     internal bool StartConfigured(out string result)
     {
@@ -154,8 +214,11 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
 
         var owner = new LeaseOwner(GoalId.New(), TaskId.New(), AttemptId.New(), 60,
             "Nexus native inventory maintenance");
+        List<ResourceKind> resources = [ResourceKind.UiInteraction, ResourceKind.InventoryMutation];
+        if (operations.Contains(NexusMaintenanceOperation.GrandCompanyTurnIn))
+            resources.Add(ResourceKind.Retainer);
         if (!leases.TryAcquire(owner,
-                [ResourceKind.UiInteraction, ResourceKind.InventoryMutation],
+                resources,
                 LeaseLifetime, out lease, out ResourceLeaseSnapshot? blocking))
         {
             result = blocking is null
@@ -191,6 +254,11 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
             Fail("Nexus stopped maintenance because the active character changed.");
             return;
         }
+        if (stopRequested)
+        {
+            ReconcileProviderStop();
+            return;
+        }
         if (condition[ConditionFlag.InCombat] || condition[ConditionFlag.BoundByDuty] ||
             condition[ConditionFlag.BoundByDuty56] || condition[ConditionFlag.BoundByDuty95])
         {
@@ -222,6 +290,11 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
                 case NexusMaintenanceOperation.RegisterMinions: UpdateRegistration(now, RegistrationKind.Minion); break;
                 case NexusMaintenanceOperation.RegisterOrchestrionRolls: UpdateRegistration(now, RegistrationKind.Orchestrion); break;
                 case NexusMaintenanceOperation.OpenCoffers: UpdateCoffers(now); break;
+                case NexusMaintenanceOperation.Sell: UpdateSelling(now); break;
+                case NexusMaintenanceOperation.Desynthesize: UpdateDesynthesis(now); break;
+                case NexusMaintenanceOperation.GrandCompanyTurnIn: UpdateProviderOperation(now, true); break;
+                case NexusMaintenanceOperation.EntrustArmoire:
+                case NexusMaintenanceOperation.EntrustGlamourChest: UpdateProviderOperation(now, false); break;
             }
         }
         catch (Exception exception)
@@ -237,6 +310,17 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         {
             result = "No Nexus maintenance is active.";
             return false;
+        }
+        if (providerStarted && current is NexusMaintenanceOperation.GrandCompanyTurnIn or
+            NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest)
+        {
+            queue.Clear();
+            stopRequested = true;
+            if (current == NexusMaintenanceOperation.GrandCompanyTurnIn)
+                TryInvoke(autoRetainerAbort, "stop the Grand Company turn-in provider");
+            message = "Nexus requested Stop and is retaining ownership until the provider confirms it is inactive.";
+            result = message;
+            return true;
         }
         CloseOwnedAddons();
         Reset("Nexus maintenance stopped. No additional items will be changed.");
@@ -468,6 +552,183 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         Throttle(now, 1_500);
     }
 
+    private void UpdateSelling(DateTimeOffset now)
+    {
+        if (!TryAddon("Shop", out _))
+        {
+            Fail("Open a normal NPC shop, then approve the protected-selling preview again. Nexus will never choose an unknown vendor or sell outside its exact approval.");
+            return;
+        }
+        if (pendingSale is { } pending)
+        {
+            InventoryItem* slot = InventoryManager.Instance()->GetInventorySlot(
+                (InventoryType)pending.Container, pending.Slot);
+            if (slot is null || slot->GetItemId() != pending.ItemId || slot->Quantity < pending.Quantity)
+            {
+                pendingSale = null;
+                Throttle(now, 350);
+                return;
+            }
+            if (now - pendingItemStartedAt > TimeSpan.FromSeconds(3))
+            {
+                Fail($"Nexus could not verify that {pending.Name} was sold, so no other item was touched.");
+                return;
+            }
+            return;
+        }
+        if (approvedSale.Count == 0)
+        {
+            CompleteCurrent(now);
+            return;
+        }
+        NexusInventoryItemSnapshot next = approvedSale.Dequeue();
+        InventoryItem* currentItem = InventoryManager.Instance()->GetInventorySlot(
+            (InventoryType)next.Container, next.Slot);
+        if (currentItem is null || currentItem->GetItemId() != next.ItemId || currentItem->Quantity != next.Quantity)
+        {
+            Fail("A protected-selling item changed after approval. Nexus stopped before selecting another item.");
+            return;
+        }
+        sellItem((uint)next.Slot, (InventoryType)next.Container, 0);
+        pendingSale = next;
+        pendingItemStartedAt = now;
+        Throttle(now, 500);
+    }
+
+    private void UpdateDesynthesis(DateTimeOffset now)
+    {
+        if (EmptyBagSlots() < 1)
+        {
+            Fail("Nexus stopped desynthesis because the inventory has no free slot for results.");
+            return;
+        }
+        if (TryAddon("SalvageResult", out AtkUnitBase* result))
+        {
+            result->Close(true);
+            Throttle(now, 300);
+            return;
+        }
+        if (TryAddon("SalvageDialog", out AtkUnitBase* dialog))
+        {
+            FireBoolean(dialog, 15, policy!.DesynthNormalQualityOnly);
+            FireBoolean(dialog, 0, false);
+            Throttle(now, 500);
+            return;
+        }
+        if (!TryAddon<AddonSalvageItemSelector>("SalvageItemSelector", out AddonSalvageItemSelector* selector))
+        {
+            AgentSalvage.Instance()->AgentInterface.Show();
+            Throttle(now, 1_000);
+            return;
+        }
+        AgentSalvage* agent = AgentSalvage.Instance();
+        agent->ItemListRefresh(true);
+        if (!desynthCategoryInitialized && !SelectNextDesynthCategory(reset: true))
+        {
+            selector->AtkUnitBase.Close(true);
+            CompleteCurrent(now);
+            return;
+        }
+        if (agent->SelectedCategory != desynthCategory)
+        {
+            agent->SelectedCategory = desynthCategory;
+            Throttle(now, 350);
+            return;
+        }
+        HashSet<uint> gearsetItems = policy!.ProtectGearsetsFromDesynth ? GearsetItemIds() : [];
+        for (int index = 0; index < agent->ItemCount; index++)
+        {
+            AgentSalvage.SalvageListItem entry = agent->ItemList[index];
+            InventoryItem* item = InventoryManager.Instance()->GetInventorySlot(entry.InventoryType, (int)entry.InventorySlot);
+            if (item is null || IsExperienceBonusEquipment(item->GetBaseItemId()) ||
+                gearsetItems.Contains(item->GetItemId()))
+                continue;
+            Item? row = dataManager.GetExcelSheet<Item>().GetRowOrDefault(item->GetBaseItemId());
+            if (row is null)
+                continue;
+            if (policy.DesynthForSkill)
+            {
+                float skill = FFXIVClientStructs.FFXIV.Client.Game.UI.PlayerState.Instance()
+                    ->GetDesynthesisLevel(entry.ClassJob);
+                uint itemLevel = row.Value.LevelItem.RowId;
+                uint maximumItemLevel = dataManager.GetExcelSheet<Item>()
+                    .Where(value => value.Desynth > 0).Max(value => value.LevelItem.RowId);
+                if (skill >= itemLevel + policy.DesynthSkillGapLimit || skill >= maximumItemLevel)
+                    continue;
+            }
+            Fire((AtkUnitBase*)selector, true, 12, index);
+            Throttle(now, 600);
+            return;
+        }
+        if (!SelectNextDesynthCategory(reset: false))
+        {
+            selector->AtkUnitBase.Close(true);
+            CompleteCurrent(now);
+        }
+        else
+            Throttle(now, 350);
+    }
+
+    private void UpdateProviderOperation(DateTimeOffset now, bool grandCompany)
+    {
+        bool busy;
+        try { busy = grandCompany ? autoRetainerBusy.InvokeFunc() : glamourLogBusy.InvokeFunc(); }
+        catch
+        {
+            Fail(grandCompany
+                ? "AutoRetainer is not ready for the Grand Company turn-in contract."
+                : "Glamour Log is not ready for the storage contract.");
+            return;
+        }
+        sawProviderBusy |= busy;
+        if (!providerStarted)
+        {
+            try
+            {
+                if (grandCompany)
+                    autoRetainerTurnIn.InvokeAction();
+                else if (!glamourLogEntrust.InvokeFunc())
+                    throw new InvalidOperationException("Storage provider rejected the request.");
+                providerStarted = true;
+                Throttle(now, 500);
+            }
+            catch
+            {
+                Fail(grandCompany
+                    ? "AutoRetainer rejected the bounded Grand Company turn-in request."
+                    : "Glamour Log rejected the bounded storage request.");
+            }
+            return;
+        }
+        if (!busy && (sawProviderBusy || !grandCompany && now - operationStartedAt > TimeSpan.FromSeconds(2)))
+            CompleteCurrent(now);
+        else if (!busy && now - operationStartedAt > TimeSpan.FromSeconds(15))
+            Fail("The provider never confirmed that the requested operation started.");
+    }
+
+    private void ReconcileProviderStop()
+    {
+        bool busy;
+        try
+        {
+            busy = current == NexusMaintenanceOperation.GrandCompanyTurnIn
+                ? autoRetainerBusy.InvokeFunc()
+                : glamourLogBusy.InvokeFunc();
+        }
+        catch
+        {
+            message = "Nexus is retaining maintenance ownership because provider inactivity cannot be confirmed.";
+            return;
+        }
+        if (busy)
+        {
+            message = "Nexus is waiting for the provider to confirm Stop before releasing maintenance ownership.";
+            return;
+        }
+        CloseOwnedAddons();
+        Reset("Nexus confirmed that maintenance stopped. No additional items will be changed.");
+    }
+
     private bool IsEligibleCoffer(InventoryItem item)
     {
         uint itemId = item.GetItemId();
@@ -570,6 +831,90 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         return quantity;
     }
 
+    private IReadOnlyList<NexusInventoryItemSnapshot> ReadBagSnapshot()
+    {
+        HashSet<uint> gearsets = GearsetItemIds();
+        List<NexusInventoryItemSnapshot> result = [];
+        foreach (InventoryType type in Bags)
+        {
+            InventoryContainer* container = InventoryManager.Instance()->GetInventoryContainer(type);
+            if (container is null || !container->IsLoaded)
+                continue;
+            for (int index = 0; index < container->Size; index++)
+            {
+                InventoryItem item = container->Items[index];
+                if (item.ItemId == 0)
+                    continue;
+                uint baseId = item.GetBaseItemId();
+                Item? row = dataManager.GetExcelSheet<Item>().GetRowOrDefault(baseId);
+                if (row is null)
+                    continue;
+                result.Add(new NexusInventoryItemSnapshot(
+                    (int)type, index, item.GetItemId(), item.Quantity, row.Value.Name.ExtractText(),
+                    row.Value.EquipSlotCategory.RowId > 0, row.Value.PriceLow, row.Value.IsUntradable,
+                    item.SpiritbondOrCollectability,
+                    item.Flags.HasFlag(InventoryItem.ItemFlags.Collectable),
+                    IsExperienceBonusEquipment(baseId), gearsets.Contains(item.GetItemId())));
+            }
+        }
+        return result;
+    }
+
+    private static HashSet<uint> GearsetItemIds()
+    {
+        HashSet<uint> result = [];
+        RaptureGearsetModule* gearsets = RaptureGearsetModule.Instance();
+        if (gearsets is null)
+            return result;
+        for (int index = 0; index < gearsets->Entries.Length; index++)
+        {
+            if (!gearsets->IsValidGearset(index))
+                continue;
+            foreach (RaptureGearsetModule.GearsetItem item in gearsets->Entries[index].Items)
+                if (item.ItemId > 0)
+                    result.Add(item.ItemId);
+        }
+        return result;
+    }
+
+    private bool IsExperienceBonusEquipment(uint itemId)
+    {
+        Item? item = dataManager.GetExcelSheet<Item>().GetRowOrDefault(itemId);
+        return item is { EquipSlotCategory.RowId: > 0 } equipment &&
+               (equipment.ItemSpecialBonus.RowId == 6 && equipment.ItemSpecialBonusParam > 0 ||
+                equipment.Description.ExtractText().Contains("EXP earned", StringComparison.OrdinalIgnoreCase) ||
+                equipment.Description.ExtractText().Contains("EXP Bonus", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool SelectNextDesynthCategory(bool reset)
+    {
+        AgentSalvage.SalvageItemCategory[] categories = Enum.GetValues<AgentSalvage.SalvageItemCategory>();
+        int start = reset ? 0 : (int)desynthCategory + 1;
+        for (int index = start; index < categories.Length; index++)
+        {
+            if ((policy!.DesynthCategories & 1UL << index) == 0)
+                continue;
+            desynthCategory = categories[index];
+            desynthCategoryInitialized = true;
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryInvoke(ICallGateSubscriber<object> subscriber, string purpose)
+    {
+        try
+        {
+            subscriber.InvokeAction();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Warning(exception, "Nexus could not {Purpose}.", purpose);
+            return false;
+        }
+    }
+
     private bool RestoreGearset()
     {
         RaptureGearsetModule* gearsets = RaptureGearsetModule.Instance();
@@ -596,6 +941,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         lease?.Dispose();
         lease = null;
         characterId = 0;
+        approvedSale.Clear();
         message = result;
         ResetOperationState();
     }
@@ -610,6 +956,12 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         pendingItemAttempts = 0;
         pendingItemStartedAt = default;
         initialGearset = -1;
+        providerStarted = false;
+        sawProviderBusy = false;
+        pendingSale = null;
+        desynthCategory = default;
+        desynthCategoryInitialized = false;
+        stopRequested = false;
     }
 
     private void Throttle(DateTimeOffset now, int milliseconds) => nextActionAt = now.AddMilliseconds(milliseconds);
@@ -639,7 +991,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
     {
         if (repairClicked)
             CloseAddon("SelectYesno");
-        foreach (string name in new[] { "Repair", "Materialize", "MaterializeDialog" })
+        foreach (string name in new[] { "Repair", "Materialize", "MaterializeDialog", "SalvageResult", "SalvageDialog", "SalvageItemSelector" })
             CloseAddon(name);
     }
 
@@ -652,6 +1004,16 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
             values[index].Int = arguments[index];
         }
         addon->FireCallback((uint)arguments.Length, values, updateState);
+    }
+
+    private static void FireBoolean(AtkUnitBase* addon, int callback, bool value)
+    {
+        AtkValue* values = stackalloc AtkValue[2];
+        values[0].Type = AtkValueType.Int;
+        values[0].Int = callback;
+        values[1].Type = AtkValueType.Bool;
+        values[1].Byte = value ? (byte)1 : (byte)0;
+        addon->FireCallback(2, values, true);
     }
 
     private static void ClickButton(AtkComponentButton* button, AtkUnitBase* addon)
@@ -674,6 +1036,11 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         NexusMaintenanceOperation.RegisterMinions => "registering minions",
         NexusMaintenanceOperation.RegisterOrchestrionRolls => "registering orchestrion rolls",
         NexusMaintenanceOperation.OpenCoffers => "opening eligible coffers",
+        NexusMaintenanceOperation.Sell => "selling the exact approved items",
+        NexusMaintenanceOperation.Desynthesize => "desynthesizing eligible protected items",
+        NexusMaintenanceOperation.GrandCompanyTurnIn => "running Grand Company turn-ins",
+        NexusMaintenanceOperation.EntrustArmoire => "entrusting eligible Armoire items",
+        NexusMaintenanceOperation.EntrustGlamourChest => "entrusting eligible Glamour Dresser items",
         _ => "running maintenance",
     };
 

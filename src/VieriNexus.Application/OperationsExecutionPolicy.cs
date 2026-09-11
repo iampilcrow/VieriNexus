@@ -8,6 +8,11 @@ public enum NexusMaintenanceOperation
     RegisterMinions,
     RegisterOrchestrionRolls,
     OpenCoffers,
+    Sell,
+    Desynthesize,
+    GrandCompanyTurnIn,
+    EntrustArmoire,
+    EntrustGlamourChest,
 }
 
 public static class OperationsExecutionPolicy
@@ -16,10 +21,14 @@ public static class OperationsExecutionPolicy
     {
         ArgumentNullException.ThrowIfNull(policy);
         List<NexusMaintenanceOperation> result = [];
-        if (policy.AutoRepair && policy.RepairWithCrafter)
-            result.Add(NexusMaintenanceOperation.Repair);
         if (policy.AutoExtract)
             result.Add(NexusMaintenanceOperation.ExtractMateria);
+        if (policy.AutoDesynth)
+            result.Add(NexusMaintenanceOperation.Desynthesize);
+        if (policy.EntrustArmoire)
+            result.Add(NexusMaintenanceOperation.EntrustArmoire);
+        if (policy.EntrustGlamourChest)
+            result.Add(NexusMaintenanceOperation.EntrustGlamourChest);
         if (policy.RegisterTripleTriadCards)
             result.Add(NexusMaintenanceOperation.RegisterTripleTriadCards);
         if (policy.RegisterMinions)
@@ -28,6 +37,10 @@ public static class OperationsExecutionPolicy
             result.Add(NexusMaintenanceOperation.RegisterOrchestrionRolls);
         if (policy.AutoOpenCoffers)
             result.Add(NexusMaintenanceOperation.OpenCoffers);
+        if (policy.AutoGrandCompanyTurnIn)
+            result.Add(NexusMaintenanceOperation.GrandCompanyTurnIn);
+        if (policy.AutoRepair && policy.RepairWithCrafter)
+            result.Add(NexusMaintenanceOperation.Repair);
         return result;
     }
 }
