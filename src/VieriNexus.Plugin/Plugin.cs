@@ -36,6 +36,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private readonly WindowSystem windows = new("VieriNexus");
     private readonly NexusWindow mainWindow;
+    private readonly NexusOperationsOverlay operationsOverlay;
     private readonly DependencyService dependencyService;
     private readonly GameplayReadyGate gameplayReadyGate = new();
     private readonly WorldStateStore worldStore;
@@ -47,6 +48,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NavigationRecoveryService navigationRecovery;
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly NavigationLibraryService navigationLibrary;
+    private readonly AutoDutyMigrationService autoDutyMigration;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
@@ -60,6 +62,11 @@ public sealed class Plugin : IDalamudPlugin
 
         dependencyService = new DependencyService(PluginInterface);
         var legacyInventory = new LegacyConfigurationInventory(PluginInterface);
+        LegacyImportState autoDutyImport = Configuration.ForLegacyImport("autoduty");
+        autoDutyMigration = new AutoDutyMigrationService(
+            legacyInventory,
+            PluginInterface.GetPluginConfigDirectory(),
+            autoDutyImport.Imported ? autoDutyImport.ReceiptId : null);
         LegacyImportState navigationImport = Configuration.ForLegacyImport("navplotter");
         var navigationMigration = new NavigationMigrationService(
             legacyInventory,
@@ -179,11 +186,23 @@ public sealed class Plugin : IDalamudPlugin
 
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
-        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration,
+        mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
             navigationLibrary, navigationActivation, navigationDiagnostics,
             navigationRuntime, progressionProviders, progressionRuntime, gearShoppingRuntime,
             moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
+        operationsOverlay = new NexusOperationsOverlay(
+            this,
+            navigationRuntime,
+            gearShoppingRuntime,
+            progressionRuntime,
+            page =>
+            {
+                Configuration.SelectedPage = page;
+                mainWindow.IsOpen = true;
+                Save();
+            });
+        windows.AddWindow(operationsOverlay);
 
         ipc = new NexusIpcProvider(
             PluginInterface,

@@ -2,8 +2,8 @@
 
 Working snapshot: 2026-09-10 (America/Chicago)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.36`
-Current published release source: `0.1.0.36`, commit `7a90146cabf97fb067807c1f21467cd28e65ecfa`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current product version: `0.1.0.37`
+Current published release source: `0.1.0.36`, commit `7a90146cabf97fb067807c1f21467cd28e65ecfa`. Version `0.1.0.37` is the current release candidate. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -23,7 +23,7 @@ The repository is authoritative for what exists today. The recovered conversatio
 
 `VieriNexus` is the permanent product and Dalamud internal name for the planned unified Vieri FFXIV suite. It is intended to replace the separately installed Vieri plugins with one coherent, modular Dalamud package. It is not intended to be a launcher for separate plugins, a collection of embedded predecessor windows, or one giant controller.
 
-The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, maintains a separate Nexus-owned working library, records and edits personal routes, previews saved/generated paths, and performs guarded local, cross-zone, or Grand Company inn travel. Version 0.1.0.26 added the first Nexus-owned Progression planner. Versions 0.1.0.27-0.1.0.29 removed the route dependency on VieriAutoDuty and completed accepted Nexus-owned Lifestream/vnavmesh travel. Versions 0.1.0.30-0.1.0.31 added and live-accepted the durable one-duty-at-a-time Progression lane. Versions 0.1.0.32-0.1.0.35 progressively moved gear readiness, approval, ranking, live equipment, and vendor catalogs into Nexus. Version 0.1.0.36 completes native Gear & Inventory execution: Nexus travels to the pinned vendor, selects the combat shop, buys only exact approved items under the gil floor, verifies equipping, updates the gearset, cleans only displaced items, and blocks Progression duty handoff after any unconfirmed failure. VieriAutoDuty is no longer used for Gear & Inventory; it remains only as the temporary duty provider while its maintenance, UI, and other Vieri-specific behavior migrate. Quest execution remains locked. VieriCodex and VieriAutoDuty are migration providers, not permanent selections.
+The current production line is an active migration foundation. Nexus can be installed alongside existing Vieri products, transactionally imports VieriNavPlotter into immutable staging, maintains a separate Nexus-owned working library, records and edits personal routes, previews saved/generated paths, and performs guarded local, cross-zone, or Grand Company inn travel. Version 0.1.0.26 added the first Nexus-owned Progression planner. Versions 0.1.0.27-0.1.0.29 removed the route dependency on VieriAutoDuty and completed accepted Nexus-owned Lifestream/vnavmesh travel. Versions 0.1.0.30-0.1.0.31 added and live-accepted the durable one-duty-at-a-time Progression lane. Versions 0.1.0.32-0.1.0.35 progressively moved gear readiness, approval, ranking, live equipment, and vendor catalogs into Nexus. Version 0.1.0.36 completes native Gear & Inventory execution: Nexus travels to the pinned vendor, selects the combat shop, buys only exact approved items under the gil floor, verifies equipping, updates the gearset, cleans only displaced items, and blocks Progression duty handoff after any unconfirmed failure. Version 0.1.0.37 transactionally preserves the complete VieriAutoDuty operations/profile state and adds the compact Nexus-owned Goto/Gear/Inventory/Extras overlay over currently working Nexus controls. VieriAutoDuty is no longer used for Gear & Inventory; it remains only as the temporary duty provider while native maintenance and remaining Vieri-specific behavior migrate. Quest execution remains locked. VieriCodex and VieriAutoDuty are migration providers, not permanent selections.
 
 ### Product vision
 
@@ -196,14 +196,15 @@ Several target concepts already have types or tests but are not general live sub
 ### `src/VieriNexus.Plugin`
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
-- `Configuration.cs` — schema 3 global presentation/setup settings, character-scoped safety and Progression draft settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.36`, assembly/internal root `VieriNexus`.
+- `Configuration.cs` — schema 4 global presentation/setup/operations-overlay settings, character-scoped safety and Progression draft settings, and per-source migration state.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.37`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
 - `Services/DependencyService.cs` — installed-plugin detection and focused Dalamud Plugin Installer actions.
 - `Services/GameplayReadyGate.cs` — post-login/zone stable-world gate.
 - `Services/LegacyConfigurationInventory.cs` — read-only path discovery for nine predecessor sources; VieriLink is marked protected.
+- `Services/AutoDutyMigrationService.cs` — VieriAutoDuty profile discovery, cached full-operations preview, transactional staging/rollback, and saved-receipt recovery.
 - `Services/NavigationMigrationService.cs` — source location, cached preview, import/rollback orchestration, Nexus storage paths, saved-receipt recovery across plugin reloads, and in-memory access to the verified staged snapshot.
 - `Services/NavigationActivationService.cs` — composition of working-library readiness, installed/loaded source ownership, dependency readiness, Navigation/Movement lease state, verified Stop, explicit-stop compatibility readiness, reload/watchdog readiness, and automatic session authority into the pure activation policy.
 - `Services/VnavmeshNavigationStopProvider.cs` — provider adapter that requests `vnavmesh.Path.Stop` and independently observes `vnavmesh.Path.IsRunning` for verified completion.
@@ -222,11 +223,12 @@ Several target concepts already have types or tests but are not general live sub
 - `Services/NexusIpcProvider.cs` — registered read-only status, dependency, and Nexus-namespaced navigation IPC.
 - `Services/WorldSnapshotObserver.cs` — throttled Dalamud client/player/object/condition observation plus the current read-only provider-health snapshot.
 - `UI/NexusWindow.cs` — entire current shell and pages.
+- `UI/NexusOperationsOverlay.cs` — optional compact Goto/Gear/Inventory/Extras surface over working Nexus controls with current operation status and a unified Stop action.
 - `UI/NexusTheme.cs` — dark/red/gold ImGui theme and shared status/section helpers.
 
 ### `tests/VieriNexus.Application.Tests`
 
-There are 155 automated tests across:
+There are 202 automated tests across:
 
 - `DependencyCatalogTests.cs`
 - `NavigationRouteMigrationImporterTests.cs`
@@ -259,7 +261,7 @@ There are 155 automated tests across:
 - `TransactionalMigrationStoreTests.cs`
 - `WorldStateStoreTests.cs`
 
-The 0.1.0.36 source passes all 198 tests plus a zero-warning full plugin build.
+The 0.1.0.37 source passes all 202 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -540,15 +542,15 @@ Home, Control Center, Progression, Routes, Dependencies, Migration, and Settings
 
 ### Current configuration — IMPLEMENTED
 
-`Configuration` implements Dalamud `IPluginConfiguration`, currently schema `Version = 3`:
+`Configuration` implements Dalamud `IPluginConfiguration`, currently schema `Version = 4`:
 
-- Global: `FirstRunComplete`, `OpenOnLogin`, `CompactNavigation`, `UiScale`, `SelectedPage`.
+- Global: `FirstRunComplete`, `OpenOnLogin`, `CompactNavigation`, `UiScale`, `SelectedPage`, and the compact operations overlay's visibility/lock/transparency/status choices.
 - Per-character dictionary keyed by `CharacterKey.ToString()` (`content ID + home world`): profile name, allow automation, pause-on-manual-target, retained legacy pause-on-manual-movement/quiet-period fields, and a Progression draft containing target level, allowed job-quest/Hunting Log/side-quest/duty methods, and hard minimum-gil reserve. Legacy route fields remain readable for configuration compatibility but are no longer displayed or used by production route control.
 - Per-source `LegacyImports`: reviewed/imported flags, source version, import time, receipt ID, imported count, ready-for-activation, activated.
 
-`Initialize(...)` clamps UI scale, restores dictionary comparers/null safety, supplies missing per-character Progression drafts, sets schema version 3, and attaches the plugin interface. There is no destructive older-version migration; existing character and route settings remain intact.
+`Initialize(...)` clamps UI scale, restores dictionary comparers/null safety, supplies missing per-character Progression drafts, sets schema version 4, and attaches the plugin interface. There is no destructive older-version migration; existing character and route settings remain intact.
 
-Nexus configuration is saved through Dalamud. NavPlotter staging is separate JSON under `NexusData`; backups and receipts live beside it under the Nexus config directory.
+Nexus configuration is saved through Dalamud. NavPlotter and VieriAutoDuty operations staging are separate JSON under `NexusData`; backups and receipts live beside them under the Nexus config directory.
 
 ### Persistence rules — RECOVERED/PLANNED
 
@@ -694,7 +696,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.36`. Dalamud API 15. Publication is the current release step.
+- Plugin project version: `0.1.0.37`. Dalamud API 15. Publication is the current release step.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -846,6 +848,8 @@ The user accepted the 0.1.0.33 manual preview with a valid live no-upgrade resul
 
 Version 0.1.0.36 removes that final adapter. `NexusGearExecutionService` pins exact vendor identity into the approval; resolves a user-enabled route override or the immutable verified built-in route; travels through Nexus's own Lifestream/vnavmesh provider; opens only relevant combat-gear menu pages; rechecks live price, inventory space, and the gil floor before each item; confirms ownership growth; equips only approved item IDs into approved slots with stable verification and bounded retry; handles ring counts and two-handed layouts; updates the active gearset; and moves only equipment displaced by this transaction from the Armoury Chest to free bag slots. Explicit Stop halts travel and closes owned shop UI. A failed transaction never advances its completion sequence, and both manual Gear and automatic Progression distinguish that from success; automatic Progression will not queue a duty after an unconfirmed gear exit. No VieriAutoDuty gear IPC remains.
 
+Version 0.1.0.37 adds the complete VieriAutoDuty operations-state importer rather than another isolated checkbox migration. `AutoDutyMigrationImporter` maps every profile, content-ID assignment, pending retired-equipment transfer, overlay/button choice, gear/repair/extraction/coffer/desynthesis/Grand Company/Armoire/Glamour/registration/selling rule, thresholds, opaque preferred-vendor payloads, and safe in-duty maintenance setting. The plugin service locates the real `AutoDuty/AutoDutyConfig.json` layout, previews the mapping, creates a timestamped untouched-source backup, atomically writes `NexusData/autoduty-operations.v1.json`, verifies a SHA-256 receipt on reload, and can roll back only while the staged target still matches its receipt. Import remains staging-only and cannot enable duplicate actions. The optional `NexusOperationsOverlay` preserves the compact Goto/Gear/Inventory/Extras organization while exposing only working Nexus route, shopping, Progression, Last Run, status, and global Stop controls; pending native maintenance and striking-dummy actions are omitted instead of rendered as disabled clutter. Overlay visibility, locking, transparency, and status-line display are Nexus settings.
+
 The user also made the AutoDuty UI disposition explicit: the custom overlay is product functionality, not disposable fork decoration. Nexus must preserve the cleaner categorized Goto, Gear, Inventory, and Extras controls; striking-dummy destination menu; manual shopping review; and useful duty actions/status as Nexus-owned UI. The eventual stock AutoDuty provider does not replace this experience, and the fork cannot retire until those features are present and accepted in Nexus.
 
 ### Completed versus unfinished
@@ -871,7 +875,7 @@ There is no known external blocker. The old conversation's context window, not t
 - **Migration service cache:** source preview invalidates by path and last-write time. Extremely unusual same-timestamp external rewrites could leave a stale preview until reload/mtime change.
 - **Control Center is partial:** it now shows the durable Progression goal status/title, but resource/activity detail and the other module runtimes remain incomplete.
 - **Dependency health is shallow:** installed/loaded state is not the same as compatible version or healthy IPC. The new navigation diagnostics label vnavmesh as loaded/available but deliberately do not invoke Stop or movement-state IPC merely to probe health.
-- **Remaining AutoDuty migration scope:** route composition, bounded duty execution, and the complete Gear & Inventory subsystem are Nexus-owned. VieriAutoDuty no longer participates in gear. Maintenance, configuration import, the preserved categorized overlay/status/control experience, the remaining duty-engine audit, and final stock-provider coexistence/retirement remain governed by `docs/AUTODUTY_PROVIDER_MIGRATION_AUDIT.md`.
+- **Remaining AutoDuty migration scope:** route composition, bounded duty execution, the complete Gear & Inventory subsystem, full operations-state staging, and the clean categorized overlay shell are Nexus-owned. VieriAutoDuty no longer participates in gear. Native maintenance executors, striking-dummy travel, the remaining duty-engine audit, and final stock-provider coexistence/retirement remain governed by `docs/AUTODUTY_PROVIDER_MIGRATION_AUDIT.md`.
 
 ### Preserved reliability incidents/regressions
 
@@ -902,9 +906,9 @@ VieriRotationHelper's suggestion bars primarily cover damage rotations. Wrath au
 - World state is minimal and now contains six navigation-specific provider/safety observations. Other domains remain empty; future modules must not add independent ad hoc scanners as a shortcut.
 - Dependency catalog is centralized and static rather than contributed by modules/providers; compatibility/version/IPC health is absent.
 - UI navigation and status strings are hardcoded; most pages are honest placeholders. No schema-driven goal builder or registered page/panel contributions.
-- `Configuration.Version` is forced to 2 without a formal migration pipeline.
+- `Configuration.Version` is forced to 4 without a formal migration pipeline; added fields use backward-compatible defaults.
 - IPC defines an unused command endpoint and lacks handshake, goals, combat, positional, legacy alias, conflict, and deprecation support.
-- Migration storage is JSON and generic only in name: `TransactionalMigrationStore.Apply(...)` currently accepts `NavigationLibrarySnapshot`, so later importers will require a safe generalization rather than duplicated transaction code.
+- Migration storage remains JSON; `TransactionalMigrationStore` now shares its atomic backup/hash/receipt/rollback mechanics across Navigation and VieriAutoDuty operations snapshots, but additional source types still need explicit validated mappings.
 - There is no durable general logging/audit/history/support-export implementation despite `IPluginLog` and `IChatGui` being injected. The bounded session-only navigation transition audit is deliberately narrower.
 - No SQLite dependency/store, event bus, command gateway, framework-thread dispatcher abstraction, background-work boundary, replay harness, provider contract harness, or packaging test project.
 - Source licenses/notices for eventual embedded upstream code are planned but not yet represented beyond repository/commit provenance.
@@ -1066,9 +1070,10 @@ Do not execute these as part of recovery. The next normal development thread sho
 3. Treat the 0.1.0.33 Nexus Shop for Upgrades UI, exact single-use approval, spending floor, full resource lease, and Stop as accepted by the valid live zero-upgrade MCH result. Do not rerun the accepted automatic Progression transaction.
 4. Treat the repeated zero-upgrade MCH result as accepted. Do not ask for another lookup-only check.
 5. Version 0.1.0.36 completes native physical shop/purchase/equip/gearset/displaced-item ownership. Its only Gear acceptance case is one future real upgrade transaction, preferably as part of the normal Progression handoff; do not split it into more micro-tests.
-6. Preserve and continue rebuilding the custom VieriAutoDuty categorized overlay, striking-dummy menu, maintenance actions, and useful duty controls/status as Nexus-owned UI. Do not substitute stock AutoDuty's overlay.
-7. Then connect the bounded stock-Questionable quest/progression lane. Keep stock Questionable and stock AutoDuty behind narrow capability-versioned provider adapters, and never load stock AutoDuty beside the Vieri fork during migration because both use the same `AutoDuty` identity.
-8. For every substantial change, update this file, `IMPLEMENTATION_STATUS.md`, migration/upstream policy, source lock, tests, package metadata, and release documentation consistently.
+6. Version 0.1.0.37 preserves the complete VieriAutoDuty profile/operations state and lands the clean categorized Nexus overlay over working controls. Do not repeat this as many per-setting migrations.
+7. Move the native maintenance executors and striking-dummy travel into that overlay in one large slice; do not substitute stock AutoDuty's overlay or expose unfinished actions as dead menu clutter.
+8. Then connect the bounded stock-Questionable quest/progression lane. Keep stock Questionable and stock AutoDuty behind narrow capability-versioned provider adapters, and never load stock AutoDuty beside the Vieri fork during migration because both use the same `AutoDuty` identity.
+9. For every substantial change, update this file, `IMPLEMENTATION_STATUS.md`, migration/upstream policy, source lock, tests, package metadata, and release documentation consistently.
 
 ## 17. New Codex Thread Startup Procedure
 
@@ -1110,8 +1115,8 @@ This section is **durable production operating state**. Future Codex threads mus
 - **Normal branch at recovery:** `main`.
 - **Distribution domain:** `https://www.thedailypilcrow.com`.
 - **Authoritative custom Dalamud repository URL configured by users:** `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
-- **Current production release:** `0.1.0.35`; `0.1.0.36` is the current release candidate.
-- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.36</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
+- **Current production release:** `0.1.0.36`; `0.1.0.37` is the current release candidate.
+- **Current project version source verified in repository:** `src/VieriNexus.Plugin/VieriNexus.Plugin.csproj` contains `<Version>0.1.0.37</Version>` and uses `Dalamud.NET.Sdk/15.0.0` at this snapshot.
 - **Plugin manifest:** `src/VieriNexus.Plugin/VieriNexus.json`; its internal name/API compatibility must remain synchronized with the runtime package/feed requirements.
 
 The live `pluginmaster.json` and the source/deployment mechanism that produces it are production infrastructure. Do not treat the feed as disposable generated output unless the existing release implementation proves that it is safely generated from an authoritative source.

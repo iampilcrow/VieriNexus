@@ -67,3 +67,94 @@ public sealed record StagedNavigationReadResult(
     string Message,
     MigrationReceipt? Receipt = null,
     NavigationLibrarySnapshot? Snapshot = null);
+
+public sealed record AutoDutyOverlayPreferences(
+    bool ShowOverlay,
+    bool HideWhenStopped,
+    bool LockPosition,
+    bool TransparentBackground,
+    bool AnchorBottom,
+    bool ShowDutyStatus,
+    bool ShowActionStatus,
+    bool ShowGoto,
+    bool ShowGear,
+    bool ShowRepair,
+    bool ShowExtract,
+    bool ShowDesynth,
+    bool ShowSell,
+    bool ShowTurnIn,
+    bool ShowCoffers,
+    bool ShowTripleTriad);
+
+public sealed record AutoDutyMaintenancePolicy(
+    bool AutoBuyVendorGear,
+    uint MinimumGilReserve,
+    bool AutoEquipRecommendedGear,
+    bool AutoRepair,
+    uint RepairBelowPercent,
+    bool RepairWithCrafter,
+    string? PreferredRepairVendorJson,
+    bool AutoExtract,
+    bool ExtractAllCategories,
+    bool AutoOpenCoffers,
+    byte? CofferGearset,
+    bool UseCofferBlacklist,
+    IReadOnlyDictionary<uint, string> CofferBlacklist,
+    bool AutoDesynth,
+    bool DesynthForSkill,
+    int DesynthSkillGapLimit,
+    bool DesynthNormalQualityOnly,
+    bool ProtectGearsetsFromDesynth,
+    ulong DesynthCategories,
+    bool AutoGrandCompanyTurnIn,
+    bool TurnInAtFreeSlotThreshold,
+    int TurnInFreeSlotThreshold,
+    bool UseGrandCompanyAetheryteTickets,
+    bool EntrustArmoire,
+    bool EntrustGlamourChest,
+    bool RegisterTripleTriadCards,
+    bool RegisterMinions,
+    bool RegisterOrchestrionRolls,
+    bool SellTripleTriadCards,
+    int TripleTriadMinimumItemCount,
+    int TripleTriadMinimumFreeSlots,
+    bool AutoSell,
+    string AutoSellMode,
+    bool SellAtOccupiedSlotThreshold,
+    int SellOccupiedSlotThreshold,
+    bool SellAtBagPercentThreshold,
+    int SellBagPercentThreshold,
+    bool ProtectGearsetsFromSelling,
+    string? PreferredSellVendorJson,
+    bool InDutyMaintenance,
+    bool WithdrawForDurability,
+    int InDutyDurabilityPercent,
+    bool WithdrawForInventory,
+    bool ExtractBeforeSelling,
+    bool DesynthBeforeSelling,
+    bool ReturnToInnAfterMaintenance);
+
+public sealed record AutoDutyProfileSnapshot(
+    string Name,
+    IReadOnlyList<ulong> CharacterIds,
+    AutoDutyOverlayPreferences Overlay,
+    AutoDutyMaintenancePolicy Maintenance);
+
+public sealed record AutoDutyMigrationSnapshot(
+    int SchemaVersion,
+    string DefaultProfileName,
+    IReadOnlyList<AutoDutyProfileSnapshot> Profiles,
+    IReadOnlyList<string> RetiredEquipmentTransfersJson);
+
+public sealed record AutoDutyMigrationPreview(
+    AutoDutyMigrationSnapshot? Snapshot,
+    IReadOnlyList<MigrationIssue> Issues)
+{
+    public bool CanImport => Snapshot is not null && Issues.All(issue => issue.Severity != MigrationIssueSeverity.Error);
+}
+
+public sealed record StagedAutoDutyReadResult(
+    bool Success,
+    string Message,
+    MigrationReceipt? Receipt = null,
+    AutoDutyMigrationSnapshot? Snapshot = null);

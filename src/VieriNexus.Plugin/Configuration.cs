@@ -6,12 +6,16 @@ namespace VieriNexus;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 3;
+    public int Version { get; set; } = 4;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
     public float UiScale { get; set; } = 1f;
     public string SelectedPage { get; set; } = "Home";
+    public bool ShowOperationsOverlay { get; set; }
+    public bool LockOperationsOverlay { get; set; }
+    public bool OperationsOverlayTransparent { get; set; }
+    public bool ShowOperationsStatus { get; set; } = true;
     public Dictionary<string, CharacterConfiguration> Characters { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, LegacyImportState> LegacyImports { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -26,7 +30,7 @@ public sealed class Configuration : IPluginConfiguration
         LegacyImports = new Dictionary<string, LegacyImportState>(LegacyImports ?? [], StringComparer.OrdinalIgnoreCase);
         foreach (CharacterConfiguration character in Characters.Values)
             character.Progression ??= new ProgressionDraftConfiguration();
-        Version = 3;
+        Version = 4;
     }
 
     public CharacterConfiguration ForCharacter(string key)

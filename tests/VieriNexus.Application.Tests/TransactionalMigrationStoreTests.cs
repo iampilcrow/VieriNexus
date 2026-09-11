@@ -128,6 +128,44 @@ public sealed class TransactionalMigrationStoreTests : IDisposable
         Assert.Equal("{\"Version\":1,\"Routes\":[]}", File.ReadAllText(source));
     }
 
+    [Fact]
+    public void AutoDutyProfilesAreBackedUpRecoveredAndRolledBackTransactionally()
+    {
+        Directory.CreateDirectory(root);
+        string source = Path.Combine(root, "AutoDutyConfig.json");
+        string original = "{\"DefaultConfigName\":\"Main\"}";
+        File.WriteAllText(source, original);
+        string target = Path.Combine(root, "nexus", "autoduty-operations.v1.json");
+        string receipts = Path.Combine(root, "receipts");
+        AutoDutyMigrationSnapshot snapshot = new(1, "Main",
+            [new AutoDutyProfileSnapshot("Main", [123],
+                new AutoDutyOverlayPreferences(true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true),
+                new AutoDutyMaintenancePolicy(false, 0, false, false, 50, false, null, false, false,
+                    false, null, false, new Dictionary<uint, string>(), false, false, 50, false, true, 1,
+                    false, false, 5, false, false, false, false, false, false, false, 1, 1,
+                    false, "UnneededEquipment", true, 120, true, 85, true, null,
+                    false, true, 20, true, false, false, false))],
+            ["{\"CharacterId\":123}"]);
+        TransactionalMigrationStore store = new();
+
+        MigrationWriteResult applied = store.ApplyAutoDuty(
+            "autoduty", source, target, Path.Combine(root, "backups"), receipts, snapshot);
+        StagedAutoDutyReadResult recovered = store.ReadStagedAutoDutyState(
+            TransactionalMigrationStore.ReceiptPath(receipts, applied.Receipt!.Id), "autoduty", target);
+
+        Assert.True(applied.Success);
+        Assert.True(recovered.Success);
+        Assert.Equal("Main", recovered.Snapshot!.DefaultProfileName);
+        Assert.Equal(original, File.ReadAllText(source));
+        Assert.Equal(original, File.ReadAllText(applied.Receipt.SourceBackupPath));
+
+        MigrationWriteResult rolledBack = store.Rollback(
+            TransactionalMigrationStore.ReceiptPath(receipts, applied.Receipt.Id));
+        Assert.True(rolledBack.Success);
+        Assert.False(File.Exists(target));
+        Assert.Equal(original, File.ReadAllText(source));
+    }
+
     public void Dispose()
     {
         if (!Directory.Exists(root))

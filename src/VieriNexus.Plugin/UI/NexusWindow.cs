@@ -33,6 +33,7 @@ internal sealed class NexusWindow : Window
     private readonly DependencyService dependencies;
     private readonly LegacyConfigurationInventory legacyInventory;
     private readonly NavigationMigrationService navigationMigration;
+    private readonly AutoDutyMigrationService autoDutyMigration;
     private readonly NavigationLibraryService navigationLibrary;
     private readonly NavigationActivationService navigationActivation;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
@@ -64,6 +65,7 @@ internal sealed class NexusWindow : Window
         DependencyService dependencies,
         LegacyConfigurationInventory legacyInventory,
         NavigationMigrationService navigationMigration,
+        AutoDutyMigrationService autoDutyMigration,
         NavigationLibraryService navigationLibrary,
         NavigationActivationService navigationActivation,
         NavigationDiagnosticsService navigationDiagnostics,
@@ -80,6 +82,7 @@ internal sealed class NexusWindow : Window
         this.dependencies = dependencies;
         this.legacyInventory = legacyInventory;
         this.navigationMigration = navigationMigration;
+        this.autoDutyMigration = autoDutyMigration;
         this.navigationLibrary = navigationLibrary;
         this.navigationActivation = navigationActivation;
         this.navigationDiagnostics = navigationDiagnostics;
@@ -364,6 +367,11 @@ internal sealed class NexusWindow : Window
                 DrawNavigationMigration();
                 continue;
             }
+            if (source.Id == "autoduty")
+            {
+                DrawAutoDutyMigration();
+                continue;
+            }
             BeginPanel(source.DisplayName.ToUpperInvariant());
             NexusTheme.StatusDot(source.Found ? NexusTheme.Green : NexusTheme.Muted,
                 source.Found ? "Configuration located" : "Not found on this computer");
@@ -380,6 +388,93 @@ internal sealed class NexusWindow : Window
         BeginPanel("CREDENTIAL SAFETY");
         ImGui.TextColored(NexusTheme.Green, "Discord credentials and channel identifiers have not been touched.");
         ImGui.TextWrapped("The Communications migration will copy encrypted values transactionally on the same computer, verify them, and retain the original VieriLink configuration as rollback data. Each user imports only their own local configuration.");
+        EndPanel();
+    }
+
+    private void DrawAutoDutyMigration()
+    {
+        const string importLabel = "Create backup and import operations";
+        const string rollbackLabel = "Rollback operations import";
+        AutoDutyMigrationStatus status = autoDutyMigration.Status();
+        LegacyImportState state = plugin.Configuration.ForLegacyImport("autoduty");
+        bool staged = status.LastReceipt is not null;
+        string operationMessage = status.Message;
+
+        BeginPanel("DUTIES, GEAR & INVENTORY");
+        NexusTheme.StatusDot(status.SourceFound ? NexusTheme.Green : NexusTheme.Muted,
+            status.SourceFound ? "VieriAutoDuty configuration located" : "Not found on this computer");
+        ImGui.TextColored(NexusTheme.Gold, "Destination: Nexus Operations and stock-compatible Duties");
+        if (status.Preview?.Snapshot is { } snapshot)
+        {
+            int assignments = snapshot.Profiles.Sum(profile => profile.CharacterIds.Count);
+            ImGui.TextUnformatted($"{snapshot.Profiles.Count} profile(s) • {assignments} character assignment(s) • {snapshot.RetiredEquipmentTransfersJson.Count} pending retired-item transfer(s)");
+            TextWrapped(NexusTheme.Muted,
+                "Overlay layout, gear, repair, extraction, coffers, desynthesis, Grand Company turn-ins, selling, registration, thresholds, preferred vendors, and safe in-duty maintenance rules are mapped together.");
+            foreach (MigrationIssue issue in status.Preview.Issues.Take(2))
+            {
+                Vector4 color = issue.Severity == MigrationIssueSeverity.Error ? NexusTheme.Red :
+                    issue.Severity == MigrationIssueSeverity.Warning ? NexusTheme.Amber : NexusTheme.Muted;
+                TextWrapped(color, $"• {issue.Message}");
+            }
+        }
+        else
+        {
+            TextWrapped(NexusTheme.Muted, status.Message);
+        }
+
+        float availableButtonWidth = ImGui.GetContentRegionAvail().X;
+        float importButtonWidth = ButtonWidth(importLabel);
+        float rollbackButtonWidth = ButtonWidth(rollbackLabel);
+        bool canImport = status.Preview?.CanImport == true;
+        if (!canImport)
+            ImGui.BeginDisabled();
+        if (ImGui.Button(importLabel, new Vector2(importButtonWidth, 0)) && canImport)
+        {
+            MigrationWriteResult result = autoDutyMigration.Import();
+            operationMessage = result.Message;
+            if (result.Success && result.Receipt is { } receipt)
+            {
+                staged = true;
+                state.Reviewed = true;
+                state.Imported = true;
+                state.SourceVersion = "operations-v1";
+                state.ImportedAt = receipt.CreatedAtUtc;
+                state.ReceiptId = receipt.Id;
+                state.ImportedItemCount = status.Preview!.Snapshot!.Profiles.Count;
+                state.ReadyForActivation = false;
+                state.Activated = false;
+                plugin.Save();
+            }
+        }
+        if (!canImport)
+            ImGui.EndDisabled();
+
+        if (staged && status.LastReceipt is { } savedReceipt)
+        {
+            if (availableButtonWidth >= importButtonWidth + ImGui.GetStyle().ItemSpacing.X + rollbackButtonWidth)
+                ImGui.SameLine();
+            if (ImGui.Button(rollbackLabel, new Vector2(rollbackButtonWidth, 0)))
+            {
+                MigrationWriteResult result = autoDutyMigration.Rollback(savedReceipt.Id);
+                operationMessage = result.Message;
+                if (result.Success)
+                {
+                    staged = false;
+                    state.Imported = false;
+                    state.ImportedAt = null;
+                    state.ReceiptId = null;
+                    state.ImportedItemCount = 0;
+                    state.ReadyForActivation = false;
+                    state.Activated = false;
+                    plugin.Save();
+                }
+            }
+        }
+
+        TextWrapped(staged ? NexusTheme.Green : NexusTheme.Muted, operationMessage);
+        TextWrapped(NexusTheme.Muted, staged
+            ? "Verified staging only • source configuration remains unchanged • Nexus actions activate only as each owned executor lands"
+            : "Import creates an exact source backup and does not enable duplicate automation.");
         EndPanel();
     }
 
@@ -1899,6 +1994,33 @@ internal sealed class NexusWindow : Window
         if (ImGui.Checkbox("Compact navigation", ref compact))
         {
             plugin.Configuration.CompactNavigation = compact;
+            plugin.Save();
+        }
+
+        ImGui.Spacing();
+        NexusTheme.SectionTitle("Operations overlay");
+        bool showOperations = plugin.Configuration.ShowOperationsOverlay;
+        if (ImGui.Checkbox("Show compact Nexus operations overlay", ref showOperations))
+        {
+            plugin.Configuration.ShowOperationsOverlay = showOperations;
+            plugin.Save();
+        }
+        bool lockOperations = plugin.Configuration.LockOperationsOverlay;
+        if (ImGui.Checkbox("Lock overlay position", ref lockOperations))
+        {
+            plugin.Configuration.LockOperationsOverlay = lockOperations;
+            plugin.Save();
+        }
+        bool transparentOperations = plugin.Configuration.OperationsOverlayTransparent;
+        if (ImGui.Checkbox("Transparent overlay background", ref transparentOperations))
+        {
+            plugin.Configuration.OperationsOverlayTransparent = transparentOperations;
+            plugin.Save();
+        }
+        bool showOperationsStatus = plugin.Configuration.ShowOperationsStatus;
+        if (ImGui.Checkbox("Show current action below the overlay", ref showOperationsStatus))
+        {
+            plugin.Configuration.ShowOperationsStatus = showOperationsStatus;
             plugin.Save();
         }
 
