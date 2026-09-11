@@ -14,6 +14,7 @@ internal sealed class NexusOperationsOverlay : Window
     private readonly ProgressionRuntimeService progression;
     private readonly NexusMaintenanceRuntimeService maintenance;
     private readonly StrikingDummyTravelService strikingDummies;
+    private readonly NexusControlService control;
     private readonly Action<string> openPage;
     private string message = string.Empty;
 
@@ -24,6 +25,7 @@ internal sealed class NexusOperationsOverlay : Window
         ProgressionRuntimeService progression,
         NexusMaintenanceRuntimeService maintenance,
         StrikingDummyTravelService strikingDummies,
+        NexusControlService control,
         Action<string> openPage)
         : base("Nexus Operations###VieriNexusOperations",
             ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.AlwaysAutoResize)
@@ -34,6 +36,7 @@ internal sealed class NexusOperationsOverlay : Window
         this.progression = progression;
         this.maintenance = maintenance;
         this.strikingDummies = strikingDummies;
+        this.control = control;
         this.openPage = openPage;
         RespectCloseHotkey = false;
         IsOpen = true;
@@ -67,12 +70,7 @@ internal sealed class NexusOperationsOverlay : Window
         {
             if (ImGui.Button("Stop"))
             {
-                navigation.Stop();
-                strikingDummies.Stop(out _);
-                gear.Stop();
-                maintenance.Stop(out _);
-                progression.StopNow();
-                message = "Stop requested for every Nexus-owned operation.";
+                message = control.StopAll().Message;
             }
             ImGui.SameLine();
         }
@@ -164,12 +162,30 @@ internal sealed class NexusOperationsOverlay : Window
         }
 
         ImGui.SameLine();
+        CategoryButton("Duty", "NexusDuty");
+        if (ImGui.BeginPopup("NexusDuty"))
+        {
+            ProgressionGoalState? goal = progression.State;
+            if (goal is null || goal.Goal.Status is VieriNexus.Domain.GoalStatus.Satisfied or VieriNexus.Domain.GoalStatus.Cancelled)
+            {
+                if (ImGui.Selectable("Start configured level goal"))
+                    message = control.ExecuteLocal("progression.start").Message;
+            }
+            else if (goal.Goal.Status is VieriNexus.Domain.GoalStatus.Paused or VieriNexus.Domain.GoalStatus.Blocked)
+            {
+                if (ImGui.Selectable("Resume with a fresh plan"))
+                    message = control.ExecuteLocal("progression.resume").Message;
+            }
+            if (progressionActive && ImGui.Selectable("Finish current duty, then stop"))
+                message = progression.StopAfterCurrentDuty().Message;
+            if (ImGui.Selectable("Progression details")) Open("Progression");
+            ImGui.EndPopup();
+        }
+
+        ImGui.SameLine();
         CategoryButton("Extras", "NexusExtras");
         if (ImGui.BeginPopup("NexusExtras"))
         {
-            if (ImGui.Selectable("Progression")) Open("Progression");
-            if (progressionActive && ImGui.Selectable("Finish current duty, then stop"))
-                message = progression.StopAfterCurrentDuty().Message;
             if (ImGui.Selectable("Control Center")) Open("Overview");
             ImGui.EndPopup();
         }
@@ -184,12 +200,8 @@ internal sealed class NexusOperationsOverlay : Window
         if (!plugin.Configuration.ShowOperationsStatus)
             return;
 
-        string status = gearActive ? gear.Status.Message :
-            maintenanceActive ? maintenance.Status.Message :
-            dummyTravelActive ? strikingDummies.Status.Message :
-            navigationActive ? navigation.Status.Message :
-            progressionActive ? progression.State!.ActiveTask?.StatusDetail ?? progression.State.ActiveTask?.Title ?? progression.State.Goal.Title :
-            message;
+        VieriNexus.Contracts.NexusOperationsStatusDto operations = control.Status();
+        string status = operations.Detail ?? operations.Activity ?? message;
         if (!string.IsNullOrWhiteSpace(status))
         {
             ImGui.Separator();

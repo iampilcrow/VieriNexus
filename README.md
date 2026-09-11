@@ -20,7 +20,9 @@ The VieriAutoDuty operations importer preserves every profile, character assignm
 
 The operations importer treats missing, explicit-null, and wrong-type optional scalar values as safe defaults and reports malformed profile entries as migration issues rather than throwing from the startup or Migration draw path.
 
-The compact optional Goto/Gear/Inventory/Extras overlay now includes the native maintenance actions and the preserved striking-dummy catalog. Striking-dummy travel uses Lifestream only for an unlocked teleport and Nexus-owned vnavmesh travel for the final approach. It does not fall back to stock AutoDuty's UI or fork-only helper endpoints.
+The compact optional Goto/Gear/Inventory/Duty/Extras overlay includes native maintenance actions, the preserved striking-dummy catalog, configured level-goal Start/Resume/Last Run controls, live operation status, and one global Stop. Striking-dummy travel uses Lifestream only for an unlocked teleport and Nexus-owned vnavmesh travel for the final approach. It does not fall back to stock AutoDuty's UI or fork-only helper endpoints.
+
+Nexus also owns one versioned command and operations-status gateway for its overlay, chat, and trusted companion integrations. Mutation requests are bounded, idempotent by request ID, and scoped to the current character. The gateway exposes the same route, Progression, maintenance, protected-selling review, page-opening, and global Stop behavior as the visible UI; unsupported fork-only pause/leave/loop commands fail closed rather than approximating unsafe provider behavior. `/nexus status`, `start`, `resume`, `last`, `stop`, and the maintenance shortcuts use this same boundary.
 
 Staged migration status survives a Nexus reload: the saved receipt, target path, target hash, schema, and staged payload are verified before the import message and rollback action are restored.
 

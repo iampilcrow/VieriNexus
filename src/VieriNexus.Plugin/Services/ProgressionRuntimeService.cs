@@ -95,6 +95,61 @@ internal sealed class ProgressionRuntimeService
             ?? new ProgressionActionResult(false, LoadError ?? "Progression state is unavailable.");
     }
 
+    internal ProgressionActionResult StartConfigured(
+        CharacterSnapshot? character,
+        ProgressionDraftConfiguration configuration,
+        bool allowAutomation)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (character is null || !character.Key.IsKnown)
+            return new ProgressionActionResult(false, "A logged-in character is required to start Progression.");
+        if (!allowAutomation)
+            return new ProgressionActionResult(false, "Automation is disabled for this character in Nexus settings.");
+        if (configuration.TargetLevel == 0)
+            configuration.TargetLevel = Math.Min(
+                ReachJobLevelPlanner.MaximumSupportedLevel,
+                Math.Max(1, character.Level + 2));
+
+        ProgressionCharacterMetrics metrics = CurrentMetrics;
+        ReachJobLevelGoalDraft draft = new(
+            character.Key,
+            character.ClassJobId,
+            character.Level,
+            configuration.TargetLevel,
+            configuration.AllowJobQuests,
+            configuration.AllowHuntingLog,
+            configuration.AllowSideQuests,
+            configuration.AllowDuties,
+            configuration.MinimumGilReserve,
+            metrics.ItemLevel,
+            metrics.Gil);
+        ProgressionProviderSnapshot providers = provider.Snapshot();
+        ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
+            draft,
+            providers.Questing,
+            providers.Duties,
+            IsHuntingLogReady,
+            HuntingLogReadinessDetail);
+        bool hasEligibleActivity =
+            configuration.AllowDuties && EligibleDuties(character.Level).Count > 0 ||
+            (configuration.AllowJobQuests || configuration.AllowSideQuests) && EligibleQuests(
+                character.ClassJobId,
+                character.Level,
+                configuration.AllowJobQuests,
+                configuration.AllowSideQuests).Count > 0 ||
+            configuration.AllowHuntingLog && EligibleHuntingTargets(
+                character.ClassJobId,
+                character.Level).Count > 0;
+        if (!plan.IsValid || plan.IsSatisfied || !plan.IsExecutionConnected || !IsGearReadinessReady ||
+            !hasEligibleActivity)
+            return new ProgressionActionResult(false,
+                plan.Issues.FirstOrDefault(issue => issue.Severity == ProgressionPlanIssueSeverity.Blocker)?.Message ??
+                plan.Issues.FirstOrDefault()?.Message ??
+                (plan.IsSatisfied ? "The configured level goal is already satisfied." :
+                    "No executable progression activity is ready for the configured goal."));
+        return Start(draft, plan);
+    }
+
     internal ProgressionActionResult Resume() => coordinator is not null && lastWorld is { } world
         ? coordinator.Resume(world)
         : new ProgressionActionResult(false, LoadError ?? "The current character is unavailable.");

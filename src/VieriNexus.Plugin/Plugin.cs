@@ -5,6 +5,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using System.Text.Json;
 using VieriNexus.Application;
 using VieriNexus.Domain;
 using VieriNexus.Services;
@@ -58,6 +59,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
     private readonly StrikingDummyTravelService strikingDummyTravel;
+    private readonly NexusControlService controlService;
     private readonly NexusIpcProvider ipc;
     private bool sessionInitialized;
 
@@ -228,6 +230,25 @@ public sealed class Plugin : IDalamudPlugin
             gearShoppingRuntime, maintenanceRuntime,
             moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
+        controlService = new NexusControlService(
+            Configuration,
+            worldStore,
+            DataManager,
+            Condition,
+            progressionRuntime,
+            progressAtlasActions,
+            navigationLibrary,
+            navigationRuntime,
+            gearShoppingRuntime,
+            maintenanceRuntime,
+            strikingDummyTravel,
+            page =>
+            {
+                Configuration.SelectedPage = page;
+                mainWindow.IsOpen = true;
+                Save();
+            },
+            Save);
         operationsOverlay = new NexusOperationsOverlay(
             this,
             navigationRuntime,
@@ -235,6 +256,7 @@ public sealed class Plugin : IDalamudPlugin
             progressionRuntime,
             maintenanceRuntime,
             strikingDummyTravel,
+            controlService,
             page =>
             {
                 Configuration.SelectedPage = page;
@@ -249,11 +271,12 @@ public sealed class Plugin : IDalamudPlugin
             navigationLibrary,
             navigationActivation,
             progressionRuntime,
-            worldStore);
+            worldStore,
+            controlService);
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Subcommands: progression, atlas, routes, play <name>, preview <name>, stop, home, dependencies, migration.",
+            HelpMessage = "Open VieriNexus. Controls: status, start, resume, last, stop, maintenance, repair, extract, register, coffers, desynth, gcturnin, storage, sell, play <route>, preview <route>.",
         });
         CommandManager.AddHandler(ShortCommand, new CommandInfo(OnCommand)
         {
@@ -361,12 +384,14 @@ public sealed class Plugin : IDalamudPlugin
         string trimmed = arguments.Trim();
         if (trimmed.StartsWith("play ", StringComparison.OrdinalIgnoreCase))
         {
-            RunNamedRoute(trimmed[5..].Trim().Trim('"'), previewOnly: false);
+            PrintControl(controlService.ExecuteLocal("route.play",
+                JsonSerializer.Serialize(new { name = trimmed[5..].Trim().Trim('"') })));
             return;
         }
         if (trimmed.StartsWith("preview ", StringComparison.OrdinalIgnoreCase))
         {
-            RunNamedRoute(trimmed[8..].Trim().Trim('"'), previewOnly: true);
+            PrintControl(controlService.ExecuteLocal("route.preview",
+                JsonSerializer.Serialize(new { name = trimmed[8..].Trim().Trim('"') })));
             return;
         }
 
@@ -399,19 +424,22 @@ public sealed class Plugin : IDalamudPlugin
                 mainWindow.IsOpen = true;
                 break;
             case "stop":
-                bool stoppedAny = false;
-                stoppedAny |= maintenanceRuntime.Stop(out _);
-                stoppedAny |= strikingDummyTravel.Stop(out _);
-                if (gearShoppingRuntime.Status.IsActive)
-                    stoppedAny |= gearShoppingRuntime.Stop().Success;
-                if (progressionRuntime.State is { Goal.Status: GoalStatus.Active })
-                    stoppedAny |= progressionRuntime.StopNow().Success;
-                if (navigationRuntime.Status.IsActive)
-                {
-                    navigationRuntime.Stop();
-                    stoppedAny = true;
-                }
-                ChatGui.Print($"[VieriNexus] {(stoppedAny ? "Stop requested for every active Nexus operation." : "No Nexus operation is active.")}");
+                PrintControl(controlService.ExecuteLocal("stop"));
+                break;
+            case "status":
+            case "start":
+            case "resume":
+            case "last":
+            case "maintenance":
+            case "repair":
+            case "extract":
+            case "register":
+            case "coffers":
+            case "desynth":
+            case "gcturnin":
+            case "storage":
+            case "sell":
+                PrintControl(controlService.ExecuteLocal(trimmed));
                 break;
             case "home":
             case "splash":
@@ -443,23 +471,11 @@ public sealed class Plugin : IDalamudPlugin
         Save();
     }
 
-    private void RunNamedRoute(string nameOrId, bool previewOnly)
+    private static void PrintControl(VieriNexus.Contracts.NexusCommandResultDto result)
     {
-        NavigationLibrarySnapshot? snapshot = navigationLibrary.Current;
-        NavigationRouteSnapshot? route = snapshot is null
-            ? null
-            : NavigationLibraryQuery.Find(snapshot, nameOrId);
-        if (route is null)
-        {
-            ChatGui.PrintError($"[VieriNexus] Route '{nameOrId}' was not found.");
-            return;
-        }
-
-        string result;
-        if (previewOnly)
-            result = navigationRuntime.TogglePreview(route, snapshot!.ShowPointNumbers).Message;
+        if (result.Accepted)
+            ChatGui.Print($"[VieriNexus] {result.Message}");
         else
-            result = navigationRuntime.Start(route, NavigationRoutePlanKind.Playback).Message;
-        ChatGui.Print($"[VieriNexus] {result}");
+            ChatGui.PrintError($"[VieriNexus] {result.Message}");
     }
 }

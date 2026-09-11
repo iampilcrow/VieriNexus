@@ -9,6 +9,8 @@ namespace VieriNexus.Services;
 internal sealed class NexusIpcProvider : IDisposable
 {
     private readonly ICallGateProvider<NexusStatusDto> statusProvider;
+    private readonly ICallGateProvider<NexusCommandDto, NexusCommandResultDto> commandProvider;
+    private readonly ICallGateProvider<NexusOperationsStatusDto> operationsStatusProvider;
     private readonly ICallGateProvider<DependencyDto[]> dependencyProvider;
     private readonly ICallGateProvider<int> navigationVersionProvider;
     private readonly ICallGateProvider<NavigationLibraryStatusDto> navigationStatusProvider;
@@ -21,6 +23,7 @@ internal sealed class NexusIpcProvider : IDisposable
     private readonly NavigationActivationService navigationActivation;
     private readonly ProgressionRuntimeService progression;
     private readonly WorldStateStore world;
+    private readonly NexusControlService control;
 
     internal NexusIpcProvider(
         IDalamudPluginInterface pluginInterface,
@@ -28,14 +31,18 @@ internal sealed class NexusIpcProvider : IDisposable
         NavigationLibraryService navigation,
         NavigationActivationService navigationActivation,
         ProgressionRuntimeService progression,
-        WorldStateStore world)
+        WorldStateStore world,
+        NexusControlService control)
     {
         this.dependencies = dependencies;
         this.navigation = navigation;
         this.navigationActivation = navigationActivation;
         this.progression = progression;
         this.world = world;
+        this.control = control;
         statusProvider = pluginInterface.GetIpcProvider<NexusStatusDto>(NexusIpc.GetStatus);
+        commandProvider = pluginInterface.GetIpcProvider<NexusCommandDto, NexusCommandResultDto>(NexusIpc.ExecuteCommand);
+        operationsStatusProvider = pluginInterface.GetIpcProvider<NexusOperationsStatusDto>(NexusIpc.GetOperationsStatus);
         dependencyProvider = pluginInterface.GetIpcProvider<DependencyDto[]>(NexusIpc.GetDependencies);
         navigationVersionProvider = pluginInterface.GetIpcProvider<int>(NexusIpc.GetNavigationApiVersion);
         navigationStatusProvider = pluginInterface.GetIpcProvider<NavigationLibraryStatusDto>(NexusIpc.GetNavigationStatus);
@@ -44,6 +51,8 @@ internal sealed class NexusIpcProvider : IDisposable
         navigationResolveVendorProvider = pluginInterface.GetIpcProvider<uint, uint, string>(NexusIpc.ResolveGearVendorOverride);
         navigationActivationProvider = pluginInterface.GetIpcProvider<NavigationActivationStatusDto>(NexusIpc.GetNavigationActivationStatus);
         statusProvider.RegisterFunc(GetStatus);
+        commandProvider.RegisterFunc(control.Execute);
+        operationsStatusProvider.RegisterFunc(control.Status);
         dependencyProvider.RegisterFunc(GetDependencies);
         navigationVersionProvider.RegisterFunc(() => NexusIpc.CurrentVersion);
         navigationStatusProvider.RegisterFunc(GetNavigationStatus);
@@ -194,6 +203,8 @@ internal sealed class NexusIpcProvider : IDisposable
         navigationListProvider.UnregisterFunc();
         navigationStatusProvider.UnregisterFunc();
         navigationVersionProvider.UnregisterFunc();
+        operationsStatusProvider.UnregisterFunc();
+        commandProvider.UnregisterFunc();
         statusProvider.UnregisterFunc();
         dependencyProvider.UnregisterFunc();
     }

@@ -1,7 +1,7 @@
 # AutoDuty provider migration audit
 
-Snapshot: 2026-09-09
-Vieri source: `a5e1e757e35bd77191a647add7124210cdf86122` (`1.0.0.440`)
+Snapshot: 2026-09-11
+Vieri source: `0a81501e7f00d682ad66211080fb2a2f1ae92fe0` (`1.0.0.442`)
 Stock upstream: `2b0943ed113da76f3ce9df0df2f302151f828292`
 Common ancestor: `17f54e99235d84fe39582258eca7058fc5fb3e2b`
 
@@ -42,8 +42,8 @@ The following Vieri endpoints are additions and cannot be assumed on stock:
 | `IsNavPlotterVisualizationActive` | Filter route drawing to owned travel | Nexus route execution state |
 | `TravelVieriRoute` / `StopVieriRouteTravel` | Whole Nexus route trip | Nexus travel orchestrator over Lifestream, vnavmesh, and interaction adapters |
 | `StartProgressionLeveling` | Long-running target-level loop | Nexus Progression goal scheduling one bounded duty task at a time |
-| `ExecuteVieriCommand` | Start/stop/leave/pause/resume/loops/sell/repair/inn/job gateway | Nexus command gateway plus narrow stock-provider calls |
-| `GetVieriStatus` | Character, duty, queue, gear, durability, and completion telemetry | Nexus world snapshots, provider observations, and activity history |
+| `ExecuteVieriCommand` | Start/stop/leave/pause/resume/loops/sell/repair/inn/job gateway | Implemented in Nexus 0.1.0.49 as the character-scoped, idempotent `VieriNexus.Commands.V1.Execute` gateway over Nexus-owned commands and narrow providers; unsupported leave/pause/loop requests fail closed |
+| `GetVieriStatus` | Character, duty, queue, gear, durability, and completion telemetry | Implemented in Nexus 0.1.0.49 as `VieriNexus.Operations.V1.GetStatus`, composed from Nexus world/runtime state without calling VieriAutoDuty status IPC |
 
 Stock AutoDuty is therefore usable now for bounded duty start/stop and path eligibility, but it cannot replace VieriAutoDuty in production until the Vieri-only responsibilities below have moved or been proven unnecessary.
 
@@ -116,9 +116,10 @@ Each receives one of three outcomes before retirement: an exact Nexus mapping, a
 5. **Operations preservation completed in 0.1.0.37:** Nexus transactionally stages the complete VieriAutoDuty profile/character mapping, retired-item transfers, overlay choices, and every identified custom maintenance policy group with source backup, atomic target, SHA-256 receipt, reload verification, and guarded rollback. A compact Nexus-owned Goto/Gear/Inventory/Extras overlay now presents only working Nexus route, shopping, Progression, Last Run, status, and Stop controls; unfinished actions are omitted rather than exposed as dead UI.
 6. **Safe native maintenance and striking-dummy travel implemented in 0.1.0.38:** Nexus promotes the verified operations import into an independent atomic working library, resolves the current character's profile, and directly executes self-repair, materia extraction, Triple Triad/minion/orchestrion registration, and eligible coffer opening under exclusive UI/inventory leases and explicit Stop. The preserved overlay exposes those actions and the full striking-dummy destination catalog; Lifestream performs only compatible travel and vnavmesh performs the final approach. Selling, desynthesis, Grand Company turn-ins, Armoire/Glamour ordering, and in-duty withdrawal remain pending behind destructive-item review and recovery contracts.
 7. **Protected item transactions implemented in 0.1.0.47 and prerequisite ownership completed in 0.1.0.48:** Nexus owns imported ordering, exact selling selection/approval, gearset/EXP/collectable protection, desynthesis filtering, resource leases, Stop, timeout, and completion observation. For Grand Company turn-ins and Armoire/Glamour storage it also owns destination selection, Lifestream travel, vnavmesh approach, exact furnishing interaction, empty-set no-op handling, and final eligible-set verification. It invokes no AutoDuty maintenance endpoint. AutoRetainer remains a narrow Grand Company mechanics provider and Glamour Log remains a narrow eligible-storage mechanics provider. In-duty withdrawal stays inactive rather than treating AutoDuty Stop as a fake leave/resume contract.
-8. Audit the remaining duty-engine tree diff against then-current stock AutoDuty. Upstream generic fixes or prove the stock behavior equivalent; do not copy the full duty engine into Nexus.
-9. Run coexistence, provider-loss, duty completion, Last Run, gear interruption, reload, maintenance recovery, and clean stock-provider tests.
-10. Only then enable stock AutoDuty beside Nexus by default and retire the VieriAutoDuty package/feed entry through the deliberate retirement process.
+8. **Custom control/status ownership implemented in 0.1.0.49:** one Nexus gateway backs chat, the preserved overlay, and versioned companion IPC. It owns Start/Resume/Last Run, routes, maintenance, protected-selling review, page opening, character scoping, request replay protection, live character/duty/queue/gear/inventory/activity telemetry, and one Stop covering Progression, Atlas, gear, maintenance, dummy travel, and routes. Fork-only fake leave/pause/loop behavior is deliberately rejected.
+9. Audit the remaining duty-engine tree diff against then-current stock AutoDuty. Upstream generic fixes or prove the stock behavior equivalent; do not copy the full duty engine into Nexus.
+10. Run coexistence, provider-loss, duty completion, Last Run, gear interruption, reload, maintenance recovery, and clean stock-provider tests.
+11. Only then enable stock AutoDuty beside Nexus by default and retire the VieriAutoDuty package/feed entry through the deliberate retirement process.
 
 ## Non-goals
 

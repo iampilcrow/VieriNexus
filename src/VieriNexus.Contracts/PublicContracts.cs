@@ -5,6 +5,7 @@ public static class NexusIpc
     public const int CurrentVersion = 1;
     public const string GetStatus = "VieriNexus.Status.V1.Get";
     public const string ExecuteCommand = "VieriNexus.Commands.V1.Execute";
+    public const string GetOperationsStatus = "VieriNexus.Operations.V1.GetStatus";
     public const string GetDependencies = "VieriNexus.Dependencies.V1.Get";
     public const string GetNavigationApiVersion = "VieriNexus.Navigation.V1.GetApiVersion";
     public const string GetNavigationStatus = "VieriNexus.Navigation.V1.GetStatus";
@@ -39,6 +40,35 @@ public sealed record NexusCommandResultDto(
     bool Accepted,
     string Code,
     string Message);
+
+public sealed record NexusOperationsStatusDto(
+    int ContractVersion,
+    bool IsAvailable,
+    string Character,
+    ulong ContentId,
+    string Job,
+    int Level,
+    int ItemLevel,
+    int Gil,
+    uint TerritoryId,
+    string Location,
+    bool IsInCombat,
+    bool IsInDuty,
+    bool IsInDutyQueue,
+    int InventoryUsed,
+    int InventoryTotal,
+    float DurabilityPercent,
+    string State,
+    string? ActiveModule,
+    string? Activity,
+    string? Detail,
+    string? Provider,
+    bool StopAfterCurrentActivity,
+    int CompletedQuests,
+    int CompletedHuntingTargets,
+    int CompletedDuties,
+    string? LastCompletedActivity,
+    DateTimeOffset UpdatedAtUtc);
 
 public sealed record DependencyDto(
     string Id,

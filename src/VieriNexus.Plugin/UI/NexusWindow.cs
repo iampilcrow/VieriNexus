@@ -2169,19 +2169,10 @@ internal sealed class NexusWindow : Window
                 ImGui.BeginDisabled();
             if (ImGui.Button("Start level goal", new Vector2(-1, 0)))
             {
-                ReachJobLevelGoalDraft goalDraft = new(
-                    character.Key,
-                    character.ClassJobId,
-                    character.Level,
-                    draft.TargetLevel,
-                    draft.AllowJobQuests,
-                    draft.AllowHuntingLog,
-                    draft.AllowSideQuests,
-                    draft.AllowDuties,
-                    draft.MinimumGilReserve,
-                    progressionRuntime.CurrentMetrics.ItemLevel,
-                    progressionRuntime.CurrentMetrics.Gil);
-                ProgressionActionResult result = progressionRuntime.Start(goalDraft, plan);
+                ProgressionActionResult result = progressionRuntime.StartConfigured(
+                    character,
+                    draft,
+                    plugin.Configuration.ForCharacter(character.Key.ToString()).AllowAutomation);
                 progressionMessage = result.Message;
             }
             if (!canStart)
