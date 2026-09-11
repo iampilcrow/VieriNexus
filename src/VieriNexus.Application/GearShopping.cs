@@ -96,10 +96,49 @@ public sealed record GearShoppingApprovalResult(
     GearShoppingApproval? Approval = null,
     ulong EstimatedCost = 0);
 
+public sealed record GearReadinessDecision(
+    bool Success,
+    bool RequiresShopping,
+    string Message,
+    GearShoppingApproval? Approval = null);
+
 /// <summary>
-/// Selects the exact live gil-vendor replacement for each equipment slot. The temporary provider
-/// supplies raw equipment/catalog facts; Nexus owns role scoring, two-handed weapon handling,
-/// EXP-item protection, upgrade comparison, and the final preview presented for approval.
+/// Uses the same Nexus-owned exact approval for automatic Progression and the manual Gear page.
+/// A verified no-upgrade snapshot completes locally and never starts a provider operation.
+/// </summary>
+public static class GearReadinessDecisionPolicy
+{
+    public static GearReadinessDecision Build(
+        GearUpgradePreview preview,
+        int currentGil,
+        int minimumGilReserve)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        if (!string.IsNullOrWhiteSpace(preview.UnavailableReason))
+            return new(false, false, preview.UnavailableReason);
+
+        int[] selectedSlots = preview.Slots
+            .Where(slot => slot.Recommended && !slot.ActiveExperienceBonus && slot.Replacement is not null)
+            .Select(slot => slot.SlotKey)
+            .ToArray();
+        if (selectedSlots.Length == 0)
+            return new(true, false, $"Nexus verified the current {preview.Job} gear; no vendor upgrades are needed.");
+
+        GearShoppingApprovalResult approval = GearShoppingApprovalPolicy.Build(
+            preview,
+            selectedSlots,
+            currentGil,
+            minimumGilReserve);
+        return approval.Success && approval.Approval is not null
+            ? new(true, true, approval.Message, approval.Approval)
+            : new(false, false, approval.Message);
+    }
+}
+
+/// <summary>
+/// Selects the exact live gil-vendor replacement for each equipment slot from Nexus's native
+/// equipment/catalog snapshot. Nexus owns role scoring, two-handed weapon handling, EXP-item
+/// protection, upgrade comparison, and the final preview presented for approval.
 /// </summary>
 public static class GearUpgradeCandidatePolicy
 {

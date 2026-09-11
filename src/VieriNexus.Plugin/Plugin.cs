@@ -157,7 +157,8 @@ public sealed class Plugin : IDalamudPlugin
             new NavigationDiagnosticsMonitor(),
             new NavigationSafetySimulator());
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
-        progressionProviders = new ProgressionProviderService(PluginInterface, dependencyService, DataManager);
+        progressionProviders = new ProgressionProviderService(
+            PluginInterface, dependencyService, DataManager, PlayerState, ObjectTable);
         progressionRuntime = new ProgressionRuntimeService(
             PluginInterface.GetPluginConfigDirectory(),
             resourceLeases,

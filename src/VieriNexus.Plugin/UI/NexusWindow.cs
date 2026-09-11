@@ -1390,9 +1390,11 @@ internal sealed class NexusWindow : Window
                 ? "Shopping and equipment verification are running"
                 : progressionProviders.IsGearShoppingPreviewReady
                     ? $"Ready • {metrics.Gil:N0} gil • item level {metrics.ItemLevel}"
-                    : "The temporary live gear-scanning adapter is unavailable");
+                    : "Log into a character to inspect gear upgrades");
         TextWrapped(NexusTheme.Muted,
-            "Nexus owns the displayed selection, exact item approval, maximum prices, and protected gil floor. VieriAutoDuty temporarily supplies live catalog, vendor-window, and equip mechanics only.");
+            progressionProviders.IsGearShoppingExecutionReady
+                ? "Nexus reads the live equipment and vendor catalogs, selects upgrades, and owns the exact approval and gil floor. VieriAutoDuty temporarily performs only the physical shop and equip actions."
+                : "Nexus reads the live equipment and vendor catalogs directly. Shopping actions remain unavailable until the temporary VieriAutoDuty mechanics adapter is enabled.");
         if (!shoppingStatus.IsActive && shoppingStatus.State is not ManualGearShoppingState.Idle)
             TextWrapped(shoppingStatus.State == ManualGearShoppingState.Completed ? NexusTheme.Green : NexusTheme.Red,
                 shoppingStatus.Message);
@@ -1550,7 +1552,9 @@ internal sealed class NexusWindow : Window
         else
             TextWrapped(NexusTheme.Muted, approval.Message);
 
-        if (!approval.Success || busy || !characterConfiguration.AllowAutomation)
+        bool shoppingAllowed = approval.Success && !busy && characterConfiguration.AllowAutomation &&
+                               progressionProviders.IsGearShoppingExecutionReady;
+        if (!shoppingAllowed)
             ImGui.BeginDisabled();
         if (ImGui.Button("Approve selected upgrades and shop", new Vector2(-1, 0)) && approval.Approval is not null)
         {
@@ -1562,7 +1566,7 @@ internal sealed class NexusWindow : Window
                 selectedGearUpgradeSlots.Clear();
             }
         }
-        if (!approval.Success || busy || !characterConfiguration.AllowAutomation)
+        if (!shoppingAllowed)
             ImGui.EndDisabled();
         TextWrapped(NexusTheme.Muted,
             "Approval is single-use. Any character, job, equipment, item, quantity, or price change requires a fresh preview.");
