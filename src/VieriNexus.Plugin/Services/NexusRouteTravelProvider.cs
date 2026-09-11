@@ -37,6 +37,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
     private int authoredPointIndex;
     private uint rootTerritoryId;
     private string? aethernetDestination;
+    private uint territoryOnlyTarget;
     private SuiteRouteProviderObservation observation = Idle();
 
     internal NexusRouteTravelProvider(
@@ -131,6 +132,43 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         }
     }
 
+    internal SuiteRouteDispatchResult DispatchToInn(uint territoryId)
+    {
+        if (phase != TravelPhase.Idle)
+            return new(false, "Stop the current Nexus trip before starting another one.");
+        if (Plugin.ObjectTable.LocalPlayer is null)
+            return new(false, "FFXIV is not logged into a character.");
+        if (condition[ConditionFlag.InCombat])
+            return new(false, "Inn travel cannot begin while in combat.");
+        if (!TryGetInnIndex(territoryId, out int innIndex))
+            return new(false, $"Territory {territoryId} is not a supported Grand Company inn.");
+        if (clientState.TerritoryType == territoryId)
+        {
+            observation = new SuiteRouteProviderObservation(
+                SuiteRouteProviderState.Completed, "nexus-inn-arrived", "Nexus is already in the selected inn.", false);
+            return new(true, observation.Message);
+        }
+        if (!LifestreamAvailable())
+            return new(false, "Inn travel requires Lifestream to be loaded and compatible.");
+        if (IsLifestreamBusy())
+            return new(false, "Lifestream is already busy. Let its current trip finish first.");
+        try
+        {
+            startedAt = DateTimeOffset.UtcNow;
+            phaseStartedAt = startedAt;
+            territoryOnlyTarget = territoryId;
+            enqueueInnShortcut.InvokeAction(innIndex);
+            SetRunning(TravelPhase.WaitingForInnOnly,
+                "nexus-maintenance-entering-inn", "Nexus asked Lifestream to enter the selected Grand Company inn.");
+            return new(true, observation.Message);
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Warning(exception, "Nexus maintenance could not start inn travel.");
+            return FailDispatch("Lifestream did not accept the Grand Company inn request.");
+        }
+    }
+
     public bool Stop()
     {
         try
@@ -173,6 +211,19 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         {
             switch (phase)
             {
+                case TravelPhase.WaitingForInnOnly:
+                    if (clientState.TerritoryType == territoryOnlyTarget && !IsLifestreamBusy())
+                    {
+                        observation = new SuiteRouteProviderObservation(
+                            SuiteRouteProviderState.Completed, "nexus-inn-arrived",
+                            "Nexus reached the selected Grand Company inn.", false);
+                        phase = TravelPhase.Idle;
+                        territoryOnlyTarget = 0;
+                    }
+                    else if (!IsLifestreamBusy() && now - phaseStartedAt > PhaseTimeout)
+                        return Fail("nexus-inn-timeout", "Lifestream stopped without reaching the selected Grand Company inn.");
+                    break;
+
                 case TravelPhase.WaitingForAethernetRoot:
                     if (clientState.TerritoryType == request!.TerritoryId && navigation.IsReady)
                         StartAuthoredPath(now);
@@ -246,6 +297,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
             throw new InvalidOperationException("vnavmesh is not ready in the route territory.");
 
         authoredPointIndex = 0;
+        territoryOnlyTarget = 0;
         StartAuthoredLeg(now);
         SetRunning(TravelPhase.MovingAuthoredPath,
             "nexus-route-playing",
@@ -393,6 +445,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         observedMovement = false;
         authoredPointIndex = 0;
         observation = Idle();
+        territoryOnlyTarget = 0;
     }
 
     private static bool TryGetInnIndex(uint territoryId, out int innIndex)
@@ -418,6 +471,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         Idle,
         WaitingForAethernetRoot,
         WaitingForTargetTerritory,
+        WaitingForInnOnly,
         MovingAuthoredPath,
     }
 

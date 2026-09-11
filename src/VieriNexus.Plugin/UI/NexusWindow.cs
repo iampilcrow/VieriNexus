@@ -1785,7 +1785,7 @@ internal sealed class NexusWindow : Window
                     ? $"Nexus profile: {profile.Name}"
                     : "Import operations settings on the Migration page");
         TextWrapped(NexusTheme.Muted,
-            "Nexus owns maintenance order, item protection, resource locking, Stop, timeouts, and completion. AutoRetainer is used only for Grand Company mechanics; Glamour Log is used only for eligible storage mechanics. AutoDuty is not called.");
+            "Nexus owns maintenance order, item protection, travel, interaction, resource locking, Stop, timeouts, and completion. It takes you to the correct Grand Company officer or inn before using AutoRetainer only for turn-in mechanics and Glamour Log only for eligible storage mechanics. AutoDuty is not called.");
 
         if (status.IsActive)
         {
@@ -1816,13 +1816,7 @@ internal sealed class NexusWindow : Window
                 maintenanceRuntime.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out maintenanceMessage);
 
             if (ImGui.Button("Entrust eligible storage items"))
-            {
-                AutoDutyMaintenancePolicy storagePolicy = profile.Maintenance;
-                NexusMaintenanceOperation operation = storagePolicy.EntrustArmoire
-                    ? NexusMaintenanceOperation.EntrustArmoire
-                    : NexusMaintenanceOperation.EntrustGlamourChest;
-                maintenanceRuntime.Start(operation, out maintenanceMessage);
-            }
+                maintenanceRuntime.StartStorage(out maintenanceMessage);
 
             if (ImGui.Button(protectedSalePreview is null ? "Review protected selling" : "Refresh protected selling"))
             {

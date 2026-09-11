@@ -1,15 +1,20 @@
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
+using System.Numerics;
+using System.Text.Json;
 using VieriNexus.Application;
 using VieriNexus.Domain;
 
@@ -48,11 +53,15 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
     private readonly ICondition condition;
     private readonly IGameGui gameGui;
     private readonly IDataManager dataManager;
+    private readonly IClientState clientState;
+    private readonly NexusRouteTravelProvider travel;
     private readonly ICallGateSubscriber<bool> autoRetainerBusy;
     private readonly ICallGateSubscriber<object> autoRetainerTurnIn;
     private readonly ICallGateSubscriber<object> autoRetainerAbort;
     private readonly ICallGateSubscriber<bool> glamourLogBusy;
     private readonly ICallGateSubscriber<bool> glamourLogEntrust;
+    private readonly ICallGateSubscriber<uint, bool> glamourLogIsInArmoire;
+    private readonly ICallGateSubscriber<uint, bool> glamourLogIsInDresser;
     private readonly Queue<NexusMaintenanceOperation> queue = [];
     private readonly Dictionary<uint, int> skippedQuantities = [];
     private ResourceLeaseHandle? lease;
@@ -80,6 +89,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
     private AgentSalvage.SalvageItemCategory desynthCategory;
     private bool desynthCategoryInitialized;
     private bool stopRequested;
+    private ProviderPreparationPhase providerPreparation;
+    private DateTimeOffset providerPreparationStartedAt;
 
     internal NexusMaintenanceRuntimeService(
         ResourceLeaseManager leases,
@@ -89,6 +100,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         ICondition condition,
         IGameGui gameGui,
         IDataManager dataManager,
+        IClientState clientState,
+        NexusRouteTravelProvider travel,
         IDalamudPluginInterface pluginInterface,
         IGameInteropProvider gameInteropProvider)
     {
@@ -99,11 +112,15 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         this.condition = condition;
         this.gameGui = gameGui;
         this.dataManager = dataManager;
+        this.clientState = clientState;
+        this.travel = travel;
         autoRetainerBusy = pluginInterface.GetIpcSubscriber<bool>("PluginState.IsBusy");
         autoRetainerTurnIn = pluginInterface.GetIpcSubscriber<object>("AutoRetainer.GC.EnqueueInitiation");
         autoRetainerAbort = pluginInterface.GetIpcSubscriber<object>("PluginState.AbortAllTasks");
         glamourLogBusy = pluginInterface.GetIpcSubscriber<bool>("GlamourLog.IsBusy");
         glamourLogEntrust = pluginInterface.GetIpcSubscriber<bool>("GlamourLog.EntrustAll");
+        glamourLogIsInArmoire = pluginInterface.GetIpcSubscriber<uint, bool>("GlamourLog.IsItemInArmoire");
+        glamourLogIsInDresser = pluginInterface.GetIpcSubscriber<uint, bool>("GlamourLog.IsItemInDresser");
         gameInteropProvider.InitializeFromAttributes(this);
     }
 
@@ -189,6 +206,27 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         ], selectedPolicy, out result);
     }
 
+    internal bool StartStorage(out string result)
+    {
+        AutoDutyMaintenancePolicy? selectedPolicy = CurrentProfile?.Maintenance;
+        if (selectedPolicy is null)
+        {
+            result = "Import VieriAutoDuty operations on the Migration page first.";
+            return false;
+        }
+        List<NexusMaintenanceOperation> operations = [];
+        if (selectedPolicy.EntrustArmoire)
+            operations.Add(NexusMaintenanceOperation.EntrustArmoire);
+        if (selectedPolicy.EntrustGlamourChest)
+            operations.Add(NexusMaintenanceOperation.EntrustGlamourChest);
+        if (operations.Count == 0)
+        {
+            result = "This profile has no collection-storage action enabled.";
+            return false;
+        }
+        return Start(operations, selectedPolicy, out result);
+    }
+
     private bool Start(
         IReadOnlyList<NexusMaintenanceOperation> operations,
         AutoDutyMaintenancePolicy selectedPolicy,
@@ -215,6 +253,9 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         var owner = new LeaseOwner(GoalId.New(), TaskId.New(), AttemptId.New(), 60,
             "Nexus native inventory maintenance");
         List<ResourceKind> resources = [ResourceKind.UiInteraction, ResourceKind.InventoryMutation];
+        if (operations.Any(operation => operation is NexusMaintenanceOperation.GrandCompanyTurnIn or
+                NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest))
+            resources.Add(ResourceKind.Teleport);
         if (operations.Contains(NexusMaintenanceOperation.GrandCompanyTurnIn))
             resources.Add(ResourceKind.Retainer);
         if (!leases.TryAcquire(owner,
@@ -267,9 +308,13 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         }
         if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51] || now < nextActionAt)
             return;
-        if (now - operationStartedAt > OperationTimeout)
+        TimeSpan operationTimeout = current is NexusMaintenanceOperation.GrandCompanyTurnIn or
+            NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest
+                ? TimeSpan.FromMinutes(15)
+                : OperationTimeout;
+        if (now - operationStartedAt > operationTimeout)
         {
-            Fail($"Nexus stopped because {Display(current.Value)} did not finish within three minutes.");
+            Fail($"Nexus stopped because {Display(current.Value)} did not finish within {operationTimeout.TotalMinutes:0} minutes.");
             return;
         }
 
@@ -322,6 +367,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
             result = message;
             return true;
         }
+        if (providerPreparation is ProviderPreparationPhase.Traveling or ProviderPreparationPhase.Approaching)
+            travel.Stop();
         CloseOwnedAddons();
         Reset("Nexus maintenance stopped. No additional items will be changed.");
         result = message;
@@ -671,6 +718,49 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
 
     private void UpdateProviderOperation(DateTimeOffset now, bool grandCompany)
     {
+        if (providerPreparation == ProviderPreparationPhase.None)
+        {
+            StartProviderPreparation(grandCompany, now);
+            return;
+        }
+        if (providerPreparation is ProviderPreparationPhase.Traveling or ProviderPreparationPhase.Approaching)
+        {
+            SuiteRouteProviderObservation observation = travel.Observe(now);
+            if (observation.State == SuiteRouteProviderState.Failed)
+            {
+                Fail(observation.Message);
+                return;
+            }
+            message = observation.Message;
+            if (observation.State != SuiteRouteProviderState.Completed)
+                return;
+            if (grandCompany)
+            {
+                providerPreparation = ProviderPreparationPhase.Ready;
+                providerPreparationStartedAt = now;
+                message = "Nexus reached the Grand Company personnel officer and is starting the bounded turn-in provider.";
+            }
+            else if (providerPreparation == ProviderPreparationPhase.Traveling)
+                StartStorageApproach(now);
+            else
+            {
+                providerPreparation = ProviderPreparationPhase.Interacting;
+                providerPreparationStartedAt = now;
+                message = "Nexus reached the storage furnishing and is opening it.";
+            }
+            return;
+        }
+        if (providerPreparation == ProviderPreparationPhase.Interacting)
+        {
+            if (now - providerPreparationStartedAt > TimeSpan.FromSeconds(30))
+            {
+                Fail("Nexus could not open the selected storage furnishing within 30 seconds.");
+                return;
+            }
+            UpdateStorageInteraction(now);
+            return;
+        }
+
         bool busy;
         try { busy = grandCompany ? autoRetainerBusy.InvokeFunc() : glamourLogBusy.InvokeFunc(); }
         catch
@@ -678,6 +768,13 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
             Fail(grandCompany
                 ? "AutoRetainer is not ready for the Grand Company turn-in contract."
                 : "Glamour Log is not ready for the storage contract.");
+            return;
+        }
+        if (!providerStarted && busy)
+        {
+            Fail(grandCompany
+                ? "AutoRetainer is already busy. Let its current work finish before starting Nexus maintenance."
+                : "Glamour Log is already busy. Let its current work finish before starting Nexus maintenance.");
             return;
         }
         sawProviderBusy |= busy;
@@ -690,6 +787,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
                 else if (!glamourLogEntrust.InvokeFunc())
                     throw new InvalidOperationException("Storage provider rejected the request.");
                 providerStarted = true;
+                pendingItemStartedAt = now;
                 Throttle(now, 500);
             }
             catch
@@ -700,11 +798,220 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
             }
             return;
         }
-        if (!busy && (sawProviderBusy || !grandCompany && now - operationStartedAt > TimeSpan.FromSeconds(2)))
+        if (!busy && grandCompany && sawProviderBusy)
             CompleteCurrent(now);
-        else if (!busy && now - operationStartedAt > TimeSpan.FromSeconds(15))
+        else if (!busy && !grandCompany && providerStarted &&
+                 (sawProviderBusy || now - pendingItemStartedAt > TimeSpan.FromSeconds(2)))
+        {
+            if (!HasStorageCandidates(current == NexusMaintenanceOperation.EntrustArmoire, out string reason))
+            {
+                if (reason.Length > 0)
+                    Fail(reason);
+                else
+                    CompleteCurrent(now);
+            }
+            else
+                Fail("The storage provider stopped but eligible items remain. Nexus will not report an unverified completion.");
+        }
+        else if (!busy && providerStarted && now - pendingItemStartedAt > TimeSpan.FromSeconds(15))
             Fail("The provider never confirmed that the requested operation started.");
     }
+
+    private void StartProviderPreparation(bool grandCompany, DateTimeOffset now)
+    {
+        if (grandCompany)
+        {
+            if (FFXIVClientStructs.FFXIV.Client.Game.UI.PlayerState.Instance()->GetGrandCompanyRank() <= 5)
+            {
+                Fail("Grand Company expert delivery requires rank 6 or higher.");
+                return;
+            }
+            if (policy!.TurnInAtFreeSlotThreshold && EmptyBagSlots() > policy.TurnInFreeSlotThreshold)
+            {
+                CompleteCurrent(now);
+                return;
+            }
+        }
+        else if (!HasStorageCandidates(current == NexusMaintenanceOperation.EntrustArmoire, out string storageReason))
+        {
+            if (storageReason.Length > 0)
+                Fail(storageReason);
+            else
+                CompleteCurrent(now);
+            return;
+        }
+
+        SuiteRouteDispatchResult dispatch;
+        if (grandCompany)
+        {
+            GrandCompanyDestination destination = CurrentGrandCompanyDestination();
+            string request = JsonSerializer.Serialize(new
+            {
+                TerritoryId = destination.TerritoryId,
+                Points = new[] { new { X = destination.Position.X, Y = destination.Position.Y, Z = destination.Position.Z } },
+                UseMesh = true,
+                UseFlight = false,
+                Tolerance = 0.75f,
+                LastPointTolerance = 3f,
+                Mode = "travel",
+                VendorTargetDataId = 0,
+                VendorPosition = (object?)null,
+            });
+            dispatch = travel.Dispatch(request);
+        }
+        else
+            dispatch = travel.DispatchToInn(CurrentGrandCompanyDestination().InnTerritoryId);
+
+        if (!dispatch.Started)
+        {
+            Fail(dispatch.Message);
+            return;
+        }
+        providerPreparation = ProviderPreparationPhase.Traveling;
+        providerPreparationStartedAt = now;
+        message = grandCompany
+            ? "Nexus is traveling to the current Grand Company personnel officer."
+            : "Nexus is traveling to the current Grand Company inn before opening storage.";
+        Throttle(now, 250);
+    }
+
+    private void StartStorageApproach(DateTimeOffset now)
+    {
+        IGameObject? storage = StorageObject();
+        if (storage is null)
+        {
+            message = "Nexus reached the inn and is waiting for the selected storage furnishing to appear.";
+            return;
+        }
+        if (objectTable.LocalPlayer is { } player && Vector3.Distance(player.Position, storage.Position) <= 4f)
+        {
+            providerPreparation = ProviderPreparationPhase.Interacting;
+            providerPreparationStartedAt = now;
+            message = "Nexus reached the storage furnishing and is opening it.";
+            return;
+        }
+        string request = JsonSerializer.Serialize(new
+        {
+            TerritoryId = clientState.TerritoryType,
+            Points = new[] { new { X = storage.Position.X, Y = storage.Position.Y, Z = storage.Position.Z } },
+            UseMesh = true,
+            UseFlight = false,
+            Tolerance = 0.75f,
+            LastPointTolerance = 3f,
+            Mode = "travel",
+            VendorTargetDataId = 0,
+            VendorPosition = (object?)null,
+        });
+        SuiteRouteDispatchResult dispatch = travel.Dispatch(request);
+        if (!dispatch.Started)
+        {
+            Fail(dispatch.Message);
+            return;
+        }
+        providerPreparation = ProviderPreparationPhase.Approaching;
+        providerPreparationStartedAt = now;
+        message = "Nexus is approaching the selected storage furnishing through vnavmesh.";
+        Throttle(now, 250);
+    }
+
+    private void UpdateStorageInteraction(DateTimeOffset now)
+    {
+        bool armoire = current == NexusMaintenanceOperation.EntrustArmoire;
+        if (TryAddon(armoire ? "Cabinet" : "MiragePrismPrismBoxCrystallize", out _))
+        {
+            providerPreparation = ProviderPreparationPhase.Ready;
+            providerPreparationStartedAt = now;
+            message = "Nexus opened storage and is starting the bounded eligible-item entrust provider.";
+            return;
+        }
+        if (now < nextActionAt)
+            return;
+        if (TryAddon<AddonSelectYesno>("SelectYesno", out AddonSelectYesno* confirm))
+        {
+            ClickButton(confirm->YesButton, (AtkUnitBase*)confirm);
+            Throttle(now, 500);
+            return;
+        }
+        if (armoire && TryAddon("SelectString", out AtkUnitBase* select))
+        {
+            Fire(select, true, 0);
+            Throttle(now, 500);
+            return;
+        }
+        IGameObject? storage = StorageObject();
+        if (storage is null || !storage.IsTargetable || objectTable.LocalPlayer is not { } player ||
+            Vector3.Distance(player.Position, storage.Position) > 7f)
+        {
+            message = "Nexus is waiting for the selected storage furnishing to become interactable.";
+            return;
+        }
+        TargetSystem* targets = TargetSystem.Instance();
+        if (targets is not null)
+            targets->InteractWithObject((GameObject*)storage.Address, false);
+        message = armoire ? "Nexus is opening the Armoire." : "Nexus is opening the Glamour Dresser.";
+        Throttle(now, 1_000);
+    }
+
+    private IGameObject? StorageObject()
+    {
+        uint eventId = current == NexusMaintenanceOperation.EntrustArmoire ? 720978u : 721347u;
+        return objectTable.Where(candidate =>
+            {
+                GameObject* value = (GameObject*)candidate.Address;
+                return value is not null && value->EventHandler is not null &&
+                       value->EventHandler->Info.EventId == eventId;
+            })
+            .OrderBy(candidate => objectTable.LocalPlayer is { } player
+                ? Vector3.DistanceSquared(player.Position, candidate.Position)
+                : float.MaxValue)
+            .FirstOrDefault();
+    }
+
+    private bool HasStorageCandidates(bool armoire, out string failure)
+    {
+        failure = string.Empty;
+        try
+        {
+            if ((armoire && !glamourLogIsInArmoire.HasFunction) ||
+                (!armoire && !glamourLogIsInDresser.HasFunction))
+            {
+                failure = "Glamour Log does not expose the required eligible-storage verification contract.";
+                return false;
+            }
+            HashSet<uint>? armoireItems = armoire
+                ? dataManager.GetExcelSheet<Lumina.Excel.Sheets.Cabinet>().Select(row => row.Item.RowId).ToHashSet()
+                : null;
+            var dresserItems = armoire ? null : dataManager.GetExcelSheet<MirageStoreSetItemLookup>();
+            foreach (NexusInventoryItemSnapshot item in ReadBagSnapshot())
+            {
+                uint baseId = item.ItemId % 1_000_000;
+                if (item.IsExperienceBonusEquipment ||
+                    armoire && !armoireItems!.Contains(baseId) ||
+                    !armoire && !dresserItems!.HasRow(baseId))
+                    continue;
+                bool stored = armoire
+                    ? glamourLogIsInArmoire.InvokeFunc(baseId)
+                    : glamourLogIsInDresser.InvokeFunc(baseId);
+                if (!stored)
+                    return true;
+            }
+            return false;
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Warning(exception, "Nexus could not verify eligible collection-storage items.");
+            failure = "Glamour Log could not verify the eligible collection-storage item list.";
+            return false;
+        }
+    }
+
+    private static GrandCompanyDestination CurrentGrandCompanyDestination() =>
+        FFXIVClientStructs.FFXIV.Client.Game.UI.PlayerState.Instance()->GrandCompany switch
+        {
+            1 => new(128, 177, new Vector3(94.02183f, 40.27537f, 74.475525f)),
+            2 => new(132, 179, new Vector3(-68.678566f, -0.5015295f, -8.470145f)),
+            _ => new(130, 178, new Vector3(-142.82619f, 4.0999994f, -106.31349f)),
+        };
 
     private void ReconcileProviderStop()
     {
@@ -928,6 +1235,10 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
 
     private void Fail(string result)
     {
+        if (providerPreparation is ProviderPreparationPhase.Traveling or ProviderPreparationPhase.Approaching)
+            travel.Stop();
+        if (providerStarted && current == NexusMaintenanceOperation.GrandCompanyTurnIn)
+            TryInvoke(autoRetainerAbort, "stop Nexus-owned Grand Company turn-ins after failure");
         RestoreGearset();
         CloseOwnedAddons();
         Reset(result);
@@ -962,6 +1273,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         desynthCategory = default;
         desynthCategoryInitialized = false;
         stopRequested = false;
+        providerPreparation = ProviderPreparationPhase.None;
+        providerPreparationStartedAt = default;
     }
 
     private void Throttle(DateTimeOffset now, int milliseconds) => nextActionAt = now.AddMilliseconds(milliseconds);
@@ -993,6 +1306,12 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
             CloseAddon("SelectYesno");
         foreach (string name in new[] { "Repair", "Materialize", "MaterializeDialog", "SalvageResult", "SalvageDialog", "SalvageItemSelector" })
             CloseAddon(name);
+        if (current is NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest)
+            foreach (string name in new[] { "Cabinet", "CabinetWithdraw", "MiragePrismPrismBox", "MiragePrismPrismBoxCrystallize", "SelectString", "SelectYesno" })
+                CloseAddon(name);
+        if (current == NexusMaintenanceOperation.GrandCompanyTurnIn)
+            foreach (string name in new[] { "GrandCompanySupplyList", "GrandCompanySupplyReward", "SelectYesno", "SelectString" })
+                CloseAddon(name);
     }
 
     private static void Fire(AtkUnitBase* addon, bool updateState, params int[] arguments)
@@ -1050,4 +1369,18 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         Minion,
         Orchestrion,
     }
+
+    private enum ProviderPreparationPhase
+    {
+        None,
+        Traveling,
+        Approaching,
+        Interacting,
+        Ready,
+    }
+
+    private readonly record struct GrandCompanyDestination(
+        uint TerritoryId,
+        uint InnTerritoryId,
+        Vector3 Position);
 }

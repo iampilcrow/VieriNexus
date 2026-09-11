@@ -206,7 +206,7 @@ public sealed class Plugin : IDalamudPlugin
         gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
         maintenanceRuntime = new NexusMaintenanceRuntimeService(
             resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager,
-            PluginInterface, GameInteropProvider);
+            ClientState, suiteTravelProvider, PluginInterface, GameInteropProvider);
         strikingDummyTravel = new StrikingDummyTravelService(
             PluginInterface, ClientState, Condition, DataManager, AetheryteList, navigationRuntime);
         worldObserver = new WorldSnapshotObserver(

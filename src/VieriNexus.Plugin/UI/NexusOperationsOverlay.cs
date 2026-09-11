@@ -152,6 +152,11 @@ internal sealed class NexusOperationsOverlay : Window
                 ImGui.CloseCurrentPopup();
                 maintenance.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out message);
             }
+            if (maintenance.HasWorkingProfile && ImGui.Selectable("Entrust enabled storage"))
+            {
+                ImGui.CloseCurrentPopup();
+                maintenance.StartStorage(out message);
+            }
             if (maintenance.HasWorkingProfile && ImGui.Selectable("Review protected selling"))
                 Open("Gear & Inventory");
             if (ImGui.Selectable("Gear & Inventory page")) Open("Gear & Inventory");
