@@ -52,6 +52,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
     private readonly ProgressAtlasService progressAtlas;
+    private readonly ProgressAtlasActionService progressAtlasActions;
     private readonly NexusHuntingLogService huntingLog;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
@@ -169,6 +170,14 @@ public sealed class Plugin : IDalamudPlugin
             new NavigationSafetySimulator());
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
         progressAtlas = new ProgressAtlasService(DataManager, ClientState, PlayerState);
+        progressAtlasActions = new ProgressAtlasActionService(
+            progressAtlas,
+            suiteTravelProvider,
+            resourceLeases,
+            ClientState,
+            Condition,
+            ObjectTable,
+            TargetManager);
         huntingLog = new NexusHuntingLogService(
             PluginInterface,
             progressAtlas,
@@ -211,6 +220,7 @@ public sealed class Plugin : IDalamudPlugin
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
             navigationLibrary, navigationActivation, navigationDiagnostics,
             navigationRuntime, progressionProviders, progressionRuntime, progressAtlas,
+            progressAtlasActions,
             gearShoppingRuntime, maintenanceRuntime,
             moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
@@ -252,6 +262,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        progressAtlasActions.Shutdown();
         huntingLog.Shutdown();
         maintenanceRuntime.Shutdown();
         strikingDummyTravel.Stop(out _);
@@ -284,6 +295,7 @@ public sealed class Plugin : IDalamudPlugin
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
         progressionProviders.UpdateGearAdapter();
         progressAtlas.Update(DateTimeOffset.UtcNow);
+        progressAtlasActions.Update(DateTimeOffset.UtcNow);
         huntingLog.Update(DateTimeOffset.UtcNow);
         gearShoppingRuntime.Update();
         maintenanceRuntime.Update(DateTimeOffset.UtcNow);

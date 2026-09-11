@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Numerics;
 using System.Text.Json;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -25,6 +26,8 @@ internal sealed class ProgressAtlasService
     private readonly uint[] aetherCurrentIds;
     private readonly uint[] achievementIds;
     private readonly MapDiscoveryRegion[] mapDiscoveryRegions;
+    private readonly AetheryteAtlasTarget[] aetheryteTargets;
+    private readonly AetherCurrentAtlasTarget[] aetherCurrentTargets;
     private readonly HuntingLogCatalog huntingLogCatalog;
     private DateTimeOffset lastRefresh = DateTimeOffset.MinValue;
     private DateTimeOffset lastAchievementRequest = DateTimeOffset.MinValue;
@@ -35,13 +38,29 @@ internal sealed class ProgressAtlasService
     {
         this.clientState = clientState;
         this.playerState = playerState;
-        aetheryteIds = dataManager.GetExcelSheet<Aetheryte>()
+        Aetheryte[] aetherytes = dataManager.GetExcelSheet<Aetheryte>()
             .Where(row => row.RowId > 0 && row.Territory.RowId > 0)
             .Where(row => row.IsAetheryte ||
                           row.AethernetGroup != 0 && row.AethernetName.ValueNullable is not null)
+            .ToArray();
+        aetheryteIds = aetherytes
             .Select(row => row.RowId)
             .Distinct()
             .Order()
+            .ToArray();
+        aetheryteTargets = aetherytes
+            .Select(row => (Row: row, Level: row.Level[0].ValueNullable))
+            .Where(value => value.Level is not null)
+            .Select(value => new AetheryteAtlasTarget(
+                value.Row.RowId,
+                value.Row.IsAetheryte
+                    ? value.Row.PlaceName.ValueNullable?.Name.ToString() ?? $"Aetheryte {value.Row.RowId}"
+                    : value.Row.AethernetName.ValueNullable?.Name.ToString() ?? $"Aethernet shard {value.Row.RowId}",
+                value.Row.Territory.RowId,
+                new Vector3(value.Level!.Value.X, value.Level.Value.Y, value.Level.Value.Z),
+                !value.Row.IsAetheryte))
+            .OrderBy(target => target.TerritoryId)
+            .ThenBy(target => target.Name, StringComparer.CurrentCulture)
             .ToArray();
         aetherCurrentIds = dataManager.GetExcelSheet<AetherCurrentCompFlgSet>()
             .Where(row => row.RowId > 0 && row.Territory.IsValid)
@@ -51,6 +70,7 @@ internal sealed class ProgressAtlasService
             .Distinct()
             .Order()
             .ToArray();
+        aetherCurrentTargets = LoadAetherCurrentTargets();
         achievementIds = dataManager.GetExcelSheet<SheetAchievement>()
             .Where(row => row.RowId > 0 && !row.Name.IsEmpty && row.AchievementCategory.RowId > 0)
             .Where(row => row.AchievementCategory.Value.AchievementKind.RowId != 9)
@@ -65,6 +85,27 @@ internal sealed class ProgressAtlasService
 
     internal ProgressAtlasSnapshot Current => current;
     internal IReadOnlyList<HuntingLogTargetProgress> HuntingTargets => huntingTargets;
+    internal IReadOnlyList<AetheryteAtlasTarget> AetheryteTargets => aetheryteTargets;
+    internal IReadOnlyList<AetherCurrentAtlasTarget> AetherCurrentTargets => aetherCurrentTargets;
+    internal IReadOnlyList<MapDiscoveryRegion> ExplorationTargets => mapDiscoveryRegions;
+
+    internal static unsafe bool IsAetheryteUnlocked(uint id)
+    {
+        UIState* state = UIState.Instance();
+        return state != null && state->IsAetheryteUnlocked(id);
+    }
+
+    internal static unsafe bool IsAetherCurrentUnlocked(uint id)
+    {
+        NativePlayerState* state = NativePlayerState.Instance();
+        return state != null && state->IsAetherCurrentUnlocked(id);
+    }
+
+    internal static unsafe bool IsExplorationComplete(uint mapId, byte discoveryId)
+    {
+        MapDiscoveryManager* manager = MapDiscoveryManager.Instance();
+        return manager != null && manager->IsMapRegionDiscovered(mapId, discoveryId);
+    }
 
     internal void Update(DateTimeOffset now)
     {
@@ -267,6 +308,17 @@ internal sealed class ProgressAtlasService
         }) ?? throw new InvalidDataException("Could not deserialize the Nexus Hunting Log target catalog.");
     }
 
+    private static AetherCurrentAtlasTarget[] LoadAetherCurrentTargets()
+    {
+        const string resourceName = "VieriNexus.Data.field_aether_currents.json";
+        using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
+                              ?? throw new InvalidDataException($"Missing Nexus Aether Current resource {resourceName}.");
+        return JsonSerializer.Deserialize<AetherCurrentAtlasTarget[]>(stream, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+        }) ?? throw new InvalidDataException("Could not deserialize the Nexus field Aether Current catalog.");
+    }
+
     private static int HuntingLogMemoryIndex(uint classId) => classId switch
     {
         1 => 0,
@@ -298,7 +350,10 @@ internal sealed class ProgressAtlasService
         Dictionary<uint, SheetMap> maps = dataManager.GetExcelSheet<SheetMap>()
             .Where(row => row.RowId > 0 && row.DiscoveryFlag != 0 && achievementMaps.Contains(row.RowId))
             .ToDictionary(row => row.RowId);
-        HashSet<MapDiscoveryRegion> regions = [];
+        Dictionary<(uint TerritoryId, uint MapId, byte DiscoveryId), MapDiscoveryRegionBuilder> regions = [];
+        Dictionary<uint, string> placeNames = dataManager.GetExcelSheet<PlaceName>()
+            .Where(row => row.RowId > 0 && !row.Name.IsEmpty)
+            .ToDictionary(row => row.RowId, row => row.Name.ToString());
 
         foreach (TerritoryType territory in dataManager.GetExcelSheet<TerritoryType>()
                      .Where(row => row.RowId > 0 && !row.Bg.IsEmpty))
@@ -330,14 +385,68 @@ internal sealed class ProgressAtlasService
                 if (!maps.TryGetValue(mapId, out SheetMap map) || range.DiscoveryId >= 32 ||
                     (map.DiscoveryFlag & (1u << range.DiscoveryId)) == 0)
                     continue;
-                regions.Add(new MapDiscoveryRegion(mapId, range.DiscoveryId));
+                var key = (territory.RowId, mapId, range.DiscoveryId);
+                if (!regions.TryGetValue(key, out MapDiscoveryRegionBuilder? builder))
+                {
+                    uint placeNameId = range.PlaceNameSpot != 0 ? range.PlaceNameSpot : range.PlaceNameBlock;
+                    string name = placeNames.GetValueOrDefault(placeNameId) ??
+                                  territory.PlaceName.ValueNullable?.Name.ToString() ?? $"Region {range.DiscoveryId}";
+                    builder = new MapDiscoveryRegionBuilder(territory.RowId, mapId, range.DiscoveryId, name, []);
+                    regions.Add(key, builder);
+                }
+                Vector3 position = new(
+                    instance.Transform.Translation.X,
+                    instance.Transform.Translation.Y,
+                    instance.Transform.Translation.Z);
+                if (!builder.Positions.Contains(position))
+                    builder.Positions.Add(position);
             }
         }
 
-        return regions.OrderBy(region => region.MapId).ThenBy(region => region.DiscoveryId).ToArray();
+        return regions.Values
+            .Select(region => new MapDiscoveryRegion(
+                region.TerritoryId,
+                region.MapId,
+                region.DiscoveryId,
+                region.Name,
+                region.Positions))
+            .OrderBy(region => region.TerritoryId)
+            .ThenBy(region => region.MapId)
+            .ThenBy(region => region.DiscoveryId)
+            .ToArray();
     }
 
-    private readonly record struct MapDiscoveryRegion(uint MapId, byte DiscoveryId);
+    internal sealed record AetheryteAtlasTarget(
+        uint Id,
+        string Name,
+        uint TerritoryId,
+        Vector3 Position,
+        bool IsShard);
+
+    internal sealed record AetherCurrentAtlasTarget(
+        uint AetherCurrentId,
+        uint DataId,
+        uint TerritoryId,
+        float X,
+        float Y,
+        float Z)
+    {
+        internal Vector3 Position => new(X, Y, Z);
+    }
+
+    internal sealed record MapDiscoveryRegion(
+        uint TerritoryId,
+        uint MapId,
+        byte DiscoveryId,
+        string Name,
+        IReadOnlyList<Vector3> Positions);
+
+    private sealed record MapDiscoveryRegionBuilder(
+        uint TerritoryId,
+        uint MapId,
+        byte DiscoveryId,
+        string Name,
+        List<Vector3> Positions);
 
     private sealed class HuntingLogCatalog
     {

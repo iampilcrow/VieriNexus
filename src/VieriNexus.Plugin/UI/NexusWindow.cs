@@ -42,6 +42,7 @@ internal sealed class NexusWindow : Window
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
     private readonly ProgressAtlasService progressAtlas;
+    private readonly ProgressAtlasActionService progressAtlasActions;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
     private readonly ModuleRegistry modules;
@@ -59,6 +60,7 @@ internal sealed class NexusWindow : Window
     private Guid? pendingClearRouteId;
     private int selectedBuiltInRoute;
     private string progressionMessage = string.Empty;
+    private string progressAtlasMessage = string.Empty;
     private GearUpgradePreview? gearUpgradePreview;
     private readonly HashSet<int> selectedGearUpgradeSlots = [];
     private string gearShoppingMessage = string.Empty;
@@ -78,6 +80,7 @@ internal sealed class NexusWindow : Window
         ProgressionProviderService progressionProviders,
         ProgressionRuntimeService progressionRuntime,
         ProgressAtlasService progressAtlas,
+        ProgressAtlasActionService progressAtlasActions,
         GearShoppingRuntimeService gearShoppingRuntime,
         NexusMaintenanceRuntimeService maintenanceRuntime,
         ModuleRegistry modules,
@@ -97,6 +100,7 @@ internal sealed class NexusWindow : Window
         this.progressionProviders = progressionProviders;
         this.progressionRuntime = progressionRuntime;
         this.progressAtlas = progressAtlas;
+        this.progressAtlasActions = progressAtlasActions;
         this.gearShoppingRuntime = gearShoppingRuntime;
         this.maintenanceRuntime = maintenanceRuntime;
         this.modules = modules;
@@ -1967,15 +1971,58 @@ internal sealed class NexusWindow : Window
             ImGui.ProgressBar(category.Completion, new Vector2(-1, 22),
                 category.Total == 0 ? "—" : $"{category.Completion:P0}");
             TextWrapped(NexusTheme.Muted, category.Detail);
+            DrawProgressAtlasCategoryAction(category);
             if (category.Id == ProgressAtlasCategoryId.HuntingLogs)
                 DrawHuntingLogAtlasTargets();
             EndAutoPanel();
         }
 
         BeginAutoPanel("ATLAS EXECUTION");
+        ProgressAtlasActionStatus action = progressAtlasActions.Status;
+        NexusTheme.StatusDot(action.IsActive ? NexusTheme.Cyan : NexusTheme.Muted,
+            action.IsActive ? action.Title : "No Atlas travel action is active");
+        TextWrapped(action.IsActive ? NexusTheme.Cyan : NexusTheme.Muted,
+            string.IsNullOrWhiteSpace(progressAtlasMessage) ? action.Message : progressAtlasMessage);
+        if (action.IsActive && ImGui.Button("Stop Atlas action###StopAtlasAction"))
+            progressAtlasActions.Stop(out progressAtlasMessage);
         TextWrapped(NexusTheme.Muted,
-            "Hunting and Grand Company Logs use this same live completion model. When enabled in Progression, Nexus selects and verifies each exact target while stock Lifestream, vnavmesh, and Boss Mod provide only travel, pathing, and rotation mechanics.");
+            "Nexus chooses and verifies one exact objective at a time. Stock Lifestream and vnavmesh provide only teleport and pathing; actions stop without replay after reload or provider loss.");
         EndAutoPanel();
+    }
+
+    private void DrawProgressAtlasCategoryAction(ProgressAtlasCategorySnapshot category)
+    {
+        ProgressAtlasActionStatus status = progressAtlasActions.Status;
+        int remaining;
+        string label;
+        Func<(bool Success, string Message)> start;
+        switch (category.Id)
+        {
+            case ProgressAtlasCategoryId.Aetherytes:
+                remaining = progressAtlasActions.RemainingAetherytes;
+                label = $"Attune next reachable location ({remaining})###AtlasAetheryte";
+                start = () => (progressAtlasActions.StartNextAetheryte(out string result), result);
+                break;
+            case ProgressAtlasCategoryId.AetherCurrents:
+                remaining = progressAtlasActions.RemainingFieldCurrents;
+                label = $"Collect next reachable field current ({remaining})###AtlasFieldCurrent";
+                start = () => (progressAtlasActions.StartNextFieldCurrent(out string result), result);
+                break;
+            case ProgressAtlasCategoryId.Exploration:
+                remaining = progressAtlasActions.RemainingExplorationRegions;
+                label = $"Explore next reachable region ({remaining})###AtlasExploration";
+                start = () => (progressAtlasActions.StartNextExploration(out string result), result);
+                break;
+            default:
+                return;
+        }
+
+        ImGui.BeginDisabled(remaining == 0 || status.IsActive);
+        if (ImGui.Button(label))
+        {
+            (_, progressAtlasMessage) = start();
+        }
+        ImGui.EndDisabled();
     }
 
     private void DrawHuntingLogAtlasTargets()

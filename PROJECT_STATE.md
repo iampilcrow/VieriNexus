@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-11 (America/Chicago)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.44`
+Current product version: `0.1.0.45`
 Current published release source: `0.1.0.44`, commit `4d6ad5bfc40c560177d65312f4e9b9532f68e875`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.44 is live with the bounded Nexus-owned open-world Hunting Log executor over stock Lifestream, vnavmesh, and Boss Mod. Duty-only Grand Company targets and bounded Progress Atlas actions for Aetherytes/Aethernet, open-world Aether Currents, and Mapping/Remapping exploration are next.
+Current release candidate: version 0.1.0.45 adds one-click bounded Atlas actions for reachable locked Aetherytes/Aethernet shards, field Aether Currents, and Mapping/Remapping exploration. Nexus owns exact selection, leases, interaction, live completion verification, Stop, and no-replay recovery while stock Lifestream/vnavmesh supply only travel/pathing. Aether Current quests and duty-only Grand Company targets remain next.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -207,7 +207,7 @@ Several target concepts already have types or tests but are not general live sub
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 5 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety and Progression draft settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.44`, assembly/internal root `VieriNexus`.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.45`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -242,7 +242,7 @@ Several target concepts already have types or tests but are not general live sub
 
 ### `tests/VieriNexus.Application.Tests`
 
-There are 254 automated tests across:
+There are 255 automated tests across:
 
 - `DependencyCatalogTests.cs`
 - `NavigationRouteMigrationImporterTests.cs`
@@ -278,9 +278,10 @@ There are 254 automated tests across:
 - `WorldStateStoreTests.cs`
 - `ClassJobDisplayTests.cs`
 - `ProgressAtlasModelTests.cs`
+- `ProgressAtlasActionCatalogTests.cs`
 - `HuntingLogCandidatePolicyTests.cs`
 
-The published 0.1.0.44 source passes all 254 tests plus a zero-warning full plugin build.
+The 0.1.0.45 release-candidate source passes all 255 tests plus a zero-warning full plugin build. Published 0.1.0.44 passed all 254 tests.
 
 ## 4. Major Systems and Features
 
@@ -538,7 +539,7 @@ Home, Control Center, Progression, Progress Atlas, Routes, Dependencies, Migrati
 - **Home** — permanent large logo hero plus current Routes, Progression, and provider-boundary status cards. This replaced the rejected standalone splash popup.
 - **Control Center** — current route/progression state, dependency/character cards, neutral module grid, and explicit safety state. It is informational only.
 - **Progression** — character-scoped current-job target level, Class/Job/Role-quest/Hunting Log/general-side-quest/duty allowances, hard gil reserve, stock/transition provider-contract status, conflict detection, a bounded plan preview, and durable Start/Stop-after/Stop/resume controls for exactly one gear, exact-quest, open-world Hunting Log target, or duty activity at a time.
-- **Progress Atlas** — Nexus-owned per-character completion for Aetherytes/Aethernet, all open-world and quest-earned Aether Currents, Mapping/Remapping exploration regions, current non-Legacy achievements, and all 12 Hunting/Grand Company Logs with 666 exact targets and live kill counts. It reads current game state directly and does not call VieriCodex.
+- **Progress Atlas** — Nexus-owned per-character completion for Aetherytes/Aethernet, all open-world and quest-earned Aether Currents, Mapping/Remapping exploration regions, current non-Legacy achievements, and all 12 Hunting/Grand Company Logs with 666 exact targets and live kill counts. One-click bounded actions select the next reachable locked travel node, field current, or unexplored world region and verify the exact live completion flag. It reads current game state directly and does not call VieriCodex.
 - **Hunting Log execution** — Nexus chooses one exact current-rank open-world target, travels through stock Lifestream/vnavmesh, resolves and searches known camps, approaches by job range, dismounts, targets the exact monster, runs a Nexus Boss Mod preset, verifies every live kill credit, rotates alternate camps, and replans only after completion. Nexus owns Stop, leases, reload/provider-loss recovery, and restoration of prior Boss Mod state. Duty-only Grand Company targets are not yet connected.
 - **Dependencies** — required/recommended catalog, health, version, purpose, installer/manage buttons, and first-run Continue gate.
 - **Migration** — read-only predecessor discovery, the live Routes & Navigation preview/import/rollback card, and credential-safety notice.
@@ -712,12 +713,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current released implementation commit: `1b2cbc100b933ee41848ae5a247515b10a846cd9 Run exact class job and role quests through Questionable`.
+- Current published implementation commit: `4d6ad5bfc40c560177d65312f4e9b9532f68e875 Normalize embedded hunting preset` (version 0.1.0.44). Version 0.1.0.45 is the active Atlas-action release candidate.
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.44`. Dalamud API 15. Version 0.1.0.44 is published and live through the production Dalamud feed.
+- Plugin project version: `0.1.0.45`. Dalamud API 15. Version 0.1.0.44 remains published and live while 0.1.0.45 completes release verification.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -1101,7 +1102,7 @@ Do not execute these as part of recovery. The next normal development thread sho
 5. Version 0.1.0.36 completes native physical shop/purchase/equip/gearset/displaced-item ownership. Its only Gear acceptance case is one future real upgrade transaction, preferably as part of the normal Progression handoff; do not split it into more micro-tests.
 6. Version 0.1.0.37 preserves the complete VieriAutoDuty profile/operations state and lands the clean categorized Nexus overlay over working controls. Do not repeat this as many per-setting migrations.
 7. Treat 0.1.0.38's operations working profiles, safe native maintenance, striking-dummy travel, and install-first migration flow as one completed implementation slice. Treat 0.1.0.39's exact Class/Job/Role quest lifecycle as another completed implementation slice. Validate both through ordinary use; do not split them back into setting-by-setting development gates.
-8. Treat 0.1.0.44's open-world Hunting Log executor as the first complete target/combat boundary. Next add duty-only Grand Company target dispatch through the bounded stock AutoDuty contract and bounded Atlas execution for Aetherytes/Aethernet, open-world Aether Currents, and Mapping/Remapping exploration. Then finish destructive maintenance/storage and remaining module migrations in similarly broad ownership slices.
+8. Treat 0.1.0.44's open-world Hunting Log executor and 0.1.0.45's bounded travel-node/field-current/exploration actions as complete ownership slices. Next connect Aether Current quests and duty-only Grand Company target dispatch through their existing bounded stock-provider contracts. Then finish destructive maintenance/storage and remaining module migrations in similarly broad ownership slices.
 9. For every substantial change, update this file, `IMPLEMENTATION_STATUS.md`, migration/upstream policy, source lock, tests, package metadata, and release documentation consistently.
 
 ## 17. New Codex Thread Startup Procedure
