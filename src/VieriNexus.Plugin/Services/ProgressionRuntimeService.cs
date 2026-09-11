@@ -42,6 +42,10 @@ internal sealed class ProgressionRuntimeService
     internal IReadOnlyList<ProgressionDutyCandidate> EligibleDuties(int currentLevel) =>
         provider.EligibleDuties(currentLevel);
 
+    internal IReadOnlyList<ProgressionQuestCandidate> EligibleClassJobRoleQuests(
+        uint classJobId,
+        int currentLevel) => provider.EligibleClassJobRoleQuests(classJobId, currentLevel);
+
     internal bool IsGearReadinessReady => provider.IsGearReadinessReady;
 
     internal ProgressionCharacterMetrics CurrentMetrics => provider.CharacterMetrics();
@@ -113,6 +117,7 @@ internal sealed class ProgressionRuntimeService
             coordinator = new ProgressionExecutionCoordinator(
                 new FileProgressionGoalStore(path),
                 leases,
+                provider,
                 provider,
                 provider);
         }

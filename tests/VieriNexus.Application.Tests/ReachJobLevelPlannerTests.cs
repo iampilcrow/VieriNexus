@@ -6,7 +6,7 @@ namespace VieriNexus.Application.Tests;
 public sealed class ReachJobLevelPlannerTests
 {
     [Fact]
-    public void BuildsPlanWithOnlyBoundedDutyExecutionConnected()
+    public void BuildsPlanWithBoundedQuestAndDutyExecutionConnected()
     {
         ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
             Draft(),
@@ -52,6 +52,34 @@ public sealed class ReachJobLevelPlannerTests
         Assert.True(plan.IsExecutionConnected);
         Assert.DoesNotContain(plan.Steps, step => step.Code == "run-supported-quest-work");
         Assert.Contains(plan.Steps, step => step.Code == "run-one-supported-duty");
+    }
+
+    [Fact]
+    public void ClassJobRoleQuestOnlyPlanIsExecutableThroughQuestProvider()
+    {
+        ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
+            Draft(jobQuests: true, huntingLog: false, sideQuests: false, duties: false),
+            Ready(ProgressionProviderRole.Questing, "questionable"),
+            Missing(ProgressionProviderRole.Duties));
+
+        Assert.True(plan.IsValid);
+        Assert.True(plan.IsExecutionConnected);
+        Assert.Contains(plan.Steps, step => step.Code == "run-supported-quest-work");
+        Assert.DoesNotContain(plan.Steps, step => step.Code == "run-one-supported-duty");
+    }
+
+    [Fact]
+    public void HuntingLogAloneRemainsBlockedUntilNativeSelectionIsConnected()
+    {
+        ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
+            Draft(jobQuests: false, huntingLog: true, sideQuests: false, duties: false),
+            Ready(ProgressionProviderRole.Questing, "questionable"),
+            Missing(ProgressionProviderRole.Duties));
+
+        Assert.False(plan.IsValid);
+        Assert.False(plan.IsExecutionConnected);
+        Assert.Contains(plan.Issues, issue => issue.Code == "quest-methods-not-connected");
+        Assert.Contains(plan.Issues, issue => issue.Code == "no-provider-ready");
     }
 
     [Fact]

@@ -1849,32 +1849,37 @@ internal sealed class NexusWindow : Window
 
         ImGui.Spacing();
         ImGui.TextColored(NexusTheme.Gold, "Allowed leveling methods");
-        bool jobQuests = draftConfiguration.AllowJobQuests;
-        if (ImGui.Checkbox("Job quests", ref jobQuests))
+        if (ImGui.BeginTable("###LevelingMethods", 2, ImGuiTableFlags.SizingStretchSame))
         {
-            draftConfiguration.AllowJobQuests = jobQuests;
-            changed = true;
-        }
-        ImGui.SameLine();
-        bool huntingLog = draftConfiguration.AllowHuntingLog;
-        if (ImGui.Checkbox("Hunting Log", ref huntingLog))
-        {
-            draftConfiguration.AllowHuntingLog = huntingLog;
-            changed = true;
-        }
-        ImGui.SameLine();
-        bool sideQuests = draftConfiguration.AllowSideQuests;
-        if (ImGui.Checkbox("Side quests", ref sideQuests))
-        {
-            draftConfiguration.AllowSideQuests = sideQuests;
-            changed = true;
-        }
-        ImGui.SameLine();
-        bool duties = draftConfiguration.AllowDuties;
-        if (ImGui.Checkbox("Duties", ref duties))
-        {
-            draftConfiguration.AllowDuties = duties;
-            changed = true;
+            ImGui.TableNextColumn();
+            bool jobQuests = draftConfiguration.AllowJobQuests;
+            if (ImGui.Checkbox("Class / Job / Role quests", ref jobQuests))
+            {
+                draftConfiguration.AllowJobQuests = jobQuests;
+                changed = true;
+            }
+            ImGui.TableNextColumn();
+            bool duties = draftConfiguration.AllowDuties;
+            if (ImGui.Checkbox("Duties", ref duties))
+            {
+                draftConfiguration.AllowDuties = duties;
+                changed = true;
+            }
+            ImGui.TableNextColumn();
+            bool huntingLog = draftConfiguration.AllowHuntingLog;
+            if (ImGui.Checkbox("Hunting Log (coming next)", ref huntingLog))
+            {
+                draftConfiguration.AllowHuntingLog = huntingLog;
+                changed = true;
+            }
+            ImGui.TableNextColumn();
+            bool sideQuests = draftConfiguration.AllowSideQuests;
+            if (ImGui.Checkbox("General side quests (coming next)", ref sideQuests))
+            {
+                draftConfiguration.AllowSideQuests = sideQuests;
+                changed = true;
+            }
+            ImGui.EndTable();
         }
 
         int gilReserve = draftConfiguration.MinimumGilReserve;
@@ -1934,15 +1939,21 @@ internal sealed class NexusWindow : Window
 
         if (state is null || state.Goal.Status is GoalStatus.Satisfied or GoalStatus.Cancelled)
         {
-            int eligible = progressionRuntime.EligibleDuties(character.Level).Count;
+            int eligibleDuties = draft.AllowDuties
+                ? progressionRuntime.EligibleDuties(character.Level).Count
+                : 0;
+            int eligibleQuests = draft.AllowJobQuests
+                ? progressionRuntime.EligibleClassJobRoleQuests(character.ClassJobId, character.Level).Count
+                : 0;
             BeginAutoPanel("START");
-            bool hasExecutableStart = plan.IsExecutionConnected && progressionRuntime.IsGearReadinessReady;
+            bool hasExecutableStart = plan.IsExecutionConnected && progressionRuntime.IsGearReadinessReady &&
+                (eligibleQuests > 0 || draft.AllowDuties);
             NexusTheme.StatusDot(hasExecutableStart ? NexusTheme.Green : NexusTheme.Amber,
                 hasExecutableStart
-                    ? $"Ready to verify gear, then run one duty at a time • {eligible} currently eligible"
+                    ? $"Ready • {eligibleQuests} Class / Job / Role quest(s) • {eligibleDuties} duty option(s)"
                     : plan.IsExecutionConnected
                     ? "Nexus gear shopping is unavailable"
-                        : "No executable duty lane is ready");
+                        : "No executable progression activity is ready");
             TextWrapped(NexusTheme.Muted,
                 "Nexus—not the provider—owns the level target, task history, Stop, Last Run, verification, and decision to schedule another duty.");
             bool canStart = plan.IsValid && !plan.IsSatisfied && hasExecutableStart &&
@@ -1988,7 +1999,10 @@ internal sealed class NexusWindow : Window
         TextWrapped(NexusTheme.Muted, state.Goal.StatusDetail ?? "No status detail is available.");
         int completedDuties = state.Tasks.Count(task =>
             task.Status == NexusTaskStatus.Succeeded && task.Kind.Value == "vieri.duties.run-one/v1");
-        ImGui.TextUnformatted($"Plan revision: {state.Goal.PlanRevision} • Bounded duties completed: {completedDuties}");
+        int completedQuests = state.Tasks.Count(task =>
+            task.Status == NexusTaskStatus.Succeeded && task.Kind.Value == "vieri.quest.run-one/v1");
+        ImGui.TextUnformatted(
+            $"Plan revision: {state.Goal.PlanRevision} • Quests: {completedQuests} • Duties: {completedDuties}");
         if (activeTask is not null)
         {
             ImGui.TextColored(NexusTheme.Gold, activeTask.Title);
@@ -2001,7 +2015,7 @@ internal sealed class NexusWindow : Window
             bool disableLastRun = state.StopAfterCurrentDuty || activeTask is null;
             if (disableLastRun)
                 ImGui.BeginDisabled();
-            if (ImGui.Button(state.StopAfterCurrentDuty ? "Last Run armed" : "Stop after this duty"))
+            if (ImGui.Button(state.StopAfterCurrentDuty ? "Stop-after armed" : "Stop after this activity"))
                 progressionMessage = progressionRuntime.StopAfterCurrentDuty().Message;
             if (disableLastRun)
                 ImGui.EndDisabled();
@@ -2106,7 +2120,7 @@ internal sealed class NexusWindow : Window
         if (plan.IsValid && !plan.IsSatisfied)
             TextWrapped(plan.IsExecutionConnected ? NexusTheme.Green : NexusTheme.Amber,
                 plan.IsExecutionConnected
-                    ? "Gear readiness and the duty lane are connected as separate verified tasks. Quest execution remains planning-only until its Nexus policy is migrated."
+                    ? "Gear readiness, exact Class / Job / Role quests, and duties run as separate verified activities. Nexus replans after each one."
                     : "Planning is live, but no bounded provider lane is ready to execute.");
         EndAutoPanel();
     }

@@ -29,6 +29,32 @@ public interface IProgressionDutyProvider
     bool TryStop(out string message);
 }
 
+public sealed record ProgressionQuestCandidate(
+    string QuestId,
+    string Name,
+    int RequiredLevel,
+    bool IsAccepted);
+
+public sealed record ProgressionQuestProviderObservation(
+    bool IsAvailable,
+    bool? IsRunning,
+    string? CurrentQuestId,
+    bool? IsComplete,
+    string Detail);
+
+public interface IProgressionQuestProvider
+{
+    ProviderId Id { get; }
+
+    IReadOnlyList<ProgressionQuestCandidate> EligibleClassJobRoleQuests(uint classJobId, int currentLevel);
+
+    ProgressionQuestProviderObservation ObserveQuest(string questId);
+
+    bool TryStartQuest(string questId, out string message);
+
+    bool TryStopQuest(out string message);
+}
+
 public sealed record ProgressionGearProviderObservation(
     bool IsAvailable,
     bool? IsBusy,
@@ -73,6 +99,12 @@ public sealed record ProgressionGearTaskPayload(
     int StartingGil,
     long BaselineStartedSequence,
     long BaselineCompletedSequence);
+
+public sealed record ProgressionQuestTaskPayload(
+    string QuestId,
+    string QuestName,
+    int StartingLevel,
+    int RequiredLevel);
 
 public sealed record ProgressionGoalState(
     int SchemaVersion,
@@ -232,16 +264,18 @@ public static class LevelingDutyPolicy
 }
 
 /// <summary>
-/// Owns one durable Reach Job Level goal and dispatches one bounded gear or duty provider task at
-/// a time. Gear completion requires spending-floor/item-level postconditions; duty completion
-/// requires observed entry plus return to the normal world. Reload can only Stop/pause, never replay.
+/// Owns one durable Reach Job Level goal and dispatches one bounded gear, quest, or duty task at a
+/// time. Quest completion is checked by exact ID; gear and duty work retain their stronger domain
+/// postconditions. Reload can only Stop/pause, never replay.
 /// </summary>
 public sealed class ProgressionExecutionCoordinator
 {
     private static readonly GoalKind ReachJobLevelKind = new("vieri.progression.reach-job-level/v1");
     private static readonly TaskKind EnsureGearKind = new("vieri.gear.ensure-readiness/v1");
+    private static readonly TaskKind RunQuestKind = new("vieri.quest.run-one/v1");
     private static readonly TaskKind RunDutyKind = new("vieri.duties.run-one/v1");
     private static readonly CapabilityId GearCapability = new("vieri.capability.gear.ensure-readiness/v1");
+    private static readonly CapabilityId QuestCapability = new("vieri.capability.quest.run-supported/v1");
     private static readonly CapabilityId DutyCapability = new("vieri.capability.duty.run/v1");
     private static readonly TimeSpan LeaseLifetime = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ProviderStartTimeout = TimeSpan.FromSeconds(45);
@@ -260,11 +294,22 @@ public sealed class ProgressionExecutionCoordinator
         ResourceKind.UiInteraction,
         ResourceKind.InventoryMutation,
     ];
+    private static readonly ResourceKind[] QuestResources =
+    [
+        ResourceKind.Teleport,
+        ResourceKind.Movement,
+        ResourceKind.Navigation,
+        ResourceKind.Targeting,
+        ResourceKind.Combat,
+        ResourceKind.Rotation,
+        ResourceKind.UiInteraction,
+    ];
 
     private readonly IProgressionGoalStore store;
     private readonly ResourceLeaseManager leases;
     private readonly IProgressionDutyProvider provider;
     private readonly IProgressionGearProvider? gearProvider;
+    private readonly IProgressionQuestProvider? questProvider;
     private readonly Func<DateTimeOffset> utcNow;
     private ResourceLeaseHandle? activeLease;
     private DateTimeOffset? providerStartRequestedAt;
@@ -276,12 +321,14 @@ public sealed class ProgressionExecutionCoordinator
         ResourceLeaseManager leases,
         IProgressionDutyProvider provider,
         IProgressionGearProvider? gearProvider = null,
+        IProgressionQuestProvider? questProvider = null,
         Func<DateTimeOffset>? utcNow = null)
     {
         this.store = store;
         this.leases = leases;
         this.provider = provider;
         this.gearProvider = gearProvider;
+        this.questProvider = questProvider;
         this.utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
         State = store.Load();
         ReconcileLoadedState();
@@ -295,17 +342,21 @@ public sealed class ProgressionExecutionCoordinator
             return new(false, "Wait for the current character to finish loading.");
         if (!plan.IsValid || plan.IsSatisfied)
             return new(false, plan.Summary);
-        if (!draft.AllowDuties)
-            return new(false, "The first executable Progression lane requires Duties to be enabled.");
+        if (!draft.AllowDuties && (!draft.AllowJobQuests || questProvider is null))
+            return new(false, "Enable Class / Job / Role quests or Duties with a compatible provider before starting.");
         if (State?.Goal.Status is GoalStatus.Active)
             return new(false, "A Progression goal is already active.");
         if (State?.Goal.Status is GoalStatus.Paused or GoalStatus.Blocked)
             return new(false, "Resume or cancel the saved Progression goal before starting a different one.");
 
-        ProgressionDutyCandidate? duty = LevelingDutyPolicy.SelectHighest(
-            provider.EligibleDuties(draft.CurrentLevel), draft.CurrentLevel);
-        if (duty is null && gearProvider is null)
-            return new(false, "No unlocked leveling duty currently meets the job, item-level, and provider-path requirements.");
+        ProgressionDutyCandidate? duty = draft.AllowDuties
+            ? LevelingDutyPolicy.SelectHighest(provider.EligibleDuties(draft.CurrentLevel), draft.CurrentLevel)
+            : null;
+        ProgressionQuestCandidate? quest = draft.AllowJobQuests
+            ? SelectClassJobRoleQuest(draft.ClassJobId, draft.CurrentLevel)
+            : null;
+        if (duty is null && quest is null && gearProvider is null)
+            return new(false, "No eligible Class / Job / Role quest or leveling duty is currently available.");
 
         DateTimeOffset now = utcNow();
         GoalId goalId = GoalId.New();
@@ -335,7 +386,9 @@ public sealed class ProgressionExecutionCoordinator
             now,
             1,
             gearProvider is null
-                ? $"Preparing one bounded run of {duty!.Name}."
+                ? quest is not null
+                    ? $"Preparing the quest {quest.Name}."
+                    : $"Preparing one bounded run of {duty!.Name}."
                 : "Preparing a Nexus-owned gear-readiness check before the next duty.");
         State = new ProgressionGoalState(
             ProgressionGoalState.CurrentSchemaVersion,
@@ -349,7 +402,7 @@ public sealed class ProgressionExecutionCoordinator
             now);
         Save();
         return gearProvider is null
-            ? StartNextDuty(draft.CurrentLevel, duty!)
+            ? StartNextActivity(draft, quest, duty)
             : StartGearReadiness(draft.CurrentLevel, draft.MinimumGilReserve,
                 draft.CurrentItemLevel, draft.CurrentGil);
     }
@@ -378,11 +431,7 @@ public sealed class ProgressionExecutionCoordinator
         if (gearProvider is not null)
             return StartGearReadiness(world.Level, desired.MinimumGilReserve, world.ItemLevel, world.Gil);
 
-        ProgressionDutyCandidate? duty = LevelingDutyPolicy.SelectHighest(
-            provider.EligibleDuties(world.Level), world.Level);
-        return duty is null
-            ? new(false, "No eligible leveling duty is currently available.")
-            : StartNextDuty(world.Level, duty);
+        return StartNextActivity(desired, world.Level);
     }
 
     public ProgressionActionResult StopAfterCurrentDuty()
@@ -396,7 +445,7 @@ public sealed class ProgressionExecutionCoordinator
             Goal = State.Goal with
             {
                 UpdatedAt = utcNow(),
-                StatusDetail = "Last Run armed. Nexus will pause this goal after the current duty.",
+                StatusDetail = "Stop-after armed. Nexus will pause this goal after the current bounded activity.",
             },
             UpdatedAtUtc = utcNow(),
         };
@@ -522,6 +571,12 @@ public sealed class ProgressionExecutionCoordinator
         if (task.Kind == EnsureGearKind)
         {
             UpdateGearReadiness(task, world);
+            return;
+        }
+
+        if (task.Kind == RunQuestKind)
+        {
+            UpdateQuestWork(task, world);
             return;
         }
 
@@ -871,18 +926,241 @@ public sealed class ProgressionExecutionCoordinator
         });
         ReleaseLease();
         State = State with { ActiveTaskId = null, ProviderStartObserved = false };
-        UpdateGoal(GoalStatus.Active, "Gear readiness verified; selecting one eligible duty.");
+        UpdateGoal(GoalStatus.Active, "Gear readiness verified; selecting the next eligible activity.");
+        StartNextActivity(ReadDesiredState(), world.Level);
+    }
 
-        ProgressionDutyCandidate? duty = LevelingDutyPolicy.SelectHighest(
-            provider.EligibleDuties(currentLevel: world.Level), world.Level);
-        if (duty is null)
+    private ProgressionActionResult StartNextActivity(
+        ReachJobLevelGoalDraft draft,
+        ProgressionQuestCandidate? quest,
+        ProgressionDutyCandidate? duty) =>
+        quest is not null
+            ? StartNextQuest(draft.CurrentLevel, quest)
+            : duty is not null
+                ? StartNextDuty(draft.CurrentLevel, duty)
+                : new(false, "No eligible Class / Job / Role quest or leveling duty is currently available.");
+
+    private ProgressionActionResult StartNextActivity(ReachJobLevelDesiredState desired, int currentLevel)
+    {
+        ProgressionQuestCandidate? quest = desired.AllowJobQuests
+            ? SelectClassJobRoleQuest(desired.ClassJobId, currentLevel)
+            : null;
+        if (quest is not null)
+            return StartNextQuest(currentLevel, quest);
+
+        ProgressionDutyCandidate? duty = desired.AllowDuties
+            ? LevelingDutyPolicy.SelectHighest(provider.EligibleDuties(currentLevel), currentLevel)
+            : null;
+        if (duty is not null)
+            return StartNextDuty(currentLevel, duty);
+
+        string reason = desired.AllowJobQuests && desired.AllowDuties
+            ? "No eligible Class / Job / Role quest or unlocked leveling duty is currently available."
+            : desired.AllowJobQuests
+                ? "No eligible supported Class / Job / Role quest is currently available."
+                : "No unlocked leveling duty currently meets the job, item-level, and provider-path requirements.";
+        UpdateGoal(GoalStatus.Blocked, reason, incrementPlanRevision: true);
+        return new(false, reason);
+    }
+
+    private ProgressionQuestCandidate? SelectClassJobRoleQuest(uint classJobId, int currentLevel) =>
+        questProvider?.EligibleClassJobRoleQuests(classJobId, currentLevel)
+            .OrderByDescending(candidate => candidate.IsAccepted)
+            .ThenBy(candidate => candidate.RequiredLevel)
+            .ThenBy(candidate => candidate.QuestId, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+    private ProgressionActionResult StartNextQuest(int currentLevel, ProgressionQuestCandidate quest)
+    {
+        if (State is null || questProvider is null)
+            return new(false, "The quest provider is unavailable.");
+
+        DateTimeOffset now = utcNow();
+        TaskId taskId = TaskId.New();
+        AttemptId attemptId = AttemptId.New();
+        ProgressionQuestTaskPayload payload = new(
+            quest.QuestId, quest.Name, currentLevel, quest.RequiredLevel);
+        NexusTask task = new(
+            taskId,
+            State.Goal.Id,
+            RunQuestKind,
+            1,
+            $"Complete {quest.Name}",
+            "Nexus selected one exact supported Class / Job / Role quest; the provider executes only that quest and returns control.",
+            QuestCapability,
+            questProvider.Id,
+            QuestResources.ToHashSet(),
+            NexusTaskStatus.Ready,
+            JsonSerializer.Serialize(payload),
+            "Waiting to acquire quest resources.",
+            null);
+
+        State = State with
         {
-            UpdateGoal(GoalStatus.Blocked,
-                "Gear readiness finished, but no unlocked duty meets the current level, item-level, and provider-path requirements.",
+            Tasks = [.. State.Tasks.TakeLast(99), task],
+            ActiveTaskId = taskId,
+            StopAfterCurrentDuty = false,
+            ProviderStartObserved = false,
+            DutyEntryObserved = false,
+            DutyCompletionObserved = false,
+            Goal = State.Goal with
+            {
+                UpdatedAt = now,
+                Status = GoalStatus.Active,
+                StatusDetail = $"Preparing the quest {quest.Name}.",
+            },
+            UpdatedAtUtc = now,
+        };
+        Save();
+
+        LeaseOwner owner = new(State.Goal.Id, taskId, attemptId, State.Goal.Priority,
+            $"Progression: quest {quest.Name}");
+        if (!leases.TryAcquire(owner, QuestResources, LeaseLifetime, out activeLease,
+                out ResourceLeaseSnapshot? blocking))
+        {
+            string blocker = blocking is null ? "another task" : blocking.Owner.Reason;
+            FailTask(task, FailureKind.ResourceConflict, "quest-resource-conflict",
+                $"The quest is waiting because {blocker} owns a required resource.", null, true);
+            return new(false, State!.Goal.StatusDetail!);
+        }
+
+        ReplaceTask(task with
+        {
+            Status = NexusTaskStatus.Acquiring,
+            StatusDetail = "Resources acquired; asking the quest provider to run the selected quest once.",
+        });
+        Save();
+
+        if (!questProvider.TryStartQuest(quest.QuestId, out string message))
+        {
+            FailTask(State.ActiveTask!, FailureKind.DependencyUnavailable, "quest-provider-start-rejected",
+                "The quest provider rejected the exact quest selected by Nexus.", message, true);
+            return new(false, message);
+        }
+
+        providerStartRequestedAt = now;
+        State = State with
+        {
+            Goal = State.Goal with { StatusDetail = message, UpdatedAt = now },
+            UpdatedAtUtc = now,
+        };
+        Save();
+        return new(true, message);
+    }
+
+    private void UpdateQuestWork(NexusTask task, ProgressionWorldObservation world)
+    {
+        if (questProvider is null)
+        {
+            BeginFailureStop(task, FailureKind.DependencyUnavailable, "quest-provider-unavailable",
+                "The quest provider is unavailable.", true);
+            return;
+        }
+
+        ProgressionQuestTaskPayload payload = JsonSerializer.Deserialize<ProgressionQuestTaskPayload>(task.PayloadJson)
+            ?? throw new InvalidDataException("The quest task payload is empty.");
+        ProgressionQuestProviderObservation observation = questProvider.ObserveQuest(payload.QuestId);
+        if (!observation.IsAvailable || observation.IsRunning is null || observation.IsComplete is null)
+        {
+            BeginFailureStop(task, FailureKind.DependencyUnavailable, "quest-provider-unavailable",
+                "The quest provider became unavailable. Nexus is retaining ownership until inactivity is confirmed.", true);
+            return;
+        }
+
+        bool matchingQuest = string.Equals(observation.CurrentQuestId, payload.QuestId, StringComparison.Ordinal);
+        bool started = State!.ProviderStartObserved || observation.IsRunning == true && matchingQuest;
+        if (started != State.ProviderStartObserved)
+            State = State with { ProviderStartObserved = started, UpdatedAtUtc = utcNow() };
+
+        if (observation.IsComplete == true)
+        {
+            if (observation.IsRunning == true)
+            {
+                if (task.Status != NexusTaskStatus.Verifying)
+                {
+                    ReplaceTask(task with
+                    {
+                        Status = NexusTaskStatus.Verifying,
+                        StatusDetail = "Quest completion is verified; waiting for the provider to return control.",
+                    });
+                    Save();
+                }
+                return;
+            }
+
+            CompleteQuest(task, world, payload);
+            return;
+        }
+
+        if (observation.IsRunning == true && !matchingQuest)
+        {
+            BeginFailureStop(task, FailureKind.UnsafeState, "quest-provider-mismatch",
+                "The quest provider switched to a different quest. Nexus is stopping it before releasing ownership.", true);
+            return;
+        }
+
+        if (task.Status == NexusTaskStatus.Acquiring)
+        {
+            if (observation.IsRunning == true && matchingQuest)
+            {
+                ReplaceTask(task with
+                {
+                    Status = NexusTaskStatus.Running,
+                    StatusDetail = $"The provider is running only {payload.QuestName}; Nexus is monitoring completion.",
+                });
+                Save();
+                return;
+            }
+
+            if (providerStartRequestedAt is { } requestedAt && utcNow() - requestedAt >= ProviderStartTimeout)
+                FailTask(task, FailureKind.TransientExternal, "quest-provider-start-timeout",
+                    "The selected quest did not start in time.", observation.Detail, true);
+            else if (started)
+                Save();
+            return;
+        }
+
+        if (observation.IsRunning == true && matchingQuest)
+            return;
+
+        FailTask(task, FailureKind.TransientExternal, "quest-ended-without-completion",
+            "The quest provider stopped before the selected quest was complete.", observation.Detail, true);
+    }
+
+    private void CompleteQuest(
+        NexusTask task,
+        ProgressionWorldObservation world,
+        ProgressionQuestTaskPayload payload)
+    {
+        ReplaceTask(task with
+        {
+            Status = NexusTaskStatus.Succeeded,
+            StatusDetail = $"Verified completion of {payload.QuestName}.",
+            Failure = null,
+        });
+        ReleaseLease();
+        State = State! with { ActiveTaskId = null, ProviderStartObserved = false };
+
+        ReachJobLevelDesiredState desired = ReadDesiredState();
+        if (world.Level >= desired.TargetLevel)
+        {
+            MarkGoalSatisfied(world.Level);
+            return;
+        }
+
+        if (State.StopAfterCurrentDuty)
+        {
+            State = State with { StopAfterCurrentDuty = false };
+            UpdateGoal(GoalStatus.Paused,
+                $"Current activity complete at level {world.Level}. Resume when you want Nexus to continue.",
                 incrementPlanRevision: true);
             return;
         }
-        StartNextDuty(world.Level, duty);
+
+        UpdateGoal(GoalStatus.Active,
+            $"Verified {payload.QuestName}; replanning from level {world.Level}.",
+            incrementPlanRevision: true);
+        StartNextActivity(desired, world.Level);
     }
 
     private ProgressionActionResult StartNextDuty(int currentLevel, ProgressionDutyCandidate duty)
@@ -991,7 +1269,7 @@ public sealed class ProgressionExecutionCoordinator
         {
             State = State with { ActiveTaskId = null, StopAfterCurrentDuty = false };
             UpdateGoal(GoalStatus.Paused,
-                $"Last Run complete at level {world.Level}. Resume when you want Nexus to plan another bounded duty.",
+                $"Current activity complete at level {world.Level}. Resume when you want Nexus to plan another bounded activity.",
                 incrementPlanRevision: true);
             return;
         }
@@ -1005,17 +1283,7 @@ public sealed class ProgressionExecutionCoordinator
             StartGearReadiness(world.Level, desired.MinimumGilReserve, world.ItemLevel, world.Gil);
             return;
         }
-
-        ProgressionDutyCandidate? next = LevelingDutyPolicy.SelectHighest(
-            provider.EligibleDuties(world.Level), world.Level);
-        if (next is null)
-        {
-            UpdateGoal(GoalStatus.Blocked,
-                "The duty finished, but no eligible next leveling duty is available. Check unlocks, item level, and provider health.",
-                incrementPlanRevision: true);
-            return;
-        }
-        StartNextDuty(world.Level, next);
+        StartNextActivity(desired, world.Level);
     }
 
     private void CompleteCancellation(NexusTask task)
@@ -1192,6 +1460,17 @@ public sealed class ProgressionExecutionCoordinator
             return new(gear.IsAvailable, gear.IsBusy is null ? null : !gear.IsBusy.Value, gear.Detail);
         }
 
+        if (task?.Kind == RunQuestKind)
+        {
+            if (questProvider is null)
+                return new(false, null, "The quest provider is unavailable.");
+            ProgressionQuestTaskPayload? payload = JsonSerializer.Deserialize<ProgressionQuestTaskPayload>(task.PayloadJson);
+            if (payload is null)
+                return new(false, null, "The quest task payload is unavailable.");
+            ProgressionQuestProviderObservation quest = questProvider.ObserveQuest(payload.QuestId);
+            return new(quest.IsAvailable, quest.IsRunning is null ? null : !quest.IsRunning.Value, quest.Detail);
+        }
+
         ProgressionDutyProviderObservation duty = provider.Observe();
         return new(duty.IsAvailable, duty.IsStopped, duty.Detail);
     }
@@ -1206,6 +1485,16 @@ public sealed class ProgressionExecutionCoordinator
                 return false;
             }
             return gearProvider.TryStopGearReadiness(out message);
+        }
+
+        if (task?.Kind == RunQuestKind)
+        {
+            if (questProvider is null)
+            {
+                message = "The quest provider Stop contract is unavailable.";
+                return false;
+            }
+            return questProvider.TryStopQuest(out message);
         }
 
         return provider.TryStop(out message);

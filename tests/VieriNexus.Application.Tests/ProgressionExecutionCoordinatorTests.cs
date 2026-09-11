@@ -157,7 +157,7 @@ public sealed class ProgressionExecutionCoordinatorTests
 
         Assert.Equal(GoalStatus.Paused, coordinator.State!.Goal.Status);
         Assert.Single(provider.StartedTerritories);
-        Assert.Contains("Last Run complete", coordinator.State.Goal.StatusDetail);
+        Assert.Contains("Current activity complete", coordinator.State.Goal.StatusDetail);
     }
 
     [Fact]
@@ -388,6 +388,88 @@ public sealed class ProgressionExecutionCoordinatorTests
         }
     }
 
+    [Fact]
+    public void ExactClassJobRoleQuestRunsBeforeDutyAndMustComplete()
+    {
+        FakeDutyProvider duty = new();
+        FakeQuestProvider quest = new();
+        ResourceLeaseManager leases = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), leases, duty, gearProvider: null, questProvider: quest);
+
+        ProgressionActionResult result = coordinator.Start(Draft(), Plan());
+
+        Assert.True(result.Success);
+        Assert.Equal(["500"], quest.StartedQuestIds);
+        Assert.Empty(duty.StartedTerritories);
+        Assert.Equal("vieri.quest.run-one/v1", coordinator.State!.ActiveTask!.Kind.Value);
+        Assert.Contains(ResourceKind.Navigation, coordinator.State.ActiveTask.RequiredResources);
+        Assert.Contains(ResourceKind.Combat, coordinator.State.ActiveTask.RequiredResources);
+
+        quest.IsRunning = true;
+        quest.CurrentQuestId = "500";
+        coordinator.Update(World(90, false));
+        Assert.Equal(NexusTaskStatus.Running, coordinator.State.ActiveTask!.Status);
+
+        quest.IsComplete = true;
+        quest.IsRunning = false;
+        quest.CurrentQuestId = null;
+        coordinator.Update(World(90, false));
+
+        Assert.Equal(NexusTaskStatus.Succeeded, coordinator.State!.Tasks[0].Status);
+        Assert.Equal([200u], duty.StartedTerritories);
+        Assert.Equal("vieri.duties.run-one/v1", coordinator.State.ActiveTask!.Kind.Value);
+    }
+
+    [Fact]
+    public void QuestOnlyGoalCanStartWithoutDuties()
+    {
+        FakeDutyProvider duty = new();
+        FakeQuestProvider quest = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), duty, gearProvider: null, questProvider: quest);
+
+        ProgressionActionResult result = coordinator.Start(
+            Draft() with { AllowDuties = false, AllowJobQuests = true }, Plan());
+
+        Assert.True(result.Success);
+        Assert.Equal(["500"], quest.StartedQuestIds);
+        Assert.Empty(duty.StartedTerritories);
+    }
+
+    [Fact]
+    public void StopDuringQuestUsesQuestStopAndNotDutyStop()
+    {
+        FakeDutyProvider duty = new();
+        FakeQuestProvider quest = new() { IsRunning = true, CurrentQuestId = "500" };
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), duty, gearProvider: null, questProvider: quest);
+        coordinator.Start(Draft(), Plan());
+        coordinator.Update(World(90, false));
+
+        ProgressionActionResult result = coordinator.StopNow();
+
+        Assert.True(result.Success);
+        Assert.Equal(1, quest.StopCalls);
+        Assert.Equal(0, duty.StopCalls);
+    }
+
+    [Fact]
+    public void ProviderQuestMismatchStopsAndBlocksOwnership()
+    {
+        FakeQuestProvider quest = new() { IsRunning = true, CurrentQuestId = "999" };
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), new FakeDutyProvider(),
+            gearProvider: null, questProvider: quest);
+        coordinator.Start(Draft(), Plan());
+
+        coordinator.Update(World(90, false));
+
+        Assert.Equal(GoalStatus.Blocked, coordinator.State!.Goal.Status);
+        Assert.Equal("quest-provider-mismatch", coordinator.State.ActiveTask!.Failure!.Code);
+        Assert.Equal(1, quest.StopCalls);
+    }
+
     private static ReachJobLevelGoalDraft Draft(int targetLevel = 92) => new(
         Character,
         41,
@@ -516,5 +598,48 @@ public sealed class ProgressionExecutionCoordinatorTests
         }
 
         public void EndWithoutCompletion() => isBusy = false;
+    }
+
+    private sealed class FakeQuestProvider : IProgressionQuestProvider
+    {
+        public ProviderId Id { get; } = new("provider.quest-test/v1");
+        public bool Available { get; set; } = true;
+        public bool IsRunning { get; set; }
+        public bool IsComplete { get; set; }
+        public string? CurrentQuestId { get; set; }
+        public List<string> StartedQuestIds { get; } = [];
+        public int StopCalls { get; private set; }
+
+        public IReadOnlyList<ProgressionQuestCandidate> EligibleClassJobRoleQuests(
+            uint classJobId,
+            int currentLevel) => IsComplete
+            ? []
+            : [new("500", "A Test of the Job", 90, false)];
+
+        public ProgressionQuestProviderObservation ObserveQuest(string questId) => new(
+            Available,
+            Available ? IsRunning : null,
+            CurrentQuestId,
+            Available ? IsComplete : null,
+            Available ? "test quest" : "missing quest");
+
+        public bool TryStartQuest(string questId, out string message)
+        {
+            if (!Available)
+            {
+                message = "missing quest";
+                return false;
+            }
+            StartedQuestIds.Add(questId);
+            message = "started quest";
+            return true;
+        }
+
+        public bool TryStopQuest(out string message)
+        {
+            StopCalls++;
+            message = Available ? "quest stop requested" : "missing quest";
+            return Available;
+        }
     }
 }

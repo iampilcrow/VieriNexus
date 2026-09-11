@@ -13,9 +13,11 @@ namespace VieriNexus.Services;
 /// <summary>
 /// Capability-checked adapters for the temporary Vieri providers and their intended stock replacements.
 /// Merely having the expected plugin name is not enough: every required IPC member must be present.
-/// Questing remains observation-only; the duty edge exposes one exact bounded run and Stop.
+/// Nexus selects exact Class / Job / Role quests and delegates one bounded quest or duty at a time.
+/// Vieri compatibility remains available only while the same contract is proven against stock plugins.
 /// </summary>
-internal sealed class ProgressionProviderService : IProgressionDutyProvider, IProgressionGearProvider,
+internal sealed class ProgressionProviderService : IProgressionDutyProvider, IProgressionQuestProvider,
+    IProgressionGearProvider,
     IManualGearShoppingProvider
 {
     private static readonly ProviderId CodexProviderId = new("vieri.provider.codex-compat/v1");
@@ -27,10 +29,20 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly DependencyService dependencies;
     private readonly IDataManager dataManager;
     private readonly ICallGateSubscriber<bool> codexIsRunning;
+    private readonly ICallGateSubscriber<string?> codexCurrentQuest;
     private readonly ICallGateSubscriber<string, bool> codexStartSingleQuest;
+    private readonly ICallGateSubscriber<string, bool> codexIsQuestLocked;
+    private readonly ICallGateSubscriber<string, bool> codexIsQuestComplete;
+    private readonly ICallGateSubscriber<string, bool> codexIsReadyToAcceptQuest;
+    private readonly ICallGateSubscriber<string, bool> codexIsQuestAccepted;
     private readonly ICallGateSubscriber<string, bool> codexStop;
     private readonly ICallGateSubscriber<bool> questionableIsRunning;
+    private readonly ICallGateSubscriber<string?> questionableCurrentQuest;
     private readonly ICallGateSubscriber<string, bool> questionableStartSingleQuest;
+    private readonly ICallGateSubscriber<string, bool> questionableIsQuestLocked;
+    private readonly ICallGateSubscriber<string, bool> questionableIsQuestComplete;
+    private readonly ICallGateSubscriber<string, bool> questionableIsReadyToAcceptQuest;
+    private readonly ICallGateSubscriber<string, bool> questionableIsQuestAccepted;
     private readonly ICallGateSubscriber<string, bool> questionableStop;
     private readonly ICallGateSubscriber<uint, bool> autoDutyContentHasPath;
     private readonly ICallGateSubscriber<bool> autoDutyIsStopped;
@@ -44,6 +56,11 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private long eligibleDutyCacheExpiresAt;
     private int eligibleDutyCacheLevel;
     private IReadOnlyList<ProgressionDutyCandidate> eligibleDutyCache = [];
+    private long eligibleQuestCacheExpiresAt;
+    private uint eligibleQuestCacheClassJob;
+    private int eligibleQuestCacheLevel;
+    private string? eligibleQuestCacheProvider;
+    private IReadOnlyList<ProgressionQuestCandidate> eligibleQuestCache = [];
     private long nexusGearStartedSequence;
     private long nexusGearCompletedSequence;
 
@@ -62,10 +79,20 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         this.dependencies = dependencies;
         this.dataManager = dataManager;
         codexIsRunning = pluginInterface.GetIpcSubscriber<bool>("VieriCodex.IsRunning");
+        codexCurrentQuest = pluginInterface.GetIpcSubscriber<string?>("VieriCodex.GetCurrentQuestId");
         codexStartSingleQuest = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.StartSingleQuest");
+        codexIsQuestLocked = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsQuestLocked");
+        codexIsQuestComplete = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsQuestComplete");
+        codexIsReadyToAcceptQuest = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsReadyToAcceptQuest");
+        codexIsQuestAccepted = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsQuestAccepted");
         codexStop = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.Stop");
         questionableIsRunning = pluginInterface.GetIpcSubscriber<bool>("Questionable.IsRunning");
+        questionableCurrentQuest = pluginInterface.GetIpcSubscriber<string?>("Questionable.GetCurrentQuestId");
         questionableStartSingleQuest = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.StartSingleQuest");
+        questionableIsQuestLocked = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.IsQuestLocked");
+        questionableIsQuestComplete = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.IsQuestComplete");
+        questionableIsReadyToAcceptQuest = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.IsReadyToAcceptQuest");
+        questionableIsQuestAccepted = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.IsQuestAccepted");
         questionableStop = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.Stop");
         autoDutyContentHasPath = pluginInterface.GetIpcSubscriber<uint, bool>("AutoDuty.ContentHasPath");
         autoDutyIsStopped = pluginInterface.GetIpcSubscriber<bool>("AutoDuty.IsStopped");
@@ -92,6 +119,21 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         TryStartDuty(territoryId, out message);
 
     bool IProgressionDutyProvider.TryStop(out string message) => TryStopDuty(out message);
+
+    ProviderId IProgressionQuestProvider.Id =>
+        Snapshot().Questing.Selected?.Id ?? QuestionableProviderId;
+
+    IReadOnlyList<ProgressionQuestCandidate> IProgressionQuestProvider.EligibleClassJobRoleQuests(
+        uint classJobId,
+        int currentLevel) => EligibleClassJobRoleQuests(classJobId, currentLevel);
+
+    ProgressionQuestProviderObservation IProgressionQuestProvider.ObserveQuest(string questId) =>
+        ObserveQuest(questId);
+
+    bool IProgressionQuestProvider.TryStartQuest(string questId, out string message) =>
+        TryStartQuest(questId, out message);
+
+    bool IProgressionQuestProvider.TryStopQuest(out string message) => TryStopQuest(out message);
 
     ProviderId IProgressionGearProvider.Id => NexusGearProviderId;
 
@@ -133,13 +175,19 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 "VieriCodex",
                 CodexProviderId,
                 ProgressionProviderFlavor.VieriCompatibility,
-                codexIsRunning.HasFunction && codexStartSingleQuest.HasFunction && codexStop.HasFunction),
+                codexIsRunning.HasFunction && codexCurrentQuest.HasFunction &&
+                codexStartSingleQuest.HasFunction && codexIsQuestLocked.HasFunction &&
+                codexIsQuestComplete.HasFunction && codexIsReadyToAcceptQuest.HasFunction &&
+                codexIsQuestAccepted.HasFunction && codexStop.HasFunction),
             QuestCandidate(
                 "Questionable",
                 "Questionable",
                 QuestionableProviderId,
                 ProgressionProviderFlavor.Stock,
-                questionableIsRunning.HasFunction && questionableStartSingleQuest.HasFunction && questionableStop.HasFunction),
+                questionableIsRunning.HasFunction && questionableCurrentQuest.HasFunction &&
+                questionableStartSingleQuest.HasFunction && questionableIsQuestLocked.HasFunction &&
+                questionableIsQuestComplete.HasFunction && questionableIsReadyToAcceptQuest.HasFunction &&
+                questionableIsQuestAccepted.HasFunction && questionableStop.HasFunction),
             .. dutyCandidates,
         ];
 
@@ -161,6 +209,162 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                     candidate.Readiness.ToString(),
                     candidate.Version,
                     candidate.Detail));
+    }
+
+    internal IReadOnlyList<ProgressionQuestCandidate> EligibleClassJobRoleQuests(
+        uint classJobId,
+        int currentLevel)
+    {
+        ProgressionProviderSelection selection = Snapshot().Questing;
+        if (!selection.IsReady)
+            return [];
+
+        long now = Environment.TickCount64;
+        string selectedProvider = selection.Selected!.Id.Value;
+        if (eligibleQuestCacheClassJob == classJobId && eligibleQuestCacheLevel == currentLevel &&
+            eligibleQuestCacheProvider == selectedProvider && now < eligibleQuestCacheExpiresAt)
+            return eligibleQuestCache;
+
+        HashSet<uint> chapters = ClassJobRoleQuestPolicy.Chapters(classJobId).ToHashSet();
+        if (chapters.Count == 0)
+            return [];
+
+        var chapterSheet = dataManager.GetExcelSheet<QuestChapter>();
+        var questSheet = dataManager.GetExcelSheet<Quest>();
+        if (chapterSheet is null || questSheet is null)
+            return [];
+
+        List<ProgressionQuestCandidate> candidates = [];
+        foreach (QuestChapter chapter in chapterSheet.Where(row =>
+                     row.RowId > 0 && row.Quest.RowId > 0 && chapters.Contains(row.Redo.RowId)))
+        {
+            Quest? quest = questSheet.GetRowOrDefault(chapter.Quest.RowId);
+            if (quest is null)
+                continue;
+
+            int requiredLevel = quest.Value.ClassJobLevel[0];
+            if (requiredLevel > currentLevel)
+                continue;
+
+            string questId = ((ushort)(quest.Value.RowId & 0xFFFF)).ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+            try
+            {
+                if (InvokeQuestBool(selection, codexIsQuestComplete, questionableIsQuestComplete, questId))
+                    continue;
+                bool accepted = InvokeQuestBool(selection, codexIsQuestAccepted, questionableIsQuestAccepted, questId);
+                bool ready = InvokeQuestBool(selection, codexIsReadyToAcceptQuest,
+                    questionableIsReadyToAcceptQuest, questId);
+                bool locked = InvokeQuestBool(selection, codexIsQuestLocked, questionableIsQuestLocked, questId);
+                if (!accepted && (!ready || locked))
+                    continue;
+
+                string name = quest.Value.Name.ExtractText();
+                if (string.IsNullOrWhiteSpace(name))
+                    name = $"Quest {questId}";
+                candidates.Add(new ProgressionQuestCandidate(questId, name, requiredLevel, accepted));
+            }
+            catch
+            {
+                // A single malformed or temporarily unavailable quest must not invalidate the provider.
+            }
+        }
+
+        eligibleQuestCacheClassJob = classJobId;
+        eligibleQuestCacheLevel = currentLevel;
+        eligibleQuestCacheProvider = selectedProvider;
+        eligibleQuestCacheExpiresAt = now + 5_000;
+        eligibleQuestCache = candidates
+            .DistinctBy(candidate => candidate.QuestId)
+            .OrderByDescending(candidate => candidate.IsAccepted)
+            .ThenBy(candidate => candidate.RequiredLevel)
+            .ThenBy(candidate => candidate.QuestId, StringComparer.Ordinal)
+            .ToArray();
+        return eligibleQuestCache;
+    }
+
+    internal ProgressionQuestProviderObservation ObserveQuest(string questId)
+    {
+        ProgressionProviderSelection selection = Snapshot().Questing;
+        if (!selection.IsReady)
+            return new(false, null, null, null, selection.Detail);
+
+        try
+        {
+            bool running = InvokeQuestBool(selection, codexIsRunning, questionableIsRunning);
+            string? current = InvokeQuestValue(selection, codexCurrentQuest, questionableCurrentQuest);
+            bool complete = InvokeQuestBool(selection, codexIsQuestComplete, questionableIsQuestComplete, questId);
+            if (complete)
+                eligibleQuestCacheExpiresAt = 0;
+            return new(true, running, current, complete,
+                complete
+                    ? "The selected quest is complete."
+                    : running
+                        ? "The quest provider is running bounded Nexus work."
+                        : "The quest provider is inactive.");
+        }
+        catch (Exception ex)
+        {
+            return new(false, null, null, null, ex.Message);
+        }
+    }
+
+    internal bool TryStartQuest(string questId, out string message)
+    {
+        ProgressionProviderSelection selection = Snapshot().Questing;
+        if (!selection.IsReady)
+        {
+            message = selection.Detail;
+            return false;
+        }
+
+        try
+        {
+            if (InvokeQuestBool(selection, codexIsRunning, questionableIsRunning))
+            {
+                message = $"{selection.Selected!.DisplayName} is already running work Nexus does not own. Stop it before starting this goal.";
+                return false;
+            }
+
+            bool accepted = selection.Selected!.Id == CodexProviderId
+                ? codexStartSingleQuest.InvokeFunc(questId)
+                : questionableStartSingleQuest.InvokeFunc(questId);
+            message = accepted
+                ? $"Nexus asked {selection.Selected.DisplayName} to complete one exact Class / Job / Role quest, then return control for verification."
+                : $"{selection.Selected.DisplayName} does not have a supported path for the selected quest.";
+            return accepted;
+        }
+        catch (Exception ex)
+        {
+            message = $"The quest provider could not start: {ex.Message}";
+            return false;
+        }
+    }
+
+    internal bool TryStopQuest(out string message)
+    {
+        ProgressionProviderSelection selection = Snapshot().Questing;
+        if (!selection.IsReady)
+        {
+            message = selection.Detail;
+            return false;
+        }
+
+        try
+        {
+            bool stopped = selection.Selected!.Id == CodexProviderId
+                ? codexStop.InvokeFunc("Nexus Stop")
+                : questionableStop.InvokeFunc("Nexus Stop");
+            message = stopped
+                ? $"Nexus asked {selection.Selected.DisplayName} to stop the selected quest."
+                : $"{selection.Selected.DisplayName} rejected the Stop request.";
+            return stopped;
+        }
+        catch (Exception ex)
+        {
+            message = $"The quest provider Stop request failed: {ex.Message}";
+            return false;
+        }
     }
 
     internal unsafe IReadOnlyList<ProgressionDutyCandidate> EligibleDuties(int currentLevel)
@@ -475,6 +679,27 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         return manager is null ? 0 : checked((int)Math.Min(manager->GetGil(), int.MaxValue));
     }
 
+    private static bool InvokeQuestBool(
+        ProgressionProviderSelection selection,
+        ICallGateSubscriber<bool> codex,
+        ICallGateSubscriber<bool> questionable) =>
+        selection.Selected!.Id == CodexProviderId ? codex.InvokeFunc() : questionable.InvokeFunc();
+
+    private static bool InvokeQuestBool(
+        ProgressionProviderSelection selection,
+        ICallGateSubscriber<string, bool> codex,
+        ICallGateSubscriber<string, bool> questionable,
+        string questId) =>
+        selection.Selected!.Id == CodexProviderId
+            ? codex.InvokeFunc(questId)
+            : questionable.InvokeFunc(questId);
+
+    private static string? InvokeQuestValue(
+        ProgressionProviderSelection selection,
+        ICallGateSubscriber<string?> codex,
+        ICallGateSubscriber<string?> questionable) =>
+        selection.Selected!.Id == CodexProviderId ? codex.InvokeFunc() : questionable.InvokeFunc();
+
     private ProgressionProviderCandidate QuestCandidate(
         string internalName,
         string displayName,
@@ -490,7 +715,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             flavor,
             presence,
             contractReady,
-            "IsRunning, StartSingleQuest, and Stop");
+            "IsRunning, GetCurrentQuestId, StartSingleQuest, eligibility, completion, and Stop");
     }
 
     private ProgressionProviderCandidate[] DutyCandidates()
