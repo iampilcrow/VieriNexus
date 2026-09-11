@@ -3,8 +3,8 @@
 Working snapshot: 2026-09-11 (America/Chicago)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
 Current product version: `0.1.0.48`
-Current published release source: `0.1.0.47`, commit `83d3b6b80914b13c099e1e47828e8f27b50d71c2`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.48 completes the Nexus-owned prerequisite trip around Grand Company turn-ins and Armoire/Glamour storage. Nexus selects the current Grand Company destination, owns travel/approach/interaction, validates eligible storage before and after the narrow provider request, and treats an empty set as a verified no-op. AutoDuty remains absent from maintenance. Safe in-duty leave/resume remains blocked on a missing stock AutoDuty contract; subsequent work continues the remaining predecessor modules in broad ownership slices.
+Current published release source: `0.1.0.48`, commit `0b7cecd86992299e72966b0a877a98f9966a7d16`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current workstream: version 0.1.0.48 is published and completes the Nexus-owned prerequisite trip around Grand Company turn-ins and Armoire/Glamour storage. Nexus selects the current Grand Company destination, owns travel/approach/interaction, validates eligible storage before and after the narrow provider request, and treats an empty set as a verified no-op. AutoDuty remains absent from maintenance. Safe in-duty leave/resume remains blocked on a missing stock AutoDuty contract; subsequent work continues the remaining predecessor modules in broad ownership slices.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -713,12 +713,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current published implementation commit: `83d3b6b80914b13c099e1e47828e8f27b50d71c2 Add protected item transaction ownership` (version 0.1.0.47). Version 0.1.0.48 is the active release candidate.
+- Current published implementation commit: `0b7cecd86992299e72966b0a877a98f9966a7d16 Complete maintenance prerequisite ownership` (version 0.1.0.48).
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.48`. Dalamud API 15. Version 0.1.0.47 is published and live through the production Dalamud feed while 0.1.0.48 is prepared.
+- Plugin project version: `0.1.0.48`. Dalamud API 15. Version 0.1.0.48 is published and live through the production Dalamud feed.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -1533,6 +1533,8 @@ Verification evidence for 0.1.0.45: Nexus source `6a8a128b6405b801828a32cfca4e44
 Verification evidence for 0.1.0.46: Nexus source `fc5860d4a8502d588685aac346778735174b4b57`, Daily Pilcrow release `8188b330e7ccd7de9bf71acf046489f89259eeb0`, and Daily Pilcrow verification docs `6f59ae6a2b9c7e76a513f45e8e6562b82058c8fe` are pushed. All 257 Nexus tests, the zero-warning clean Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_8JkCYgBqU7zTfmYwMvz9T1ykm9aa` and final documentation deployment `dpl_BhB1QpsveNX9VLPHMtEfqQh9qxHf` are Ready on `https://thedailypilcrow.com`. The live feed advertises VieriNexus 0.1.0.46; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `33B1BE077528C7854EB5EFA2829EB8EE3BBE28346A7944D0E1FDE46A2B8401B8` / `608E4091A780D7B3DE57AEA4053D49A114B1760EE66E88E43E521AF9766E15CD`. GitHub Actions Discord workflow `34617703795` completed successfully. Nexus now owns one-click exact quest-earned Aether Current execution and exact duty-only Grand Company target dispatch/verification, with confirmed-inactive Stop reconciliation for both provider paths.
 
 Verification evidence for 0.1.0.47: Nexus source `83d3b6b80914b13c099e1e47828e8f27b50d71c2`, Daily Pilcrow release `402eaa1e08fd5247100c4d479a6cc7599b1fc5ef`, and final Daily Pilcrow documentation `70c8030bc3f76976d0d4a7f724554304aecc5687` are pushed. All 261 Nexus tests, the zero-warning clean Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_3SqiWE8oMW7nV5MkPwo8Brien4WZ` and final documentation deployment `dpl_5fGPMTfDF3nHAb42obYFLKJnYGx5` are Ready on `https://thedailypilcrow.com`. The live feed advertises VieriNexus 0.1.0.47; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `FF96D3DC96E14852541C1EAFA776C0575E06275B02FEB5AD13EF75FA3D6BDF1D` / `59AD9C10EC921C2E5E709BE4C3E7137918A59E16D43F13B6EB76E6145113A669`. GitHub Actions Discord workflow `34641520725` completed successfully. Nexus now owns the protected between-duty item-transaction boundary while AutoRetainer and Glamour Log remain narrow replaceable mechanics providers and AutoDuty remains absent from maintenance.
+
+Verification evidence for 0.1.0.48: Nexus source `0b7cecd86992299e72966b0a877a98f9966a7d16`, Daily Pilcrow release `623032b3b9caf54aac44c296abfa75e6896ad97d`, and final Daily Pilcrow documentation `abb1e6c7b7051d7a7654ff2771bf9fc4aa4a3023` are pushed. All 261 Nexus tests, the zero-warning clean Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_6wWUzHkcLzdqagXBNbkZ39QGy7oG` and final documentation deployment `dpl_AoWhHJZ2iZAbbDRA7X6tkyPVz5Ko` are Ready on `https://thedailypilcrow.com`. The live feed advertises VieriNexus 0.1.0.48; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `29B89BC937C7EDDDACEAE016C43627A570C467C84D767465353657BE4C772123` / `FA958FADBF0E46ED02CEE97BAEE24AA8D8F59A689862BC812154936DF054B09B`. GitHub Actions Discord workflow `34644886958` completed successfully. Nexus now owns the full destination/travel/interaction prerequisite around Grand Company and collection-storage mechanics, including verified empty-set completion and final storage rechecks; AutoDuty remains absent from maintenance.
 
 ### 18.16 Release report format
 
