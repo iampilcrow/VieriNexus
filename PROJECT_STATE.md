@@ -3,8 +3,8 @@
 Working snapshot: 2026-09-11 (America/Chicago)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
 Current product version: `0.1.0.45`
-Current published release source: `0.1.0.44`, commit `4d6ad5bfc40c560177d65312f4e9b9532f68e875`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current release candidate: version 0.1.0.45 adds one-click bounded Atlas actions for reachable locked Aetherytes/Aethernet shards, field Aether Currents, and Mapping/Remapping exploration. Nexus owns exact selection, leases, interaction, live completion verification, Stop, and no-replay recovery while stock Lifestream/vnavmesh supply only travel/pathing. Aether Current quests and duty-only Grand Company targets remain next.
+Current published release source: `0.1.0.45`, commit `6a8a128b6405b801828a32cfca4e4420211bc5c2`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current workstream: version 0.1.0.45 is live with one-click bounded Atlas actions for reachable locked Aetherytes/Aethernet shards, field Aether Currents, and Mapping/Remapping exploration. Aether Current quests and duty-only Grand Company targets remain next.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -281,7 +281,7 @@ There are 255 automated tests across:
 - `ProgressAtlasActionCatalogTests.cs`
 - `HuntingLogCandidatePolicyTests.cs`
 
-The 0.1.0.45 release-candidate source passes all 255 tests plus a zero-warning full plugin build. Published 0.1.0.44 passed all 254 tests.
+The published 0.1.0.45 source passes all 255 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -713,12 +713,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current published implementation commit: `4d6ad5bfc40c560177d65312f4e9b9532f68e875 Normalize embedded hunting preset` (version 0.1.0.44). Version 0.1.0.45 is the active Atlas-action release candidate.
+- Current published implementation commit: `6a8a128b6405b801828a32cfca4e4420211bc5c2 Add Nexus-owned Progress Atlas actions` (version 0.1.0.45).
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.45`. Dalamud API 15. Version 0.1.0.44 remains published and live while 0.1.0.45 completes release verification.
+- Plugin project version: `0.1.0.45`. Dalamud API 15. Version 0.1.0.45 is published and live through the production Dalamud feed.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -1523,6 +1523,8 @@ Verification evidence for 0.1.0.42: Nexus source `aa502eadda446003c1dd0df287f9ab
 Verification evidence for 0.1.0.43: Nexus source `a993710552360b88b6032ed6ad488b31d7de9e98`, Daily Pilcrow release `eccc72a8ee2f04f5cea3689799aa439f7ea4aa28`, and Daily Pilcrow verification docs `bfb9f78dc4d04c25575fcfb356c0ed2f5c34a4e2` are pushed. All 251 Nexus tests, the zero-warning clean Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_BhUZV1nUxVTmoiHwRzAwKH5CUCBp` and final documentation deployment `dpl_C1RRL8ckvsdN4G1eGLXarJR7MViF` are Ready on `https://thedailypilcrow.com`. The live feed advertises VieriNexus 0.1.0.43; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `A0C8711924C1751E69D8E4C69EC4043EAFC6D4F43DAB6B05B126332B33C52928` / `61A6A7F9EC0B286C1179CD7D741EB37E61695D7CB2A98715FD35A0B600D025DE`. GitHub Actions Discord workflow `34600837053` completed successfully. Nexus now owns Mapping/Remapping exploration completion, the complete 12-log/666-target Hunting and Grand Company catalog, exact live per-target kill progress, current incomplete-target display, and provider-neutral deterministic next-target selection.
 
 Verification evidence for 0.1.0.44: Nexus source `4d6ad5bfc40c560177d65312f4e9b9532f68e875`, Daily Pilcrow release `a6b016d0d56d365c127f6ca7259e984ffe1d1f7b`, and Daily Pilcrow verification docs `7a12230eb578e6a1797b9b583c2b6a1f93048bba` are pushed. All 254 Nexus tests, the zero-warning clean Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_6xExFUgzoh7qHHr1hrtitx9AWWvJ` and final documentation deployment `dpl_CmgtP3KvYyWtEnPo8eabyHh8ito2` are Ready on `https://thedailypilcrow.com`. The live feed advertises VieriNexus 0.1.0.44; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `F8EF0C65F8EEEA8D2843D362731370DF2E675EA14A2A3AEB5C843A629CB1B9A6` / `B2075B3250813304526E13C49B05BA213EFE7B358C10201C2D93456E1D509488`. GitHub Actions Discord workflow `34609438619` completed successfully. Nexus now owns exact open-world Hunting Log target selection, camp travel/search, combat approach, repeated kills, exact live completion verification, Stop, recovery, and restoration of prior Boss Mod state without calling VieriCodex.
+
+Verification evidence for 0.1.0.45: Nexus source `6a8a128b6405b801828a32cfca4e4420211bc5c2` and Daily Pilcrow release `57e3774671e344127143c6399871c09cd0bedb90` are pushed. All 255 Nexus tests, the zero-warning clean Release build, all 205 website tests, typecheck, focused package validation, thirteen-entry inventory guard, and production website build pass. Release deployment `dpl_8ddEctE7hvM1hejhNPV3dHRXgxiX` is Ready on `https://thedailypilcrow.com`. The live feed advertises VieriNexus 0.1.0.45; public runtime/source downloads return HTTP 200 as valid ZIPs and match SHA-256 `3E8AD7A73B770730DB3D1324C9409603784BBB2E271895FA979D5B3AAF6EF9D8` / `879D4AC3D3601D46513590C537E88CBC8680CA5379A25CDA64E8815DDCFD1C27`. GitHub Actions Discord workflow `34611393626` completed successfully. Nexus now owns one-click bounded travel-node attunement, field-current collection, and world-region exploration with exact live completion verification and without calling VieriCodex.
 
 ### 18.16 Release report format
 
