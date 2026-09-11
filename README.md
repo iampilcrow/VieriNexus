@@ -16,6 +16,8 @@ Routes & Navigation is the first transactional migration slice. Its Migration ca
 
 The VieriAutoDuty operations importer preserves every profile, character assignment, retired-item transfer, compact-overlay preference, and custom gear/repair/extraction/coffer/desynthesis/turn-in/selling/registration/in-duty-maintenance policy as one verified staged snapshot. It also creates a separate atomic Nexus working copy, resolves the correct profile by content ID with saved-default fallback, and applies the imported overlay preferences once for that receipt. Nexus now directly runs the safe native subset—self-repair, materia extraction, Triple Triad/minion/orchestrion registration, and eligible coffer opening—without AutoDuty IPC. Selling, desynthesis, Grand Company turn-ins, storage, and in-duty withdrawal remain blocked until their destructive-item and recovery contracts are native.
 
+The operations importer treats missing, explicit-null, and wrong-type optional scalar values as safe defaults and reports malformed profile entries as migration issues rather than throwing from the startup or Migration draw path.
+
 The compact optional Goto/Gear/Inventory/Extras overlay now includes the native maintenance actions and the preserved striking-dummy catalog. Striking-dummy travel uses Lifestream only for an unlocked teleport and Nexus-owned vnavmesh travel for the final approach. It does not fall back to stock AutoDuty's UI or fork-only helper endpoints.
 
 Staged migration status survives a Nexus reload: the saved receipt, target path, target hash, schema, and staged payload are verified before the import message and rollback action are restored.

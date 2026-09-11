@@ -116,6 +116,50 @@ public sealed class AutoDutyMigrationImporterTests
     }
 
     [Fact]
+    public void PreviewTreatsExplicitNullOptionalScalarsAsMissing()
+    {
+        AutoDutyMigrationPreview preview = new AutoDutyMigrationImporter().Preview(
+            """
+            {
+              "DefaultConfigName": "Bare",
+              "profileData": [{
+                "Name": "Bare",
+                "CIDs": [null, "wrong-type", 123],
+                "Config": {
+                  "AutoOpenCoffersGearset": null,
+                  "AutoRepairPct": null,
+                  "AutoBuyGilVendorKeepGil": null,
+                  "AutoDesynthCategories": null,
+                  "AutoDesynthSkillUpLimit": null,
+                  "AutoSellMode": null
+                }
+              }]
+            }
+            """);
+
+        Assert.True(preview.CanImport);
+        AutoDutyProfileSnapshot profile = Assert.Single(preview.Snapshot!.Profiles);
+        Assert.Equal([123UL], profile.CharacterIds);
+        Assert.Null(profile.Maintenance.CofferGearset);
+        Assert.Equal(50u, profile.Maintenance.RepairBelowPercent);
+        Assert.Equal(0u, profile.Maintenance.MinimumGilReserve);
+        Assert.Equal(1UL, profile.Maintenance.DesynthCategories);
+        Assert.Equal(50, profile.Maintenance.DesynthSkillGapLimit);
+        Assert.Equal("UnneededEquipment", profile.Maintenance.AutoSellMode);
+    }
+
+    [Fact]
+    public void PreviewReportsMalformedProfileEntryInsteadOfThrowingDuringDraw()
+    {
+        AutoDutyMigrationPreview preview = new AutoDutyMigrationImporter().Preview(
+            """{"profileData":[null,{"Name":"Main","Config":{}}]}""");
+
+        Assert.False(preview.CanImport);
+        Assert.Contains(preview.Issues, issue =>
+            issue.Severity == MigrationIssueSeverity.Error && issue.Message.Contains("not a JSON object"));
+    }
+
+    [Fact]
     public void PreviewRejectsDuplicateProfiles()
     {
         AutoDutyMigrationPreview preview = new AutoDutyMigrationImporter().Preview(

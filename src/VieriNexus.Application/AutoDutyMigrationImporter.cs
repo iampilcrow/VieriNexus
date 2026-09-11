@@ -24,6 +24,13 @@ public sealed class AutoDutyMigrationImporter
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (JsonElement profileElement in profilesElement.EnumerateArray())
             {
+                if (profileElement.ValueKind != JsonValueKind.Object)
+                {
+                    issues.Add(new(MigrationIssueSeverity.Error,
+                        "A VieriAutoDuty profile entry is not a JSON object."));
+                    continue;
+                }
+
                 string name = Text(profileElement, "Name", string.Empty).Trim();
                 if (name.Length == 0 || !names.Add(name))
                 {
@@ -73,6 +80,10 @@ public sealed class AutoDutyMigrationImporter
         catch (JsonException)
         {
             return Error("The VieriAutoDuty configuration is not valid JSON.");
+        }
+        catch (InvalidOperationException)
+        {
+            return Error("The VieriAutoDuty configuration contains a value with an unsupported JSON type.");
         }
     }
 
@@ -154,7 +165,12 @@ public sealed class AutoDutyMigrationImporter
     {
         if (!parent.TryGetProperty(name, out JsonElement value))
             return fallback;
-        return value.ValueKind == JsonValueKind.String ? value.GetString() ?? fallback : value.GetRawText();
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? fallback,
+            JsonValueKind.Null or JsonValueKind.Undefined => fallback,
+            _ => value.GetRawText(),
+        };
     }
 
     private static bool Bool(JsonElement parent, string name, bool fallback) =>
@@ -163,22 +179,27 @@ public sealed class AutoDutyMigrationImporter
             : fallback;
 
     private static int Int(JsonElement parent, string name, int fallback) =>
-        parent.TryGetProperty(name, out JsonElement value) && value.TryGetInt32(out int result) ? result : fallback;
+        parent.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number &&
+        value.TryGetInt32(out int result) ? result : fallback;
 
     private static uint UInt(JsonElement parent, string name, uint fallback) =>
-        parent.TryGetProperty(name, out JsonElement value) && value.TryGetUInt32(out uint result) ? result : fallback;
+        parent.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number &&
+        value.TryGetUInt32(out uint result) ? result : fallback;
 
     private static ulong ULong(JsonElement parent, string name, ulong fallback) =>
-        parent.TryGetProperty(name, out JsonElement value) && value.TryGetUInt64(out ulong result) ? result : fallback;
+        parent.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number &&
+        value.TryGetUInt64(out ulong result) ? result : fallback;
 
     private static byte? NullableByte(JsonElement parent, string name) =>
-        parent.TryGetProperty(name, out JsonElement value) && value.TryGetByte(out byte result) ? result : null;
+        parent.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number &&
+        value.TryGetByte(out byte result) ? result : null;
 
     private static IReadOnlyList<ulong> ULongArray(JsonElement parent, string name)
     {
         if (!parent.TryGetProperty(name, out JsonElement value) || value.ValueKind != JsonValueKind.Array)
             return [];
-        return value.EnumerateArray().Select(item => item.TryGetUInt64(out ulong id) ? id : 0)
+        return value.EnumerateArray().Select(item =>
+                item.ValueKind == JsonValueKind.Number && item.TryGetUInt64(out ulong id) ? id : 0)
             .Where(id => id != 0).Distinct().Order().ToArray();
     }
 
