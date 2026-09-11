@@ -1874,7 +1874,7 @@ internal sealed class NexusWindow : Window
             }
             ImGui.TableNextColumn();
             bool sideQuests = draftConfiguration.AllowSideQuests;
-            if (ImGui.Checkbox("General side quests (coming next)", ref sideQuests))
+            if (ImGui.Checkbox("General side quests", ref sideQuests))
             {
                 draftConfiguration.AllowSideQuests = sideQuests;
                 changed = true;
@@ -1942,20 +1942,27 @@ internal sealed class NexusWindow : Window
             int eligibleDuties = draft.AllowDuties
                 ? progressionRuntime.EligibleDuties(character.Level).Count
                 : 0;
-            int eligibleQuests = draft.AllowJobQuests
-                ? progressionRuntime.EligibleClassJobRoleQuests(character.ClassJobId, character.Level).Count
-                : 0;
+            IReadOnlyList<ProgressionQuestCandidate> eligibleQuestList = progressionRuntime.EligibleQuests(
+                character.ClassJobId,
+                character.Level,
+                draft.AllowJobQuests,
+                draft.AllowSideQuests);
+            int eligibleClassJobRoleQuests = eligibleQuestList.Count(
+                quest => quest.Kind == ProgressionQuestKind.ClassJobRole);
+            int eligibleSideQuests = eligibleQuestList.Count(
+                quest => quest.Kind == ProgressionQuestKind.GeneralSideQuest);
+            int eligibleQuests = eligibleQuestList.Count;
             BeginAutoPanel("START");
             bool hasExecutableStart = plan.IsExecutionConnected && progressionRuntime.IsGearReadinessReady &&
                 (eligibleQuests > 0 || draft.AllowDuties);
             NexusTheme.StatusDot(hasExecutableStart ? NexusTheme.Green : NexusTheme.Amber,
                 hasExecutableStart
-                    ? $"Ready • {eligibleQuests} Class / Job / Role quest(s) • {eligibleDuties} duty option(s)"
+                    ? $"Ready • {eligibleClassJobRoleQuests} Class/Job/Role • {eligibleSideQuests} side quest(s) • {eligibleDuties} duties"
                     : plan.IsExecutionConnected
                     ? "Nexus gear shopping is unavailable"
                         : "No executable progression activity is ready");
             TextWrapped(NexusTheme.Muted,
-                "Nexus—not the provider—owns the level target, task history, Stop, Last Run, verification, and decision to schedule another duty.");
+                "Nexus—not the provider—owns the level target, exact quest or duty selection, task history, Stop-after, verification, and replanning.");
             bool canStart = plan.IsValid && !plan.IsSatisfied && hasExecutableStart &&
                 plugin.Configuration.ForCharacter(character.Key.ToString()).AllowAutomation;
             if (!canStart)
@@ -2120,7 +2127,7 @@ internal sealed class NexusWindow : Window
         if (plan.IsValid && !plan.IsSatisfied)
             TextWrapped(plan.IsExecutionConnected ? NexusTheme.Green : NexusTheme.Amber,
                 plan.IsExecutionConnected
-                    ? "Gear readiness, exact Class / Job / Role quests, and duties run as separate verified activities. Nexus replans after each one."
+                    ? "Gear readiness, exact Class / Job / Role quests, general side quests, and duties run as separate verified activities. Nexus replans after each one."
                     : "Planning is live, but no bounded provider lane is ready to execute.");
         EndAutoPanel();
     }

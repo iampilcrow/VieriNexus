@@ -42,9 +42,12 @@ internal sealed class ProgressionRuntimeService
     internal IReadOnlyList<ProgressionDutyCandidate> EligibleDuties(int currentLevel) =>
         provider.EligibleDuties(currentLevel);
 
-    internal IReadOnlyList<ProgressionQuestCandidate> EligibleClassJobRoleQuests(
+    internal IReadOnlyList<ProgressionQuestCandidate> EligibleQuests(
         uint classJobId,
-        int currentLevel) => provider.EligibleClassJobRoleQuests(classJobId, currentLevel);
+        int currentLevel,
+        bool includeClassJobRole,
+        bool includeGeneralSideQuests) => provider.EligibleQuests(
+            classJobId, currentLevel, includeClassJobRole, includeGeneralSideQuests);
 
     internal bool IsGearReadinessReady => provider.IsGearReadinessReady;
 

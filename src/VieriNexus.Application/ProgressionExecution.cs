@@ -29,11 +29,23 @@ public interface IProgressionDutyProvider
     bool TryStop(out string message);
 }
 
+public enum ProgressionQuestKind
+{
+    ClassJobRole,
+    GeneralSideQuest,
+}
+
 public sealed record ProgressionQuestCandidate(
     string QuestId,
     string Name,
     int RequiredLevel,
-    bool IsAccepted);
+    bool IsAccepted,
+    ProgressionQuestKind Kind = ProgressionQuestKind.ClassJobRole);
+
+public sealed record ProgressionQuestStartResult(
+    bool Success,
+    bool UnsupportedQuest,
+    string Message);
 
 public sealed record ProgressionQuestProviderObservation(
     bool IsAvailable,
@@ -46,11 +58,15 @@ public interface IProgressionQuestProvider
 {
     ProviderId Id { get; }
 
-    IReadOnlyList<ProgressionQuestCandidate> EligibleClassJobRoleQuests(uint classJobId, int currentLevel);
+    IReadOnlyList<ProgressionQuestCandidate> EligibleQuests(
+        uint classJobId,
+        int currentLevel,
+        bool includeClassJobRole,
+        bool includeGeneralSideQuests);
 
     ProgressionQuestProviderObservation ObserveQuest(string questId);
 
-    bool TryStartQuest(string questId, out string message);
+    ProgressionQuestStartResult TryStartQuest(ProgressionQuestCandidate quest);
 
     bool TryStopQuest(out string message);
 }
@@ -104,7 +120,8 @@ public sealed record ProgressionQuestTaskPayload(
     string QuestId,
     string QuestName,
     int StartingLevel,
-    int RequiredLevel);
+    int RequiredLevel,
+    ProgressionQuestKind Kind = ProgressionQuestKind.ClassJobRole);
 
 public sealed record ProgressionGoalState(
     int SchemaVersion,
@@ -279,6 +296,7 @@ public sealed class ProgressionExecutionCoordinator
     private static readonly CapabilityId DutyCapability = new("vieri.capability.duty.run/v1");
     private static readonly TimeSpan LeaseLifetime = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ProviderStartTimeout = TimeSpan.FromSeconds(45);
+    private const int MaximumUnsupportedQuestFallbacks = 24;
     private static readonly ResourceKind[] DutyResources =
     [
         ResourceKind.DutyQueue,
@@ -315,6 +333,7 @@ public sealed class ProgressionExecutionCoordinator
     private DateTimeOffset? providerStartRequestedAt;
     private bool reloadStopPending;
     private bool cancelAfterReloadStop;
+    private int unsupportedQuestFallbackDepth;
 
     public ProgressionExecutionCoordinator(
         IProgressionGoalStore store,
@@ -342,8 +361,8 @@ public sealed class ProgressionExecutionCoordinator
             return new(false, "Wait for the current character to finish loading.");
         if (!plan.IsValid || plan.IsSatisfied)
             return new(false, plan.Summary);
-        if (!draft.AllowDuties && (!draft.AllowJobQuests || questProvider is null))
-            return new(false, "Enable Class / Job / Role quests or Duties with a compatible provider before starting.");
+        if (!draft.AllowDuties && (!(draft.AllowJobQuests || draft.AllowSideQuests) || questProvider is null))
+            return new(false, "Enable Class / Job / Role quests, general side quests, or Duties with a compatible provider before starting.");
         if (State?.Goal.Status is GoalStatus.Active)
             return new(false, "A Progression goal is already active.");
         if (State?.Goal.Status is GoalStatus.Paused or GoalStatus.Blocked)
@@ -352,11 +371,13 @@ public sealed class ProgressionExecutionCoordinator
         ProgressionDutyCandidate? duty = draft.AllowDuties
             ? LevelingDutyPolicy.SelectHighest(provider.EligibleDuties(draft.CurrentLevel), draft.CurrentLevel)
             : null;
-        ProgressionQuestCandidate? quest = draft.AllowJobQuests
-            ? SelectClassJobRoleQuest(draft.ClassJobId, draft.CurrentLevel)
-            : null;
+        ProgressionQuestCandidate? quest = SelectQuest(
+            draft.ClassJobId,
+            draft.CurrentLevel,
+            draft.AllowJobQuests,
+            draft.AllowSideQuests);
         if (duty is null && quest is null && gearProvider is null)
-            return new(false, "No eligible Class / Job / Role quest or leveling duty is currently available.");
+            return new(false, "No eligible quest or leveling duty is currently available.");
 
         DateTimeOffset now = utcNow();
         GoalId goalId = GoalId.New();
@@ -402,7 +423,7 @@ public sealed class ProgressionExecutionCoordinator
             now);
         Save();
         return gearProvider is null
-            ? StartNextActivity(draft, quest, duty)
+            ? StartNextActivity(desired, draft.CurrentLevel, quest, duty)
             : StartGearReadiness(draft.CurrentLevel, draft.MinimumGilReserve,
                 draft.CurrentItemLevel, draft.CurrentGil);
     }
@@ -931,20 +952,23 @@ public sealed class ProgressionExecutionCoordinator
     }
 
     private ProgressionActionResult StartNextActivity(
-        ReachJobLevelGoalDraft draft,
+        ReachJobLevelDesiredState desired,
+        int currentLevel,
         ProgressionQuestCandidate? quest,
         ProgressionDutyCandidate? duty) =>
         quest is not null
-            ? StartNextQuest(draft.CurrentLevel, quest)
+            ? StartNextQuest(currentLevel, quest)
             : duty is not null
-                ? StartNextDuty(draft.CurrentLevel, duty)
-                : new(false, "No eligible Class / Job / Role quest or leveling duty is currently available.");
+                ? StartNextDuty(currentLevel, duty)
+                : BlockNoActivity(desired);
 
     private ProgressionActionResult StartNextActivity(ReachJobLevelDesiredState desired, int currentLevel)
     {
-        ProgressionQuestCandidate? quest = desired.AllowJobQuests
-            ? SelectClassJobRoleQuest(desired.ClassJobId, currentLevel)
-            : null;
+        ProgressionQuestCandidate? quest = SelectQuest(
+            desired.ClassJobId,
+            currentLevel,
+            desired.AllowJobQuests,
+            desired.AllowSideQuests);
         if (quest is not null)
             return StartNextQuest(currentLevel, quest);
 
@@ -954,18 +978,29 @@ public sealed class ProgressionExecutionCoordinator
         if (duty is not null)
             return StartNextDuty(currentLevel, duty);
 
-        string reason = desired.AllowJobQuests && desired.AllowDuties
-            ? "No eligible Class / Job / Role quest or unlocked leveling duty is currently available."
-            : desired.AllowJobQuests
-                ? "No eligible supported Class / Job / Role quest is currently available."
+        return BlockNoActivity(desired);
+    }
+
+    private ProgressionActionResult BlockNoActivity(ReachJobLevelDesiredState desired)
+    {
+        bool anyQuest = desired.AllowJobQuests || desired.AllowSideQuests;
+        string reason = anyQuest && desired.AllowDuties
+            ? "No eligible supported quest or unlocked leveling duty is currently available."
+            : anyQuest
+                ? "No eligible supported quest is currently available for the selected methods."
                 : "No unlocked leveling duty currently meets the job, item-level, and provider-path requirements.";
         UpdateGoal(GoalStatus.Blocked, reason, incrementPlanRevision: true);
         return new(false, reason);
     }
 
-    private ProgressionQuestCandidate? SelectClassJobRoleQuest(uint classJobId, int currentLevel) =>
-        questProvider?.EligibleClassJobRoleQuests(classJobId, currentLevel)
+    private ProgressionQuestCandidate? SelectQuest(
+        uint classJobId,
+        int currentLevel,
+        bool includeClassJobRole,
+        bool includeGeneralSideQuests) =>
+        questProvider?.EligibleQuests(classJobId, currentLevel, includeClassJobRole, includeGeneralSideQuests)
             .OrderByDescending(candidate => candidate.IsAccepted)
+            .ThenBy(candidate => candidate.Kind)
             .ThenBy(candidate => candidate.RequiredLevel)
             .ThenBy(candidate => candidate.QuestId, StringComparer.Ordinal)
             .FirstOrDefault();
@@ -979,14 +1014,15 @@ public sealed class ProgressionExecutionCoordinator
         TaskId taskId = TaskId.New();
         AttemptId attemptId = AttemptId.New();
         ProgressionQuestTaskPayload payload = new(
-            quest.QuestId, quest.Name, currentLevel, quest.RequiredLevel);
+            quest.QuestId, quest.Name, currentLevel, quest.RequiredLevel, quest.Kind);
+        string questKind = QuestKindName(quest.Kind);
         NexusTask task = new(
             taskId,
             State.Goal.Id,
             RunQuestKind,
             1,
             $"Complete {quest.Name}",
-            "Nexus selected one exact supported Class / Job / Role quest; the provider executes only that quest and returns control.",
+            $"Nexus selected one exact supported {questKind}; the provider executes only that quest and returns control.",
             QuestCapability,
             questProvider.Id,
             QuestResources.ToHashSet(),
@@ -1031,21 +1067,56 @@ public sealed class ProgressionExecutionCoordinator
         });
         Save();
 
-        if (!questProvider.TryStartQuest(quest.QuestId, out string message))
+        ProgressionQuestStartResult start = questProvider.TryStartQuest(quest);
+        if (!start.Success)
         {
+            if (start.UnsupportedQuest)
+            {
+                ReplaceTask(State.ActiveTask! with
+                {
+                    Status = NexusTaskStatus.Cancelled,
+                    StatusDetail = start.Message,
+                    Failure = new TaskFailure(
+                        FailureKind.DependencyUnavailable,
+                        "quest-path-unsupported",
+                        "The provider does not support this quest; Nexus will choose another eligible activity.",
+                        start.Message,
+                        false),
+                });
+                ReleaseLease();
+                State = State! with { ActiveTaskId = null };
+                Save();
+                if (unsupportedQuestFallbackDepth >= MaximumUnsupportedQuestFallbacks)
+                {
+                    const string reason = "Questionable rejected 24 eligible quest paths in this selection pass. Nexus stopped safely instead of retrying indefinitely.";
+                    UpdateGoal(GoalStatus.Blocked, reason, incrementPlanRevision: true);
+                    return new(false, reason);
+                }
+
+                unsupportedQuestFallbackDepth++;
+                try
+                {
+                    return StartNextActivity(ReadDesiredState(), currentLevel);
+                }
+                finally
+                {
+                    unsupportedQuestFallbackDepth--;
+                }
+            }
+
             FailTask(State.ActiveTask!, FailureKind.DependencyUnavailable, "quest-provider-start-rejected",
-                "The quest provider rejected the exact quest selected by Nexus.", message, true);
-            return new(false, message);
+                "The quest provider rejected the exact quest selected by Nexus.", start.Message, true);
+            return new(false, start.Message);
         }
 
         providerStartRequestedAt = now;
         State = State with
         {
-            Goal = State.Goal with { StatusDetail = message, UpdatedAt = now },
+            Goal = State.Goal with { StatusDetail = start.Message, UpdatedAt = now },
             UpdatedAtUtc = now,
         };
         Save();
-        return new(true, message);
+        return new(true, start.Message);
     }
 
     private void UpdateQuestWork(NexusTask task, ProgressionWorldObservation world)
@@ -1162,6 +1233,13 @@ public sealed class ProgressionExecutionCoordinator
             incrementPlanRevision: true);
         StartNextActivity(desired, world.Level);
     }
+
+    private static string QuestKindName(ProgressionQuestKind kind) => kind switch
+    {
+        ProgressionQuestKind.ClassJobRole => "Class / Job / Role quest",
+        ProgressionQuestKind.GeneralSideQuest => "general side quest",
+        _ => "quest",
+    };
 
     private ProgressionActionResult StartNextDuty(int currentLevel, ProgressionDutyCandidate duty)
     {

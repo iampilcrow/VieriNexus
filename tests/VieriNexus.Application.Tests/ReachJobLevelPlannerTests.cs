@@ -69,6 +69,21 @@ public sealed class ReachJobLevelPlannerTests
     }
 
     [Fact]
+    public void GeneralSideQuestOnlyPlanIsExecutableThroughQuestProvider()
+    {
+        ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
+            Draft(jobQuests: false, huntingLog: false, sideQuests: true, duties: false),
+            Ready(ProgressionProviderRole.Questing, "questionable"),
+            Missing(ProgressionProviderRole.Duties));
+
+        Assert.True(plan.IsValid);
+        Assert.True(plan.IsExecutionConnected);
+        ProgressionPlanStep step = Assert.Single(plan.Steps, step => step.Code == "run-supported-quest-work");
+        Assert.Contains("general side quests", step.Reason);
+        Assert.DoesNotContain(plan.Steps, step => step.Code == "run-one-supported-duty");
+    }
+
+    [Fact]
     public void HuntingLogAloneRemainsBlockedUntilNativeSelectionIsConnected()
     {
         ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(

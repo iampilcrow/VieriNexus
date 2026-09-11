@@ -438,6 +438,60 @@ public sealed class ProgressionExecutionCoordinatorTests
     }
 
     [Fact]
+    public void GeneralSideQuestOnlyGoalStartsAndPersistsItsExactKind()
+    {
+        FakeDutyProvider duty = new();
+        FakeQuestProvider quest = new()
+        {
+            Candidates =
+            [
+                new("700", "An Ordinary Side Quest", 80, false, ProgressionQuestKind.GeneralSideQuest),
+            ],
+        };
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), duty, gearProvider: null, questProvider: quest);
+
+        ProgressionActionResult result = coordinator.Start(
+            Draft() with { AllowDuties = false, AllowJobQuests = false, AllowHuntingLog = false, AllowSideQuests = true },
+            Plan());
+
+        Assert.True(result.Success);
+        Assert.Equal(["700"], quest.StartedQuestIds);
+        ProgressionQuestTaskPayload payload = System.Text.Json.JsonSerializer.Deserialize<ProgressionQuestTaskPayload>(
+            coordinator.State!.ActiveTask!.PayloadJson)!;
+        Assert.Equal(ProgressionQuestKind.GeneralSideQuest, payload.Kind);
+        Assert.Empty(duty.StartedTerritories);
+    }
+
+    [Fact]
+    public void MissingQuestPathIsSkippedAndNextSupportedQuestStartsAutomatically()
+    {
+        FakeQuestProvider quest = new()
+        {
+            Candidates =
+            [
+                new("700", "Unsupported Side Quest", 80, false, ProgressionQuestKind.GeneralSideQuest),
+                new("701", "Supported Side Quest", 81, false, ProgressionQuestKind.GeneralSideQuest),
+            ],
+        };
+        quest.UnsupportedQuestIds.Add("700");
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), new FakeDutyProvider(),
+            gearProvider: null, questProvider: quest);
+
+        ProgressionActionResult result = coordinator.Start(
+            Draft() with { AllowDuties = false, AllowJobQuests = false, AllowHuntingLog = false, AllowSideQuests = true },
+            Plan());
+
+        Assert.True(result.Success);
+        Assert.Equal(["700", "701"], quest.StartedQuestIds);
+        Assert.Equal(NexusTaskStatus.Cancelled, coordinator.State!.Tasks[0].Status);
+        Assert.Equal("quest-path-unsupported", coordinator.State.Tasks[0].Failure!.Code);
+        Assert.Equal("701", System.Text.Json.JsonSerializer.Deserialize<ProgressionQuestTaskPayload>(
+            coordinator.State.ActiveTask!.PayloadJson)!.QuestId);
+    }
+
+    [Fact]
     public void StopDuringQuestUsesQuestStopAndNotDutyStop()
     {
         FakeDutyProvider duty = new();
@@ -608,13 +662,24 @@ public sealed class ProgressionExecutionCoordinatorTests
         public bool IsComplete { get; set; }
         public string? CurrentQuestId { get; set; }
         public List<string> StartedQuestIds { get; } = [];
+        public IReadOnlyList<ProgressionQuestCandidate> Candidates { get; init; } =
+            [new("500", "A Test of the Job", 90, false)];
+        public HashSet<string> UnsupportedQuestIds { get; } = [];
+        private HashSet<string> RejectedQuestIds { get; } = [];
         public int StopCalls { get; private set; }
 
-        public IReadOnlyList<ProgressionQuestCandidate> EligibleClassJobRoleQuests(
+        public IReadOnlyList<ProgressionQuestCandidate> EligibleQuests(
             uint classJobId,
-            int currentLevel) => IsComplete
+            int currentLevel,
+            bool includeClassJobRole,
+            bool includeGeneralSideQuests) => IsComplete
             ? []
-            : [new("500", "A Test of the Job", 90, false)];
+            : Candidates
+                .Where(candidate => !RejectedQuestIds.Contains(candidate.QuestId))
+                .Where(candidate => candidate.Kind == ProgressionQuestKind.ClassJobRole
+                    ? includeClassJobRole
+                    : includeGeneralSideQuests)
+                .ToArray();
 
         public ProgressionQuestProviderObservation ObserveQuest(string questId) => new(
             Available,
@@ -623,16 +688,17 @@ public sealed class ProgressionExecutionCoordinatorTests
             Available ? IsComplete : null,
             Available ? "test quest" : "missing quest");
 
-        public bool TryStartQuest(string questId, out string message)
+        public ProgressionQuestStartResult TryStartQuest(ProgressionQuestCandidate quest)
         {
             if (!Available)
+                return new(false, false, "missing quest");
+            StartedQuestIds.Add(quest.QuestId);
+            if (UnsupportedQuestIds.Contains(quest.QuestId))
             {
-                message = "missing quest";
-                return false;
+                RejectedQuestIds.Add(quest.QuestId);
+                return new(false, true, "unsupported quest");
             }
-            StartedQuestIds.Add(questId);
-            message = "started quest";
-            return true;
+            return new(true, false, "started quest");
         }
 
         public bool TryStopQuest(out string message)

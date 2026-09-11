@@ -3,7 +3,7 @@
   "Name": "VieriNexus",
   "InternalName": "VieriNexus",
   "Punchline": "Routes, progression, and verified automation under one Nexus.",
-  "Description": "The unified, modular Vieri suite in active development. Nexus owns routes, exact Class/Job/Role quest selection, verified progression, gear transactions, safe maintenance, striking-dummy travel, and install-first migration while stock providers supply narrow mechanics.",
+  "Description": "The unified, modular Vieri suite in active development. Nexus owns routes, exact Class/Job/Role and general side-quest selection, verified progression, gear transactions, safe maintenance, striking-dummy travel, and install-first migration while stock providers supply narrow mechanics.",
   "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,

@@ -13,7 +13,7 @@ namespace VieriNexus.Services;
 /// <summary>
 /// Capability-checked adapters for the temporary Vieri providers and their intended stock replacements.
 /// Merely having the expected plugin name is not enough: every required IPC member must be present.
-/// Nexus selects exact Class / Job / Role quests and delegates one bounded quest or duty at a time.
+/// Nexus selects exact Class / Job / Role or general side quests and delegates one bounded quest or duty at a time.
 /// Vieri compatibility remains available only while the same contract is proven against stock plugins.
 /// </summary>
 internal sealed class ProgressionProviderService : IProgressionDutyProvider, IProgressionQuestProvider,
@@ -59,8 +59,11 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private long eligibleQuestCacheExpiresAt;
     private uint eligibleQuestCacheClassJob;
     private int eligibleQuestCacheLevel;
+    private bool eligibleQuestCacheIncludesClassJobRole;
+    private bool eligibleQuestCacheIncludesSideQuests;
     private string? eligibleQuestCacheProvider;
     private IReadOnlyList<ProgressionQuestCandidate> eligibleQuestCache = [];
+    private readonly Dictionary<string, HashSet<string>> unsupportedQuestIdsByProvider = [];
     private long nexusGearStartedSequence;
     private long nexusGearCompletedSequence;
 
@@ -123,15 +126,18 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     ProviderId IProgressionQuestProvider.Id =>
         Snapshot().Questing.Selected?.Id ?? QuestionableProviderId;
 
-    IReadOnlyList<ProgressionQuestCandidate> IProgressionQuestProvider.EligibleClassJobRoleQuests(
+    IReadOnlyList<ProgressionQuestCandidate> IProgressionQuestProvider.EligibleQuests(
         uint classJobId,
-        int currentLevel) => EligibleClassJobRoleQuests(classJobId, currentLevel);
+        int currentLevel,
+        bool includeClassJobRole,
+        bool includeGeneralSideQuests) => EligibleQuests(
+            classJobId, currentLevel, includeClassJobRole, includeGeneralSideQuests);
 
     ProgressionQuestProviderObservation IProgressionQuestProvider.ObserveQuest(string questId) =>
         ObserveQuest(questId);
 
-    bool IProgressionQuestProvider.TryStartQuest(string questId, out string message) =>
-        TryStartQuest(questId, out message);
+    ProgressionQuestStartResult IProgressionQuestProvider.TryStartQuest(ProgressionQuestCandidate quest) =>
+        TryStartQuest(quest);
 
     bool IProgressionQuestProvider.TryStopQuest(out string message) => TryStopQuest(out message);
 
@@ -211,43 +217,65 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                     candidate.Detail));
     }
 
-    internal IReadOnlyList<ProgressionQuestCandidate> EligibleClassJobRoleQuests(
+    internal IReadOnlyList<ProgressionQuestCandidate> EligibleQuests(
         uint classJobId,
-        int currentLevel)
+        int currentLevel,
+        bool includeClassJobRole,
+        bool includeGeneralSideQuests)
     {
         ProgressionProviderSelection selection = Snapshot().Questing;
-        if (!selection.IsReady)
+        if (!selection.IsReady || !includeClassJobRole && !includeGeneralSideQuests)
             return [];
 
         long now = Environment.TickCount64;
         string selectedProvider = selection.Selected!.Id.Value;
         if (eligibleQuestCacheClassJob == classJobId && eligibleQuestCacheLevel == currentLevel &&
+            eligibleQuestCacheIncludesClassJobRole == includeClassJobRole &&
+            eligibleQuestCacheIncludesSideQuests == includeGeneralSideQuests &&
             eligibleQuestCacheProvider == selectedProvider && now < eligibleQuestCacheExpiresAt)
             return eligibleQuestCache;
-
-        HashSet<uint> chapters = ClassJobRoleQuestPolicy.Chapters(classJobId).ToHashSet();
-        if (chapters.Count == 0)
-            return [];
 
         var chapterSheet = dataManager.GetExcelSheet<QuestChapter>();
         var questSheet = dataManager.GetExcelSheet<Quest>();
         if (chapterSheet is null || questSheet is null)
             return [];
 
+        Dictionary<uint, uint> questChapters = chapterSheet
+            .Where(row => row.RowId > 0 && row.Quest.RowId > 0)
+            .GroupBy(row => row.Quest.RowId)
+            .ToDictionary(group => group.Key, group => group.First().Redo.RowId);
+        HashSet<uint> currentChapters = ClassJobRoleQuestPolicy.Chapters(classJobId).ToHashSet();
+        HashSet<uint> allClassJobRoleChapters = Enumerable.Range(1, 43)
+            .SelectMany(id => ClassJobRoleQuestPolicy.Chapters((uint)id))
+            .ToHashSet();
+        HashSet<string> unsupported = unsupportedQuestIdsByProvider.GetValueOrDefault(selectedProvider) ?? [];
         List<ProgressionQuestCandidate> candidates = [];
-        foreach (QuestChapter chapter in chapterSheet.Where(row =>
-                     row.RowId > 0 && row.Quest.RowId > 0 && chapters.Contains(row.Redo.RowId)))
-        {
-            Quest? quest = questSheet.GetRowOrDefault(chapter.Quest.RowId);
-            if (quest is null)
-                continue;
+        IEnumerable<(Quest Quest, ProgressionQuestKind Kind)> rows = questSheet
+            .Where(quest => quest.RowId > 0 && quest.IssuerLocation.RowId > 0)
+            .Select(quest => (Quest: quest, Kind: ClassifyQuest(
+                quest,
+                classJobId,
+                questChapters.GetValueOrDefault(quest.RowId),
+                currentChapters,
+                allClassJobRoleChapters)))
+            .Where(item => item.Kind == ProgressionQuestKind.ClassJobRole && includeClassJobRole ||
+                           item.Kind == ProgressionQuestKind.GeneralSideQuest && includeGeneralSideQuests)
+            .Select(item => (item.Quest, Kind: item.Kind!.Value))
+            .OrderBy(item => item.Kind)
+            .ThenBy(item => item.Quest.ClassJobLevel[0])
+            .ThenBy(item => item.Quest.SortKey)
+            .ThenBy(item => item.Quest.RowId);
 
-            int requiredLevel = quest.Value.ClassJobLevel[0];
+        foreach ((Quest quest, ProgressionQuestKind kind) in rows)
+        {
+            int requiredLevel = quest.ClassJobLevel[0];
             if (requiredLevel > currentLevel)
                 continue;
 
-            string questId = ((ushort)(quest.Value.RowId & 0xFFFF)).ToString(
+            string questId = ((ushort)(quest.RowId & 0xFFFF)).ToString(
                 System.Globalization.CultureInfo.InvariantCulture);
+            if (unsupported.Contains(questId))
+                continue;
             try
             {
                 if (InvokeQuestBool(selection, codexIsQuestComplete, questionableIsQuestComplete, questId))
@@ -259,10 +287,12 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 if (!accepted && (!ready || locked))
                     continue;
 
-                string name = quest.Value.Name.ExtractText();
+                string name = quest.Name.ExtractText();
                 if (string.IsNullOrWhiteSpace(name))
                     name = $"Quest {questId}";
-                candidates.Add(new ProgressionQuestCandidate(questId, name, requiredLevel, accepted));
+                candidates.Add(new ProgressionQuestCandidate(questId, name, requiredLevel, accepted, kind));
+                if (candidates.Count >= 24)
+                    break;
             }
             catch
             {
@@ -272,15 +302,104 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
         eligibleQuestCacheClassJob = classJobId;
         eligibleQuestCacheLevel = currentLevel;
+        eligibleQuestCacheIncludesClassJobRole = includeClassJobRole;
+        eligibleQuestCacheIncludesSideQuests = includeGeneralSideQuests;
         eligibleQuestCacheProvider = selectedProvider;
-        eligibleQuestCacheExpiresAt = now + 5_000;
+        eligibleQuestCacheExpiresAt = now + 30_000;
         eligibleQuestCache = candidates
             .DistinctBy(candidate => candidate.QuestId)
             .OrderByDescending(candidate => candidate.IsAccepted)
+            .ThenBy(candidate => candidate.Kind)
             .ThenBy(candidate => candidate.RequiredLevel)
             .ThenBy(candidate => candidate.QuestId, StringComparer.Ordinal)
             .ToArray();
         return eligibleQuestCache;
+    }
+
+    private static ProgressionQuestKind? ClassifyQuest(
+        Quest quest,
+        uint classJobId,
+        uint chapter,
+        IReadOnlySet<uint> currentClassJobRoleChapters,
+        IReadOnlySet<uint> allClassJobRoleChapters)
+    {
+        if (currentClassJobRoleChapters.Contains(chapter))
+            return ProgressionQuestKind.ClassJobRole;
+
+        bool isMainScenario = quest.JournalGenre.ValueNullable?.Icon == 61412;
+        uint questId = quest.RowId & 0xFFFF;
+        bool sideQuest = GeneralSideQuestPolicy.IsGeneralSideQuest(
+            questId,
+            isMainScenario,
+            quest.IsRepeatable,
+            quest.Festival.RowId != 0,
+            quest.BeastTribe.RowId != 0,
+            quest.JournalGenre.RowId != 0,
+            chapter,
+            allClassJobRoleChapters);
+        return sideQuest && QuestAllowsClassJob(quest, classJobId)
+            ? ProgressionQuestKind.GeneralSideQuest
+            : null;
+    }
+
+    private static bool QuestAllowsClassJob(Quest quest, uint classJobId)
+    {
+        ClassJobCategory? category = quest.ClassJobCategory0.ValueNullable;
+        if (category is null)
+            return false;
+
+        string abbreviation = classJobId switch
+        {
+            1 => "GLA",
+            2 => "PGL",
+            3 => "MRD",
+            4 => "LNC",
+            5 => "ARC",
+            6 => "CNJ",
+            7 => "THM",
+            8 => "CRP",
+            9 => "BSM",
+            10 => "ARM",
+            11 => "GSM",
+            12 => "LTW",
+            13 => "WVR",
+            14 => "ALC",
+            15 => "CUL",
+            16 => "MIN",
+            17 => "BTN",
+            18 => "FSH",
+            19 => "PLD",
+            20 => "MNK",
+            21 => "WAR",
+            22 => "DRG",
+            23 => "BRD",
+            24 => "WHM",
+            25 => "BLM",
+            26 => "ACN",
+            27 => "SMN",
+            28 => "SCH",
+            29 => "ROG",
+            30 => "NIN",
+            31 => "MCH",
+            32 => "DRK",
+            33 => "AST",
+            34 => "SAM",
+            35 => "RDM",
+            36 => "BLU",
+            37 => "GNB",
+            38 => "DNC",
+            39 => "RPR",
+            40 => "SGE",
+            41 => "VPR",
+            42 => "PCT",
+            43 => "BST",
+            _ => string.Empty,
+        };
+        if (abbreviation.Length == 0)
+            return false;
+
+        object boxed = category.Value;
+        return boxed.GetType().GetProperty(abbreviation)?.GetValue(boxed) is true;
     }
 
     internal ProgressionQuestProviderObservation ObserveQuest(string questId)
@@ -309,35 +428,38 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         }
     }
 
-    internal bool TryStartQuest(string questId, out string message)
+    internal ProgressionQuestStartResult TryStartQuest(ProgressionQuestCandidate quest)
     {
         ProgressionProviderSelection selection = Snapshot().Questing;
         if (!selection.IsReady)
-        {
-            message = selection.Detail;
-            return false;
-        }
+            return new(false, false, selection.Detail);
 
         try
         {
             if (InvokeQuestBool(selection, codexIsRunning, questionableIsRunning))
-            {
-                message = $"{selection.Selected!.DisplayName} is already running work Nexus does not own. Stop it before starting this goal.";
-                return false;
-            }
+                return new(false, false,
+                    $"{selection.Selected!.DisplayName} is already running work Nexus does not own. Stop it before starting this goal.");
 
             bool accepted = selection.Selected!.Id == CodexProviderId
-                ? codexStartSingleQuest.InvokeFunc(questId)
-                : questionableStartSingleQuest.InvokeFunc(questId);
-            message = accepted
-                ? $"Nexus asked {selection.Selected.DisplayName} to complete one exact Class / Job / Role quest, then return control for verification."
-                : $"{selection.Selected.DisplayName} does not have a supported path for the selected quest.";
-            return accepted;
+                ? codexStartSingleQuest.InvokeFunc(quest.QuestId)
+                : questionableStartSingleQuest.InvokeFunc(quest.QuestId);
+            string kind = quest.Kind == ProgressionQuestKind.GeneralSideQuest
+                ? "general side quest"
+                : "Class / Job / Role quest";
+            if (accepted)
+                return new(true, false,
+                    $"Nexus asked {selection.Selected.DisplayName} to complete one exact {kind}, then return control for verification.");
+
+            if (!unsupportedQuestIdsByProvider.TryGetValue(selection.Selected.Id.Value, out HashSet<string>? rejected))
+                unsupportedQuestIdsByProvider[selection.Selected.Id.Value] = rejected = [];
+            rejected.Add(quest.QuestId);
+            eligibleQuestCacheExpiresAt = 0;
+            return new(false, true,
+                $"{selection.Selected.DisplayName} has no path for {quest.Name}; Nexus skipped it and will choose another eligible activity.");
         }
         catch (Exception ex)
         {
-            message = $"The quest provider could not start: {ex.Message}";
-            return false;
+            return new(false, false, $"The quest provider could not start: {ex.Message}");
         }
     }
 

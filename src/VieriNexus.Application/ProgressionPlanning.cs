@@ -177,7 +177,7 @@ public static class ReachJobLevelPlanner
                 "The gil reserve cannot be negative."));
 
         bool questLaneRequested = draft.AllowJobQuests || draft.AllowHuntingLog || draft.AllowSideQuests;
-        bool connectedQuestLaneRequested = draft.AllowJobQuests;
+        bool connectedQuestLaneRequested = draft.AllowJobQuests || draft.AllowSideQuests;
         bool dutyLaneRequested = draft.AllowDuties;
         if (!questLaneRequested && !dutyLaneRequested)
             issues.Add(new(ProgressionPlanIssueSeverity.Blocker, "no-leveling-method",
@@ -203,9 +203,9 @@ public static class ReachJobLevelPlanner
             issues.Add(new(ProgressionPlanIssueSeverity.Warning, "quest-provider-unavailable", questing.Detail));
         if (dutyLaneRequested && !duties.IsReady)
             issues.Add(new(ProgressionPlanIssueSeverity.Warning, "duty-provider-unavailable", duties.Detail));
-        if (draft.AllowHuntingLog || draft.AllowSideQuests)
+        if (draft.AllowHuntingLog)
             issues.Add(new(ProgressionPlanIssueSeverity.Warning, "quest-methods-not-connected",
-                "Hunting Log and general side-quest selection remain visible migration preferences; this release executes Class / Job / Role quests through stock Questionable."));
+                "Hunting Log needs its Nexus-owned target/combat engine and is not delegated through the ordinary Questionable quest contract."));
         if ((questLaneRequested || dutyLaneRequested) && !questLaneReady && !dutyLaneReady)
             issues.Add(new(ProgressionPlanIssueSeverity.Blocker, "no-provider-ready",
                 "None of the enabled leveling methods currently has a compatible provider."));
@@ -237,13 +237,12 @@ public static class ReachJobLevelPlanner
             string[] methods =
             [
                 .. (draft.AllowJobQuests ? new[] { "Class / Job / Role quests" } : Array.Empty<string>()),
-                .. (draft.AllowHuntingLog ? new[] { "Hunting Log" } : Array.Empty<string>()),
-                .. (draft.AllowSideQuests ? new[] { "side quests" } : Array.Empty<string>()),
+                .. (draft.AllowSideQuests ? new[] { "general side quests" } : Array.Empty<string>()),
             ];
             steps.Add(new ProgressionPlanStep(
                 "run-supported-quest-work",
                 "Complete available quest work",
-                $"Use {string.Join(", ", methods)} when Nexus policy finds eligible supported work. Class / Job / Role quests are executable now.",
+                $"Use {string.Join(", ", methods)} when Nexus policy finds eligible supported work. Nexus pins and verifies every exact quest.",
                 QuestCapability,
                 questing.Selected!.Id,
                 new HashSet<ResourceKind>
@@ -288,7 +287,7 @@ public static class ReachJobLevelPlanner
         issues.Add(new(ProgressionPlanIssueSeverity.Information,
             executionConnected ? "bounded-progression-connected" : "execution-not-connected",
             executionConnected
-                ? "Nexus can execute exact Class / Job / Role quests and duties as verified bounded activities, with Nexus-owned gear readiness between duty runs."
+                ? "Nexus can execute exact Class / Job / Role quests, general side quests, and duties as verified bounded activities, with Nexus-owned gear readiness between duty runs."
                 : "This plan has no bounded provider task that Nexus can execute yet."));
         return new ReachJobLevelPlan(
             true,
