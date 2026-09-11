@@ -52,4 +52,20 @@ public static class ProgressAtlasModel
 
         return new ProgressAtlasCategorySnapshot(id, name, completed, total, isLoaded, detail);
     }
+
+    public static int CompletedHuntingLogRanks(int currentRank, int rankCount) =>
+        rankCount <= 0 ? 0 : Math.Clamp(currentRank, 0, rankCount);
+
+    public static int HuntingLogKills(int currentRank, int targetRank, int observedKills, int requiredKills)
+    {
+        if (targetRank < 0)
+            throw new ArgumentOutOfRangeException(nameof(targetRank));
+        if (requiredKills < 0)
+            throw new ArgumentOutOfRangeException(nameof(requiredKills));
+        if (currentRank > targetRank)
+            return requiredKills;
+        if (currentRank < targetRank)
+            return 0;
+        return Math.Clamp(observedKills, 0, requiredKills);
+    }
 }

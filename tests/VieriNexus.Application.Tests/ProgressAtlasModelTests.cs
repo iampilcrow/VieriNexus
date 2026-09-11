@@ -49,4 +49,35 @@ public sealed class ProgressAtlasModelTests
             true,
             "Live"));
     }
+
+    [Theory]
+    [InlineData(-1, 5, 0)]
+    [InlineData(0, 5, 0)]
+    [InlineData(3, 5, 3)]
+    [InlineData(8, 5, 5)]
+    [InlineData(2, 0, 0)]
+    public void BoundsCompletedHuntingLogRanks(int currentRank, int rankCount, int expected)
+    {
+        Assert.Equal(expected, ProgressAtlasModel.CompletedHuntingLogRanks(currentRank, rankCount));
+    }
+
+    [Theory]
+    [InlineData(2, 1, 0, 5, 5)]
+    [InlineData(1, 2, 4, 5, 0)]
+    [InlineData(2, 2, 3, 5, 3)]
+    [InlineData(2, 2, 8, 5, 5)]
+    [InlineData(2, 2, -1, 5, 0)]
+    public void ResolvesExactHuntingLogKillProgress(
+        int currentRank,
+        int targetRank,
+        int observed,
+        int required,
+        int expected)
+    {
+        Assert.Equal(expected, ProgressAtlasModel.HuntingLogKills(
+            currentRank,
+            targetRank,
+            observed,
+            required));
+    }
 }

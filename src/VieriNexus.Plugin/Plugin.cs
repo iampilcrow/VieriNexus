@@ -176,7 +176,7 @@ public sealed class Plugin : IDalamudPlugin
             progressionProviders,
             DutyState,
             Log);
-        progressAtlas = new ProgressAtlasService(DataManager, ClientState);
+        progressAtlas = new ProgressAtlasService(DataManager, ClientState, PlayerState);
         gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
         maintenanceRuntime = new NexusMaintenanceRuntimeService(
             resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager);

@@ -1965,13 +1965,54 @@ internal sealed class NexusWindow : Window
             ImGui.ProgressBar(category.Completion, new Vector2(-1, 22),
                 category.Total == 0 ? "—" : $"{category.Completion:P0}");
             TextWrapped(NexusTheme.Muted, category.Detail);
+            if (category.Id == ProgressAtlasCategoryId.HuntingLogs)
+                DrawHuntingLogAtlasTargets();
             EndAutoPanel();
         }
 
         BeginAutoPanel("NEXT NEXUS-OWNED ATLAS SYSTEMS");
         TextWrapped(NexusTheme.Muted,
-            "Hunting and Grand Company Logs plus world exploration are being connected to this same live completion model. Their target execution will use stock providers only for narrow movement and combat mechanics.");
+            "Hunting and Grand Company Logs are being connected to this same live completion model. Their target execution will use stock providers only for narrow movement and combat mechanics.");
         EndAutoPanel();
+    }
+
+    private void DrawHuntingLogAtlasTargets()
+    {
+        IReadOnlyList<HuntingLogTargetProgress> targets = progressAtlas.HuntingTargets;
+        HuntingLogTargetProgress[] current = targets
+            .Where(target => target.IsCurrentRank && target.Killed < target.Required)
+            .OrderBy(target => target.LogName, StringComparer.CurrentCulture)
+            .ThenBy(target => target.Rank)
+            .ThenBy(target => target.TargetName, StringComparer.CurrentCulture)
+            .ToArray();
+        if (!ImGui.CollapsingHeader($"Current incomplete targets ({current.Length})###AtlasHuntingTargets"))
+            return;
+        if (current.Length == 0)
+        {
+            TextWrapped(NexusTheme.Muted, "No incomplete targets are available in the current unlocked ranks.");
+            return;
+        }
+
+        if (!ImGui.BeginTable("###AtlasHuntingTargetTable", 3,
+                ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+            return;
+        ImGui.TableSetupColumn("Log", ImGuiTableColumnFlags.WidthStretch, .34f);
+        ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthStretch, .46f);
+        ImGui.TableSetupColumn("Progress", ImGuiTableColumnFlags.WidthStretch, .20f);
+        ImGui.TableHeadersRow();
+        foreach (HuntingLogTargetProgress target in current)
+        {
+            ImGui.TableNextRow();
+            ImGui.TableNextColumn();
+            ImGui.TextWrapped($"{target.LogName} • Rank {target.Rank + 1}");
+            ImGui.TableNextColumn();
+            ImGui.TextWrapped(target.TargetName);
+            if (!target.HasOpenWorldLocation)
+                ImGui.TextColored(NexusTheme.Muted, "Duty target");
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted($"{target.Killed}/{target.Required}");
+        }
+        ImGui.EndTable();
     }
 
     private void DrawProgressionRuntime(
