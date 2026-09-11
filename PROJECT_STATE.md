@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-11 (America/Chicago)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.42`
+Current product version: `0.1.0.43`
 Current published release source: `0.1.0.42`, commit `aa502eadda446003c1dd0df287f9ab500a8e16f2`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current unreleased workstream: the next broad Progress Atlas/Hunting Log slice adds native world-exploration completion, the complete 666-target Hunting/Grand Company catalog, exact live per-target kill counts, current-rank target display, and provider-neutral next-target selection. Actual target travel/combat execution remains disconnected until its narrow stock-provider contracts and Stop/recovery behavior are complete.
+Current release candidate: version 0.1.0.43 adds native world-exploration completion, the complete 666-target Hunting/Grand Company catalog, exact live per-target kill counts, current-rank target display, and provider-neutral next-target selection. Actual target travel/combat execution remains disconnected until its narrow stock-provider contracts and Stop/recovery behavior are complete.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -207,7 +207,7 @@ Several target concepts already have types or tests but are not general live sub
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 5 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety and Progression draft settings, and per-source migration state.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.42`, assembly/internal root `VieriNexus`.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.43`, assembly/internal root `VieriNexus`.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -277,7 +277,7 @@ There are 208 automated tests across:
 - `OperationsExecutionPolicyTests.cs`
 - `WorldStateStoreTests.cs`
 
-The 0.1.0.42 published source passes all 239 tests plus a zero-warning full plugin build.
+The 0.1.0.43 release-candidate source passes all 251 tests plus a zero-warning full plugin build. Version 0.1.0.42's published source passed all 239 tests.
 
 ## 4. Major Systems and Features
 
@@ -714,7 +714,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.42`. Dalamud API 15. This version is published and live through the production Dalamud feed.
+- Plugin project version: `0.1.0.43`. Dalamud API 15. Version 0.1.0.42 remains published and live through the production Dalamud feed until this release candidate completes publication.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
