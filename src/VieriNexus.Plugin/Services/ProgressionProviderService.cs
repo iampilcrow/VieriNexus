@@ -189,24 +189,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         ProgressionProviderCandidate[] dutyCandidates = DutyCandidates();
         ProgressionProviderCandidate[] candidates =
         [
-            QuestCandidate(
-                "VieriCodex",
-                "VieriCodex",
-                CodexProviderId,
-                ProgressionProviderFlavor.VieriCompatibility,
-                codexIsRunning.HasFunction && codexCurrentQuest.HasFunction &&
-                codexStartSingleQuest.HasFunction && codexIsQuestLocked.HasFunction &&
-                codexIsQuestComplete.HasFunction && codexIsReadyToAcceptQuest.HasFunction &&
-                codexIsQuestAccepted.HasFunction && codexStop.HasFunction),
-            QuestCandidate(
-                "Questionable",
-                "Questionable",
-                QuestionableProviderId,
-                ProgressionProviderFlavor.Stock,
-                questionableIsRunning.HasFunction && questionableCurrentQuest.HasFunction &&
-                questionableStartSingleQuest.HasFunction && questionableIsQuestLocked.HasFunction &&
-                questionableIsQuestComplete.HasFunction && questionableIsReadyToAcceptQuest.HasFunction &&
-                questionableIsQuestAccepted.HasFunction && questionableStop.HasFunction),
+            .. QuestCandidates(),
             .. dutyCandidates,
         ];
 
@@ -946,23 +929,65 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         ICallGateSubscriber<string?> questionable) =>
         selection.Selected!.Id == CodexProviderId ? codex.InvokeFunc() : questionable.InvokeFunc();
 
-    private ProgressionProviderCandidate QuestCandidate(
-        string internalName,
-        string displayName,
-        ProviderId providerId,
-        ProgressionProviderFlavor flavor,
-        bool contractReady)
+    private ProgressionProviderCandidate[] QuestCandidates()
     {
-        PluginPresence presence = dependencies.FindPlugin(internalName);
-        return Candidate(
+        PluginPresence vieri = dependencies.FindPlugin("VieriCodex");
+        PluginPresence stock = dependencies.FindPlugin("Questionable");
+        QuestionableProviderIdentityAssessment identity = QuestionableProviderIdentityPolicy.Assess(
+            new QuestionableProviderInstance(vieri.IsInstalled, vieri.IsLoaded, "VieriCodex", vieri.Version),
+            new QuestionableProviderInstance(stock.IsInstalled, stock.IsLoaded, "Questionable", stock.Version));
+        if (identity.Identity == QuestionableProviderIdentity.Conflict)
+        {
+            return
+            [
+                QuestConflictCandidate(CodexProviderId, "VieriCodex", ProgressionProviderFlavor.VieriCompatibility, vieri, identity.Detail),
+                QuestConflictCandidate(QuestionableProviderId, "Questionable", ProgressionProviderFlavor.Stock, stock, identity.Detail),
+            ];
+        }
+
+        bool codexContractReady = codexIsRunning.HasFunction && codexCurrentQuest.HasFunction &&
+                                  codexStartSingleQuest.HasFunction && codexIsQuestLocked.HasFunction &&
+                                  codexIsQuestComplete.HasFunction && codexIsReadyToAcceptQuest.HasFunction &&
+                                  codexIsQuestAccepted.HasFunction && codexStop.HasFunction;
+        bool questionableContractReady = questionableIsRunning.HasFunction && questionableCurrentQuest.HasFunction &&
+                                         questionableStartSingleQuest.HasFunction && questionableIsQuestLocked.HasFunction &&
+                                         questionableIsQuestComplete.HasFunction && questionableIsReadyToAcceptQuest.HasFunction &&
+                                         questionableIsQuestAccepted.HasFunction && questionableStop.HasFunction;
+        const string contract = "IsRunning, GetCurrentQuestId, StartSingleQuest, eligibility, completion, and Stop";
+        return
+        [
+            Candidate(
+                CodexProviderId,
+                "VieriCodex",
+                ProgressionProviderRole.Questing,
+                ProgressionProviderFlavor.VieriCompatibility,
+                vieri,
+                identity.Identity == QuestionableProviderIdentity.VieriCompatibility && codexContractReady,
+                contract),
+            Candidate(
+                QuestionableProviderId,
+                "Questionable",
+                ProgressionProviderRole.Questing,
+                ProgressionProviderFlavor.Stock,
+                stock,
+                identity.Identity == QuestionableProviderIdentity.Stock && questionableContractReady,
+                contract),
+        ];
+    }
+
+    private static ProgressionProviderCandidate QuestConflictCandidate(
+        ProviderId providerId,
+        string displayName,
+        ProgressionProviderFlavor flavor,
+        PluginPresence presence,
+        string detail) => new(
             providerId,
             displayName,
             ProgressionProviderRole.Questing,
             flavor,
-            presence,
-            contractReady,
-            "IsRunning, GetCurrentQuestId, StartSingleQuest, eligibility, completion, and Stop");
-    }
+            ProgressionProviderReadiness.Conflict,
+            presence.Version,
+            detail);
 
     private ProgressionProviderCandidate[] DutyCandidates()
     {
