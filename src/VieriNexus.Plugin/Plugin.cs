@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Windowing;
@@ -33,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
     [PluginService] internal static IDutyState DutyState { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
+    [PluginService] internal static IKeyState KeyState { get; private set; } = null!;
 
     internal Configuration Configuration { get; }
 
@@ -51,6 +53,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly NavigationLibraryService navigationLibrary;
     private readonly AutoDutyMigrationService autoDutyMigration;
+    private readonly CommandCenterMigrationService commandCenterMigration;
+    private readonly CommandCenterCatalogService commandCenterCatalog;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
     private readonly SoloDutyRotationRuntimeService soloDutyRotation;
@@ -62,7 +66,27 @@ public sealed class Plugin : IDalamudPlugin
     private readonly StrikingDummyTravelService strikingDummyTravel;
     private readonly NexusControlService controlService;
     private readonly NexusIpcProvider ipc;
+    private readonly HashSet<VirtualKey> commandCenterCaptureInitiallyDown = [];
     private bool sessionInitialized;
+    private bool commandCenterHotkeyWasDown;
+
+    internal bool IsCapturingCommandCenterHotkey { get; private set; }
+
+    internal string CommandCenterHotkeyName
+    {
+        get
+        {
+            CommandCenterSnapshot? settings = commandCenterMigration.WorkingSnapshot;
+            if (settings is null || settings.Hotkey == 0 || !Enum.IsDefined(typeof(VirtualKey), settings.Hotkey))
+                return "Not assigned";
+            List<string> parts = [];
+            if (settings.HotkeyControl) parts.Add("Ctrl");
+            if (settings.HotkeyShift) parts.Add("Shift");
+            if (settings.HotkeyAlt) parts.Add("Alt");
+            parts.Add(((VirtualKey)settings.Hotkey).GetFancyName());
+            return string.Join(" + ", parts);
+        }
+    }
 
     public Plugin()
     {
@@ -76,6 +100,12 @@ public sealed class Plugin : IDalamudPlugin
             legacyInventory,
             PluginInterface.GetPluginConfigDirectory(),
             autoDutyImport.Imported ? autoDutyImport.ReceiptId : null);
+        LegacyImportState commandCenterImport = Configuration.ForLegacyImport("deck");
+        commandCenterMigration = new CommandCenterMigrationService(
+            legacyInventory,
+            PluginInterface.GetPluginConfigDirectory(),
+            commandCenterImport.Imported ? commandCenterImport.ReceiptId : null);
+        commandCenterCatalog = new CommandCenterCatalogService(PluginInterface, CommandManager, Log);
         LegacyImportState navigationImport = Configuration.ForLegacyImport("navplotter");
         var navigationMigration = new NavigationMigrationService(
             legacyInventory,
@@ -232,6 +262,7 @@ public sealed class Plugin : IDalamudPlugin
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
+            commandCenterMigration, commandCenterCatalog,
             navigationLibrary, navigationActivation, navigationDiagnostics,
             navigationRuntime, progressionProviders, progressionRuntime, soloDutyRotation,
             progressAtlas, progressAtlasActions,
@@ -284,11 +315,11 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Controls: status, start, resume, last, stop, maintenance, repair, extract, register, coffers, desynth, gcturnin, storage, sell, play <route>, preview <route>.",
+            HelpMessage = "Open VieriNexus. Pages: commands, routes, progression, atlas, migration. Controls: status, start, resume, last, stop, maintenance, repair, extract, register, coffers, desynth, gcturnin, storage, sell, play <route>, preview <route>.",
         });
         CommandManager.AddHandler(ShortCommand, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus.",
+            HelpMessage = "Open VieriNexus. Use /nexus commands for Command Center.",
         });
         PluginInterface.UiBuilder.Draw += Draw;
         PluginInterface.UiBuilder.OpenMainUi += OpenMain;
@@ -318,6 +349,34 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     internal void Save() => Configuration.Save();
+
+    internal void StartCommandCenterHotkeyCapture()
+    {
+        commandCenterCaptureInitiallyDown.Clear();
+        foreach (VirtualKey key in KeyState.GetValidVirtualKeys())
+            if (KeyState[key])
+                commandCenterCaptureInitiallyDown.Add(key);
+        IsCapturingCommandCenterHotkey = true;
+        commandCenterHotkeyWasDown = false;
+    }
+
+    internal void CancelCommandCenterHotkeyCapture()
+    {
+        IsCapturingCommandCenterHotkey = false;
+        commandCenterCaptureInitiallyDown.Clear();
+    }
+
+    internal void ClearCommandCenterHotkey()
+    {
+        CancelCommandCenterHotkeyCapture();
+        commandCenterMigration.Update(settings => settings with
+        {
+            Hotkey = 0,
+            HotkeyControl = false,
+            HotkeyShift = false,
+            HotkeyAlt = false,
+        }, out _);
+    }
 
     private void Draw()
     {
@@ -349,6 +408,7 @@ public sealed class Plugin : IDalamudPlugin
             if (navigationRuntime.RecordingStatus.IsRecording)
                 navigationRuntime.StopRecording("Recording stopped because the character logged out.");
             sessionInitialized = false;
+            commandCenterHotkeyWasDown = false;
             return;
         }
 
@@ -360,6 +420,8 @@ public sealed class Plugin : IDalamudPlugin
             now);
         if (!ready)
             return;
+
+        HandleCommandCenterHotkey();
 
         if (!sessionInitialized)
         {
@@ -389,6 +451,77 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.SelectedPage = "Settings";
         mainWindow.IsOpen = true;
     }
+
+    private void HandleCommandCenterHotkey()
+    {
+        if (IsCapturingCommandCenterHotkey)
+        {
+            CaptureCommandCenterHotkey();
+            return;
+        }
+        CommandCenterSnapshot? settings = commandCenterMigration.WorkingSnapshot;
+        if (settings is not { HotkeyEnabled: true } || settings.Hotkey == 0 ||
+            !Enum.IsDefined(typeof(VirtualKey), settings.Hotkey))
+        {
+            commandCenterHotkeyWasDown = false;
+            return;
+        }
+        VirtualKey key = (VirtualKey)settings.Hotkey;
+        bool control = ModifierDown(VirtualKey.CONTROL, VirtualKey.LCONTROL, VirtualKey.RCONTROL);
+        bool shift = ModifierDown(VirtualKey.SHIFT, VirtualKey.LSHIFT, VirtualKey.RSHIFT);
+        bool alt = ModifierDown(VirtualKey.MENU, VirtualKey.LMENU, VirtualKey.RMENU);
+        bool modifiersMatch = settings.ExactModifiers
+            ? control == settings.HotkeyControl && shift == settings.HotkeyShift && alt == settings.HotkeyAlt
+            : (!settings.HotkeyControl || control) && (!settings.HotkeyShift || shift) && (!settings.HotkeyAlt || alt);
+        bool down = KeyState.IsVirtualKeyValid(key) && KeyState[key] && modifiersMatch;
+        if (down && !commandCenterHotkeyWasDown)
+        {
+            Configuration.SelectedPage = "Command Center";
+            mainWindow.Toggle();
+        }
+        commandCenterHotkeyWasDown = down;
+    }
+
+    private void CaptureCommandCenterHotkey()
+    {
+        foreach (VirtualKey key in commandCenterCaptureInitiallyDown.ToArray())
+            if (!KeyState[key])
+                commandCenterCaptureInitiallyDown.Remove(key);
+        if (KeyState[VirtualKey.ESCAPE] && !commandCenterCaptureInitiallyDown.Contains(VirtualKey.ESCAPE))
+        {
+            CancelCommandCenterHotkeyCapture();
+            return;
+        }
+        foreach (VirtualKey key in KeyState.GetValidVirtualKeys())
+        {
+            if (!KeyState[key] || commandCenterCaptureInitiallyDown.Contains(key) || IsModifier(key) ||
+                key is VirtualKey.LBUTTON or VirtualKey.RBUTTON)
+                continue;
+            bool control = ModifierDown(VirtualKey.CONTROL, VirtualKey.LCONTROL, VirtualKey.RCONTROL);
+            bool shift = ModifierDown(VirtualKey.SHIFT, VirtualKey.LSHIFT, VirtualKey.RSHIFT);
+            bool alt = ModifierDown(VirtualKey.MENU, VirtualKey.LMENU, VirtualKey.RMENU);
+            commandCenterMigration.Update(settings => settings with
+            {
+                HotkeyEnabled = true,
+                Hotkey = (int)key,
+                HotkeyControl = control,
+                HotkeyShift = shift,
+                HotkeyAlt = alt,
+            }, out _);
+            CancelCommandCenterHotkeyCapture();
+            return;
+        }
+    }
+
+    private static bool IsModifier(VirtualKey key) => key is
+        VirtualKey.SHIFT or VirtualKey.LSHIFT or VirtualKey.RSHIFT or
+        VirtualKey.CONTROL or VirtualKey.LCONTROL or VirtualKey.RCONTROL or
+        VirtualKey.MENU or VirtualKey.LMENU or VirtualKey.RMENU;
+
+    private static bool ModifierDown(VirtualKey generic, VirtualKey left, VirtualKey right) =>
+        KeyState.IsVirtualKeyValid(generic) && KeyState[generic] ||
+        KeyState.IsVirtualKeyValid(left) && KeyState[left] ||
+        KeyState.IsVirtualKeyValid(right) && KeyState[right];
 
     private void OnCommand(string _, string arguments)
     {
@@ -432,6 +565,12 @@ public sealed class Plugin : IDalamudPlugin
                 break;
             case "atlas":
                 Configuration.SelectedPage = "Progress Atlas";
+                mainWindow.IsOpen = true;
+                break;
+            case "commands":
+            case "commandcenter":
+            case "deck":
+                Configuration.SelectedPage = "Command Center";
                 mainWindow.IsOpen = true;
                 break;
             case "stop":

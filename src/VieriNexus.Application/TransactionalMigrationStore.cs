@@ -62,6 +62,20 @@ public sealed class TransactionalMigrationStore
         return new(result.Success, result.Message, result.Receipt, result.Snapshot);
     }
 
+    public StagedCommandCenterReadResult ReadStagedCommandCenterState(
+        string receiptPath,
+        string expectedSourceId,
+        string expectedNexusTargetPath)
+    {
+        StagedJsonReadResult<CommandCenterSnapshot> result = ReadStagedJsonState<CommandCenterSnapshot>(
+            receiptPath,
+            expectedSourceId,
+            expectedNexusTargetPath,
+            CommandCenterWorkingStore.IsValid,
+            snapshot => CommandCenterSuccessMessage(snapshot.Favorites.Count, snapshot.CustomCommands.Count));
+        return new(result.Success, result.Message, result.Receipt, result.Snapshot);
+    }
+
     public MigrationWriteResult Apply(
         string sourceId,
         string sourcePath,
@@ -81,6 +95,16 @@ public sealed class TransactionalMigrationStore
         AutoDutyMigrationSnapshot snapshot) =>
         ApplyJson(sourceId, sourcePath, nexusTargetPath, backupRoot, receiptRoot, snapshot,
             AutoDutySuccessMessage(snapshot.Profiles.Count));
+
+    public MigrationWriteResult ApplyCommandCenter(
+        string sourceId,
+        string sourcePath,
+        string nexusTargetPath,
+        string backupRoot,
+        string receiptRoot,
+        CommandCenterSnapshot snapshot) =>
+        ApplyJson(sourceId, sourcePath, nexusTargetPath, backupRoot, receiptRoot, snapshot,
+            CommandCenterSuccessMessage(snapshot.Favorites.Count, snapshot.CustomCommands.Count));
 
     public MigrationWriteResult Rollback(string receiptPath)
     {
@@ -228,6 +252,9 @@ public sealed class TransactionalMigrationStore
 
     private static string AutoDutySuccessMessage(int profileCount) =>
         $"Imported {profileCount} VieriAutoDuty profile{(profileCount == 1 ? string.Empty : "s")} into staged Nexus operations storage.";
+
+    private static string CommandCenterSuccessMessage(int favoriteCount, int customGroupCount) =>
+        $"Imported VieriDeck settings with {favoriteCount} favorite{(favoriteCount == 1 ? string.Empty : "s")} and {customGroupCount} custom command group{(customGroupCount == 1 ? string.Empty : "s")}.";
 
     private static bool PathsEqual(string left, string right) =>
         string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);

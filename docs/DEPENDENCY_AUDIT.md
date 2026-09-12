@@ -4,6 +4,8 @@ This catalog was checked against the live integration and dependency surfaces in
 
 The 2026-09-09 provider audit pins Boss Mod 7.5.6.0 (`a96b0a4614a8ae28c6fc7949ec221207c56bd5f9`) and Lifestream 2.5.4.21 (`62a6f68fc0966530f6baa380c1082e41f6cd6d7c`) in `upstreams/source-lock.json`. Boss Mod retains every preset/configuration/action-queue IPC endpoint and rotation-module identifier used by AutoDuty, Codex, Avarice, and RotationHelper. Its transient-strategy implementation now resolves the existing string identifiers through the rotation-module registry, with no public signature change. Lifestream retains every travel, busy-state, character-switch, command, and abort endpoint used by AutoDuty and Codex; 2.5.4.21 changes internal duty-transfer scheduling only. VieriDeck contributes fixed chat-command shortcuts and has no binary Lifestream IPC contract. No consumer compatibility patch or unrelated rebuild is required for either provider update.
 
+The 2026-09-12 final AutoDuty recovery audit confirms that released stock 0.0.0.335 and current upstream development still lack the fork's generic stale-path/death/re-entry protections. The minimal stock patch is isolated on `nexus-recovery-fixes-0.0.0.335` at `2c583870c216573a054af109d11fafdd85d556be`, passes its five dedicated policy tests, and builds against the stock tree. Nexus retains only its outer bounded-duty ownership and completion checks; it does not absorb AutoDuty's internal path engine.
+
 ## Required external providers
 
 | Provider | Current Vieri consumers | Purpose |

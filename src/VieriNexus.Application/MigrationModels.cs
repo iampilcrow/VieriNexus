@@ -158,3 +158,45 @@ public sealed record StagedAutoDutyReadResult(
     string Message,
     MigrationReceipt? Receipt = null,
     AutoDutyMigrationSnapshot? Snapshot = null);
+
+public sealed record CommandCenterCustomCommand(string Command, string Description);
+
+public sealed record CommandCenterSnapshot(
+    int SchemaVersion,
+    int SourceConfigurationVersion,
+    bool ShowUnloadedPlugins,
+    bool HidePluginsWithoutActions,
+    bool CloseAfterOpeningPlugin,
+    bool CommandPanelOpen,
+    bool OnlyShowFavorites,
+    string SelectedPluginId,
+    float SourceListWidth,
+    float SourceCommandWidth,
+    float SourceWindowHeight,
+    float SourceUiScale,
+    bool HasSourceWindowPosition,
+    float SourceWindowPositionX,
+    float SourceWindowPositionY,
+    bool HotkeyEnabled,
+    int Hotkey,
+    bool HotkeyControl,
+    bool HotkeyShift,
+    bool HotkeyAlt,
+    bool ExactModifiers,
+    IReadOnlyList<string> Favorites,
+    IReadOnlyList<string> HiddenPlugins,
+    IReadOnlyDictionary<string, string> PreferredCommands,
+    IReadOnlyDictionary<string, IReadOnlyList<CommandCenterCustomCommand>> CustomCommands);
+
+public sealed record CommandCenterMigrationPreview(
+    CommandCenterSnapshot? Snapshot,
+    IReadOnlyList<MigrationIssue> Issues)
+{
+    public bool CanImport => Snapshot is not null && Issues.All(issue => issue.Severity != MigrationIssueSeverity.Error);
+}
+
+public sealed record StagedCommandCenterReadResult(
+    bool Success,
+    string Message,
+    MigrationReceipt? Receipt = null,
+    CommandCenterSnapshot? Snapshot = null);

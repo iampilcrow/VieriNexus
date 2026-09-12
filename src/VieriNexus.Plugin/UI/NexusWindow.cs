@@ -19,6 +19,7 @@ internal sealed class NexusWindow : Window
         ("OVERVIEW", "Progression", "Progression"),
         ("OVERVIEW", "Progress Atlas", "Atlas"),
         ("OVERVIEW", "Queue", "Queue"),
+        ("OVERVIEW", "Command Center", "Commands"),
         ("MODULES", "Combat", "Combat"),
         ("MODULES", "Gear & Inventory", "Gear"),
         ("MODULES", "Routes & Navigation", "Routes"),
@@ -35,6 +36,8 @@ internal sealed class NexusWindow : Window
     private readonly LegacyConfigurationInventory legacyInventory;
     private readonly NavigationMigrationService navigationMigration;
     private readonly AutoDutyMigrationService autoDutyMigration;
+    private readonly CommandCenterMigrationService commandCenterMigration;
+    private readonly CommandCenterCatalogService commandCenterCatalog;
     private readonly NavigationLibraryService navigationLibrary;
     private readonly NavigationActivationService navigationActivation;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
@@ -68,6 +71,11 @@ internal sealed class NexusWindow : Window
     private string maintenanceMessage = string.Empty;
     private NexusItemTransactionPreview? protectedSalePreview;
     private string migrationQuickStartMessage = string.Empty;
+    private string commandCenterSearch = string.Empty;
+    private string commandCenterSelectedId = string.Empty;
+    private string commandCenterCustomCommand = string.Empty;
+    private string commandCenterCustomDescription = string.Empty;
+    private string commandCenterMessage = string.Empty;
 
     internal NexusWindow(
         Plugin plugin,
@@ -75,6 +83,8 @@ internal sealed class NexusWindow : Window
         LegacyConfigurationInventory legacyInventory,
         NavigationMigrationService navigationMigration,
         AutoDutyMigrationService autoDutyMigration,
+        CommandCenterMigrationService commandCenterMigration,
+        CommandCenterCatalogService commandCenterCatalog,
         NavigationLibraryService navigationLibrary,
         NavigationActivationService navigationActivation,
         NavigationDiagnosticsService navigationDiagnostics,
@@ -96,6 +106,8 @@ internal sealed class NexusWindow : Window
         this.legacyInventory = legacyInventory;
         this.navigationMigration = navigationMigration;
         this.autoDutyMigration = autoDutyMigration;
+        this.commandCenterMigration = commandCenterMigration;
+        this.commandCenterCatalog = commandCenterCatalog;
         this.navigationLibrary = navigationLibrary;
         this.navigationActivation = navigationActivation;
         this.navigationDiagnostics = navigationDiagnostics;
@@ -196,6 +208,7 @@ internal sealed class NexusWindow : Window
             case "Progress Atlas": DrawProgressAtlas(); break;
             case "Gear & Inventory": DrawGearAndInventory(); break;
             case "Routes & Navigation": DrawRoutesAndNavigation(); break;
+            case "Command Center": DrawCommandCenter(); break;
             case "Dependencies": DrawDependencies(); break;
             case "Migration": DrawMigration(); break;
             case "Settings": DrawSettings(); break;
@@ -392,6 +405,11 @@ internal sealed class NexusWindow : Window
                 DrawAutoDutyMigration();
                 continue;
             }
+            if (source.Id == "deck")
+            {
+                DrawCommandCenterMigration();
+                continue;
+            }
             BeginPanel(source.DisplayName.ToUpperInvariant());
             NexusTheme.StatusDot(source.Found ? NexusTheme.Green : NexusTheme.Muted,
                 source.Found ? "Configuration located" : "Not found on this computer");
@@ -415,24 +433,29 @@ internal sealed class NexusWindow : Window
     {
         NavigationMigrationStatus navigationStatus = navigationMigration.Status();
         AutoDutyMigrationStatus operationsStatus = autoDutyMigration.Status();
+        CommandCenterMigrationStatus commandStatus = commandCenterMigration.Status();
         bool navigationReady = navigationStatus.Preview?.CanImport == true;
         bool operationsReady = operationsStatus.Preview?.CanImport == true;
         bool navigationPrepared = navigationStatus.LastReceipt is not null && navigationLibrary.HasWorkingLibrary;
         bool operationsPrepared = operationsStatus.LastReceipt is not null && autoDutyMigration.HasWorkingProfiles;
+        bool commandReady = commandStatus.Preview?.CanImport == true;
+        bool commandPrepared = commandStatus.LastReceipt is not null && commandStatus.WorkingSnapshot is not null;
         bool needsNavigation = navigationReady && !navigationPrepared;
         bool needsOperations = operationsReady && !operationsPrepared;
+        bool needsCommands = commandReady && !commandPrepared;
         bool blocked = (navigationStatus.SourceFound && !navigationReady && !navigationPrepared) ||
-                       (operationsStatus.SourceFound && !operationsReady && !operationsPrepared);
+                       (operationsStatus.SourceFound && !operationsReady && !operationsPrepared) ||
+                       (commandStatus.SourceFound && !commandReady && !commandPrepared);
         bool foundAnything = navigationStatus.SourceFound || operationsStatus.SourceFound ||
-                             navigationPrepared || operationsPrepared;
+                              commandStatus.SourceFound || navigationPrepared || operationsPrepared || commandPrepared;
 
         BeginAutoPanel("SET UP THIS COMPUTER");
-        if (blocked && !needsNavigation && !needsOperations)
+        if (blocked && !needsNavigation && !needsOperations && !needsCommands)
         {
             NexusTheme.StatusDot(NexusTheme.Red,
                 "A detected settings source needs attention in its detailed Migration card");
         }
-        else if (!needsNavigation && !needsOperations)
+        else if (!needsNavigation && !needsOperations && !needsCommands)
         {
             NexusTheme.StatusDot(foundAnything ? NexusTheme.Green : NexusTheme.Amber,
                 foundAnything
@@ -442,7 +465,7 @@ internal sealed class NexusWindow : Window
         else
         {
             NexusTheme.StatusDot(NexusTheme.Cyan,
-                $"Detected {(needsNavigation ? 1 : 0) + (needsOperations ? 1 : 0)} supported settings source(s) ready to prepare");
+                $"Detected {(needsNavigation ? 1 : 0) + (needsOperations ? 1 : 0) + (needsCommands ? 1 : 0)} supported settings source(s) ready to prepare");
             TextWrapped(NexusTheme.Muted,
                 "This uses only this player's local Dalamud settings, keeps timestamped backups, verifies the imported data, and creates Nexus working copies. Leave the old Vieri products installed until their replacement cards are green.");
             if (ImGui.Button("Back up and prepare detected settings", new Vector2(ButtonWidth("Back up and prepare detected settings"), 0)))
@@ -483,6 +506,21 @@ internal sealed class NexusWindow : Window
                         state.ImportedAt = receipt.CreatedAtUtc;
                         state.ReceiptId = receipt.Id;
                         state.ImportedItemCount = operationsStatus.Preview!.Snapshot!.Profiles.Count;
+                    }
+                }
+                if (needsCommands)
+                {
+                    MigrationWriteResult imported = commandCenterMigration.Import();
+                    results.Add(imported.Message);
+                    if (imported.Success && imported.Receipt is { } receipt)
+                    {
+                        LegacyImportState state = plugin.Configuration.ForLegacyImport("deck");
+                        state.Reviewed = state.Imported = true;
+                        state.SourceVersion = "command-center-v1";
+                        state.ImportedAt = receipt.CreatedAtUtc;
+                        state.ReceiptId = receipt.Id;
+                        state.ImportedItemCount = commandStatus.Preview!.Snapshot!.Favorites.Count +
+                                                  commandStatus.Preview.Snapshot.CustomCommands.Values.Sum(commands => commands.Count);
                     }
                 }
                 plugin.Save();
@@ -582,6 +620,389 @@ internal sealed class NexusWindow : Window
             : "Import creates an exact source backup and does not enable duplicate automation.");
         EndPanel();
     }
+
+    private void DrawCommandCenterMigration()
+    {
+        const string importLabel = "Create backup and import Command Center";
+        const string rollbackLabel = "Rollback Command Center import";
+        CommandCenterMigrationStatus status = commandCenterMigration.Status();
+        LegacyImportState state = plugin.Configuration.ForLegacyImport("deck");
+        bool staged = status.LastReceipt is not null;
+        string operationMessage = status.Message;
+
+        BeginAutoPanel("COMMAND CENTER");
+        NexusTheme.StatusDot(status.SourceFound ? NexusTheme.Green : NexusTheme.Muted,
+            status.SourceFound ? "VieriDeck configuration located" : "Not found on this computer");
+        ImGui.TextColored(NexusTheme.Gold, "Destination: Nexus Command Center");
+        if (status.Preview?.Snapshot is { } snapshot)
+        {
+            int customCommands = snapshot.CustomCommands.Values.Sum(commands => commands.Count);
+            ImGui.TextUnformatted($"{snapshot.Favorites.Count} favorite(s) • {snapshot.HiddenPlugins.Count} hidden • {customCommands} custom command(s)");
+            TextWrapped(NexusTheme.Muted,
+                "Plugin filters, favorites, hidden entries, preferred and custom commands, the selected plugin, layout reference, and hotkey are mapped together.");
+            foreach (MigrationIssue issue in status.Preview.Issues.Take(2))
+            {
+                Vector4 color = issue.Severity == MigrationIssueSeverity.Error ? NexusTheme.Red :
+                    issue.Severity == MigrationIssueSeverity.Warning ? NexusTheme.Amber : NexusTheme.Muted;
+                TextWrapped(color, $"• {issue.Message}");
+            }
+        }
+        else
+        {
+            TextWrapped(NexusTheme.Muted, status.Message);
+        }
+
+        bool canImport = status.Preview?.CanImport == true;
+        if (!canImport)
+            ImGui.BeginDisabled();
+        if (ImGui.Button(importLabel, new Vector2(ButtonWidth(importLabel), 0)) && canImport)
+        {
+            MigrationWriteResult result = commandCenterMigration.Import();
+            operationMessage = result.Message;
+            if (result.Success && result.Receipt is { } receipt)
+            {
+                staged = true;
+                state.Reviewed = state.Imported = true;
+                state.SourceVersion = "command-center-v1";
+                state.ImportedAt = receipt.CreatedAtUtc;
+                state.ReceiptId = receipt.Id;
+                state.ImportedItemCount = status.Preview!.Snapshot!.Favorites.Count +
+                                          status.Preview.Snapshot.CustomCommands.Values.Sum(commands => commands.Count);
+                plugin.Save();
+            }
+        }
+        if (!canImport)
+            ImGui.EndDisabled();
+        if (staged && status.LastReceipt is { } savedReceipt)
+        {
+            SameLineIfFits(rollbackLabel);
+            if (ImGui.Button(rollbackLabel, new Vector2(ButtonWidth(rollbackLabel), 0)))
+            {
+                MigrationWriteResult result = commandCenterMigration.Rollback(savedReceipt.Id);
+                operationMessage = result.Message;
+                if (result.Success)
+                {
+                    state.Imported = false;
+                    state.ImportedAt = null;
+                    state.ReceiptId = null;
+                    state.ImportedItemCount = 0;
+                    plugin.Save();
+                }
+            }
+        }
+        TextWrapped(staged ? NexusTheme.Green : NexusTheme.Muted, operationMessage);
+        TextWrapped(NexusTheme.Muted, staged
+            ? "Verified staging plus a separate editable Nexus working copy • VieriDeck remains unchanged"
+            : "Import creates a timestamped source backup before Nexus writes anything.");
+        EndAutoPanel();
+    }
+
+    private void DrawCommandCenter()
+    {
+        PageHeading("Command Center", "Open installed plugins and run discovered or saved commands from one Nexus page.");
+        CommandCenterSnapshot? settings = commandCenterMigration.WorkingSnapshot;
+        if (settings is null)
+        {
+            BeginAutoPanel("SETUP REQUIRED");
+            NexusTheme.StatusDot(NexusTheme.Amber, "No Nexus Command Center settings yet");
+            ImGui.TextWrapped("Import VieriDeck on the Migration page to preserve this computer's favorites, commands, filters, and hotkey.");
+            if (ImGui.Button("Open Migration", new Vector2(ButtonWidth("Open Migration"), 0)))
+            {
+                plugin.Configuration.SelectedPage = "Migration";
+                plugin.Save();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Start fresh", new Vector2(ButtonWidth("Start fresh"), 0)))
+                commandCenterMigration.StartFresh(out commandCenterMessage);
+            EndAutoPanel();
+            return;
+        }
+
+        commandCenterCatalog.Refresh();
+        bool showUnloaded = settings.ShowUnloadedPlugins;
+        if (ImGui.Checkbox("Show disabled plugins", ref showUnloaded))
+            UpdateCommandCenter(value => value with { ShowUnloadedPlugins = showUnloaded });
+        ImGui.SameLine();
+        bool favoritesOnly = settings.OnlyShowFavorites;
+        if (ImGui.Checkbox("Favorites only", ref favoritesOnly))
+            UpdateCommandCenter(value => value with { OnlyShowFavorites = favoritesOnly });
+        bool hideEmpty = settings.HidePluginsWithoutActions;
+        if (ImGui.Checkbox("Hide entries without actions", ref hideEmpty))
+            UpdateCommandCenter(value => value with { HidePluginsWithoutActions = hideEmpty });
+        if (settings.HiddenPlugins.Count > 0)
+        {
+            string restoreLabel = $"Restore {settings.HiddenPlugins.Count} hidden";
+            SameLineIfFits(restoreLabel);
+            if (ImGui.Button(restoreLabel))
+                UpdateCommandCenter(value => value with { HiddenPlugins = [] });
+        }
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("###command-center-search", "Search plugins or commands", ref commandCenterSearch, 180);
+
+        HashSet<string> favorites = settings.Favorites.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> hidden = settings.HiddenPlugins.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        CommandCenterEntry[] visible = commandCenterCatalog.Entries
+            .Where(entry => !hidden.Contains(entry.Id))
+            .Where(entry => settings.ShowUnloadedPlugins || entry.IsLoaded)
+            .Where(entry => !settings.HidePluginsWithoutActions || CanOpen(entry, settings) || CommandsFor(entry, settings).Count > 0)
+            .Where(entry => !settings.OnlyShowFavorites || favorites.Contains(entry.Id))
+            .Where(entry => string.IsNullOrWhiteSpace(commandCenterSearch) ||
+                            entry.Name.Contains(commandCenterSearch, StringComparison.OrdinalIgnoreCase) ||
+                            entry.Description.Contains(commandCenterSearch, StringComparison.OrdinalIgnoreCase) ||
+                            CommandsFor(entry, settings).Any(command => command.Command.Contains(commandCenterSearch, StringComparison.OrdinalIgnoreCase) ||
+                                                                       command.Help.Contains(commandCenterSearch, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+
+        BeginAutoPanel("PLUGINS & TOOLS");
+        NexusTheme.StatusDot(NexusTheme.Green, $"{visible.Length} matching entr{(visible.Length == 1 ? "y" : "ies")}");
+        foreach (CommandCenterEntry entry in visible)
+        {
+            ImGui.PushID("command-center-" + entry.Id);
+            ImGui.Separator();
+            bool favorite = favorites.Contains(entry.Id);
+            if (ImGui.SmallButton(favorite ? "★" : "☆"))
+                ToggleCommandCenterFavorite(entry.Id, favorite);
+            ImGui.SameLine();
+            ImGui.TextColored(entry.IsLoaded ? NexusTheme.Green : NexusTheme.Muted,
+                entry.Name + (string.IsNullOrWhiteSpace(entry.Version) ? string.Empty : $"  {entry.Version}"));
+            if (!entry.IsLoaded)
+            {
+                ImGui.SameLine();
+                ImGui.TextDisabled("Disabled");
+            }
+            bool hasPluginWindow = HasPluginWindow(entry);
+            bool canOpen = CanOpen(entry, settings);
+            if (!canOpen)
+                ImGui.BeginDisabled();
+            if (ImGui.Button(hasPluginWindow ? "Open" : "Run quick") && canOpen)
+            {
+                commandCenterMessage = OpenCommandCenterEntry(entry, settings);
+                if (settings.CloseAfterOpeningPlugin &&
+                    (commandCenterMessage.StartsWith("Opened", StringComparison.Ordinal) ||
+                     commandCenterMessage.StartsWith("Ran", StringComparison.Ordinal)))
+                    IsOpen = false;
+            }
+            if (!canOpen)
+                ImGui.EndDisabled();
+            ImGui.SameLine();
+            bool canSettings = entry.Id == "__dalamud" || entry.Plugin is { IsLoaded: true, HasConfigUi: true };
+            if (!canSettings)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Settings") && canSettings)
+            {
+                commandCenterCatalog.Open(entry, settings: true, out _);
+                if (settings.CloseAfterOpeningPlugin)
+                    IsOpen = false;
+            }
+            if (!canSettings)
+                ImGui.EndDisabled();
+            ImGui.SameLine();
+            if (ImGui.Button($"Commands ({CommandsFor(entry, settings).Count})"))
+            {
+                commandCenterSelectedId = entry.Id;
+                UpdateCommandCenter(value => value with { SelectedPluginId = entry.Id, CommandPanelOpen = true });
+            }
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Hide"))
+                HideCommandCenterEntry(entry.Id);
+            ImGui.TextWrapped(entry.Description);
+            ImGui.PopID();
+        }
+        EndAutoPanel();
+
+        string selectedId = string.IsNullOrWhiteSpace(commandCenterSelectedId) ? settings.SelectedPluginId : commandCenterSelectedId;
+        CommandCenterEntry? selected = commandCenterCatalog.Entries.FirstOrDefault(entry => entry.Id.Equals(selectedId, StringComparison.OrdinalIgnoreCase));
+        if (settings.CommandPanelOpen && selected is not null)
+            DrawCommandCenterCommands(selected, settings);
+
+        if (!string.IsNullOrWhiteSpace(commandCenterMessage))
+            TextWrapped(NexusTheme.Green, commandCenterMessage);
+
+        BeginAutoPanel("COMMAND CENTER BEHAVIOR");
+        bool closeAfter = settings.CloseAfterOpeningPlugin;
+        if (ImGui.Checkbox("Close Nexus after opening a plugin", ref closeAfter))
+            UpdateCommandCenter(value => value with { CloseAfterOpeningPlugin = closeAfter });
+        bool hotkeyEnabled = settings.HotkeyEnabled;
+        if (ImGui.Checkbox("Enable Command Center hotkey", ref hotkeyEnabled))
+            UpdateCommandCenter(value => value with { HotkeyEnabled = hotkeyEnabled });
+        ImGui.TextUnformatted($"Hotkey: {plugin.CommandCenterHotkeyName}");
+        if (plugin.IsCapturingCommandCenterHotkey)
+        {
+            TextWrapped(NexusTheme.Amber, "Press the new key combination. Press Escape to cancel.");
+            if (ImGui.Button("Cancel key capture"))
+                plugin.CancelCommandCenterHotkeyCapture();
+        }
+        else if (ImGui.Button("Set hotkey"))
+            plugin.StartCommandCenterHotkeyCapture();
+        ImGui.SameLine();
+        if (ImGui.Button("Clear hotkey"))
+            plugin.ClearCommandCenterHotkey();
+        bool exact = settings.ExactModifiers;
+        if (ImGui.Checkbox("Require exact modifier keys", ref exact))
+            UpdateCommandCenter(value => value with { ExactModifiers = exact });
+        TextWrapped(NexusTheme.Muted, "The Command Center is always available through /nexus commands.");
+        EndAutoPanel();
+    }
+
+    private void DrawCommandCenterCommands(CommandCenterEntry entry, CommandCenterSnapshot settings)
+    {
+        BeginAutoPanel($"{entry.Name.ToUpperInvariant()} COMMANDS");
+        if (ImGui.Button("Close commands"))
+            UpdateCommandCenter(value => value with { CommandPanelOpen = false });
+        IReadOnlyList<CommandCenterCommand> commands = CommandsFor(entry, settings);
+        string? preferred = settings.PreferredCommands.GetValueOrDefault(entry.Id);
+        foreach (CommandCenterCommand command in commands)
+        {
+            ImGui.PushID("run-" + command.Command);
+            bool isPreferred = string.Equals(preferred, command.Command, StringComparison.OrdinalIgnoreCase);
+            if (ImGui.Button(command.Command, new Vector2(Math.Min(360, Math.Max(130, ButtonWidth(command.Command))), 0)))
+                commandCenterMessage = commandCenterCatalog.Run(command.Command)
+                    ? $"Ran {command.Command}."
+                    : $"Command unavailable: {command.Command}";
+            ImGui.SameLine();
+            if (ImGui.SmallButton(isPreferred ? "Quick action" : "Make quick"))
+                SetPreferredCommand(entry.Id, command.Command);
+            if (command.IsCustom)
+            {
+                ImGui.SameLine();
+                if (ImGui.SmallButton("Remove"))
+                    RemoveCustomCommand(entry.Id, command.Command);
+            }
+            if (!string.IsNullOrWhiteSpace(command.Help))
+                ImGui.TextWrapped(command.Help);
+            ImGui.PopID();
+        }
+        ImGui.Separator();
+        ImGui.SetNextItemWidth(Math.Min(430, ImGui.GetContentRegionAvail().X));
+        ImGui.InputTextWithHint("###new-command", "/command or /command subcommand", ref commandCenterCustomCommand, 1_024);
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("###new-command-description", "Optional description", ref commandCenterCustomDescription, 2_048);
+        if (ImGui.Button("Add custom command") && AddCustomCommand(entry.Id))
+        {
+            commandCenterCustomCommand = string.Empty;
+            commandCenterCustomDescription = string.Empty;
+        }
+        EndAutoPanel();
+    }
+
+    private IReadOnlyList<CommandCenterCommand> CommandsFor(CommandCenterEntry entry, CommandCenterSnapshot settings)
+    {
+        IEnumerable<CommandCenterCommand> commands = entry.Commands;
+        if (settings.CustomCommands.TryGetValue(entry.Id, out IReadOnlyList<CommandCenterCustomCommand>? custom))
+            commands = commands.Concat(custom.Select(item => new CommandCenterCommand(item.Command, item.Description, IsCustom: true)));
+        return commands.GroupBy(command => command.Command, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(command => command.IsCustom).First())
+            .OrderByDescending(command => string.Equals(settings.PreferredCommands.GetValueOrDefault(entry.Id), command.Command, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(command => command.Command, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool HasPluginWindow(CommandCenterEntry entry) => entry.Id == "__dalamud" ||
+        entry.Plugin is { IsLoaded: true } plugin && (plugin.HasMainUi || plugin.HasConfigUi);
+
+    private bool CanOpen(CommandCenterEntry entry, CommandCenterSnapshot settings) =>
+        HasPluginWindow(entry) || QuickCommand(entry, settings) is not null;
+
+    private string OpenCommandCenterEntry(CommandCenterEntry entry, CommandCenterSnapshot settings)
+    {
+        if (HasPluginWindow(entry))
+            return commandCenterCatalog.Open(entry, settings: false, out bool closed)
+                ? closed ? $"Closed {entry.Name}." : $"Opened {entry.Name}."
+                : $"{entry.Name} did not expose a window.";
+        string? command = QuickCommand(entry, settings);
+        return command is not null && commandCenterCatalog.Run(command)
+            ? $"Ran {command} for {entry.Name}."
+            : $"{entry.Name} has no available quick action.";
+    }
+
+    private string? QuickCommand(CommandCenterEntry entry, CommandCenterSnapshot settings)
+    {
+        IReadOnlyList<CommandCenterCommand> commands = CommandsFor(entry, settings);
+        if (settings.PreferredCommands.TryGetValue(entry.Id, out string? preferred) &&
+            commands.Any(command => command.Command.Equals(preferred, StringComparison.OrdinalIgnoreCase)))
+            return preferred;
+        CommandCenterCommand[] native = entry.Commands.Where(command => !command.IsDerived).ToArray();
+        string normalizedId = NormalizeCommandCenterName(entry.Id);
+        string normalizedName = NormalizeCommandCenterName(entry.Name);
+        CommandCenterCommand? exact = native.FirstOrDefault(command =>
+            NormalizeCommandCenterName(command.Command.TrimStart('/')) == normalizedId ||
+            NormalizeCommandCenterName(command.Command.TrimStart('/')) == normalizedName);
+        if (exact is not null)
+            return exact.Command;
+        return native.Where(command => command.Help.Contains('\n') ||
+                                       command.Help.Contains("open", StringComparison.OrdinalIgnoreCase) ||
+                                       command.Help.Contains("toggle", StringComparison.OrdinalIgnoreCase))
+                   .OrderBy(command => command.Command.Length)
+                   .FirstOrDefault()?.Command
+               ?? native.OrderBy(command => command.Command.Length).FirstOrDefault()?.Command;
+    }
+
+    private static string NormalizeCommandCenterName(string value) =>
+        new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
+    private void UpdateCommandCenter(Func<CommandCenterSnapshot, CommandCenterSnapshot> change) =>
+        commandCenterMigration.Update(change, out commandCenterMessage);
+
+    private void ToggleCommandCenterFavorite(string id, bool currentlyFavorite) => UpdateCommandCenter(snapshot =>
+    {
+        HashSet<string> values = snapshot.Favorites.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (currentlyFavorite)
+            values.Remove(id);
+        else
+            values.Add(id);
+        return snapshot with { Favorites = values.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray() };
+    });
+
+    private void HideCommandCenterEntry(string id) => UpdateCommandCenter(snapshot =>
+    {
+        HashSet<string> values = snapshot.HiddenPlugins.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        values.Add(id);
+        return snapshot with { HiddenPlugins = values.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray() };
+    });
+
+    private void SetPreferredCommand(string id, string command) => UpdateCommandCenter(snapshot =>
+    {
+        Dictionary<string, string> values = snapshot.PreferredCommands
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        values[id] = command;
+        return snapshot with { PreferredCommands = values };
+    });
+
+    private bool AddCustomCommand(string id)
+    {
+        string command = commandCenterCustomCommand.Trim();
+        if (command.Length == 0)
+            return false;
+        if (command[0] != '/')
+            command = "/" + command;
+        string normalized = command;
+        return commandCenterMigration.Update(snapshot =>
+        {
+            Dictionary<string, IReadOnlyList<CommandCenterCustomCommand>> groups = snapshot.CustomCommands
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+            List<CommandCenterCustomCommand> commands = groups.GetValueOrDefault(id)?.ToList() ?? [];
+            if (!commands.Any(item => item.Command.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
+                commands.Add(new(normalized, commandCenterCustomDescription.Trim()));
+            groups[id] = commands;
+            return snapshot with { CustomCommands = groups };
+        }, out commandCenterMessage);
+    }
+
+    private void RemoveCustomCommand(string id, string command) => UpdateCommandCenter(snapshot =>
+    {
+        Dictionary<string, IReadOnlyList<CommandCenterCustomCommand>> groups = snapshot.CustomCommands
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        if (!groups.TryGetValue(id, out IReadOnlyList<CommandCenterCustomCommand>? existing))
+            return snapshot;
+        CommandCenterCustomCommand[] remaining = existing
+            .Where(item => !item.Command.Equals(command, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (remaining.Length == 0)
+            groups.Remove(id);
+        else
+            groups[id] = remaining;
+        return snapshot with { CustomCommands = groups };
+    });
 
     private void DrawRoutesAndNavigation()
     {
