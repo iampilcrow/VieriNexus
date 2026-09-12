@@ -725,7 +725,7 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current published state commit: `bea458dc16ed3c82ef5bc30e02f770f0d93bf10c Update project state for Nexus 0.1.0.52`; implementation commit: `f6204d2f51b55de2102326134ed04d6491ee8c09 Move solo-duty rotation handoff into Nexus`.
+- Current published release-record commit: `1694167c078662ad02d4295d9cc792a4eb863231 Record published Nexus 0.1.0.53 release`; release source/implementation commit: `3388bbe1a223a6cf9162c01e774d118cb8a47635 Move VieriDeck command center into Nexus`.
 - `origin/main` contains both the released implementation and published-source state commits.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
@@ -733,7 +733,7 @@ These are migration requirements, not current Nexus features:
 - Plugin project version: `0.1.0.53`. Dalamud API 15. Version 0.1.0.53 is published through the production feed.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
-- The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
+- The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.
 
 ### Significant history
 
