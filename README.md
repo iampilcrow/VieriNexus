@@ -85,7 +85,7 @@ An explicit Stop confirms inactivity, releases ownership, and completes its chec
 - Nexus starts route movement only from an explicit Routes-page or `/nexus play <name>` action after working-library and safety checks.
 - The Nexus window waits until a targetable character is fully in the world.
 - The supplied VieriNexus logo is the permanent Home experience, not a temporary popup window.
-- During migration VieriCodex remains authoritative and stock Questionable must not run beside it. Nexus now enforces that boundary before any quest IPC call and automatically selects stock Questionable after VieriCodex is disabled. The approved target architecture keeps Vieri-specific planning, policy, safety, custom-route, and UI behavior in Nexus while stock Questionable supplies ordinary supported quest execution through the narrow versioned adapter.
+- VieriCodex migration now backs up and transactionally stages its complete activity preferences and saved Progression Queue definition, applies a matching current-job goal without replaying a predecessor instruction pointer, and supports guarded rollback. Nexus owns exact MSQ, Class/Job/Role, ordinary side-quest, current-quest, and Atlas objective selection; stock Questionable supplies the one exact supported quest's mechanics through the narrow versioned adapter. Never load VieriCodex and Questionable together.
 
 The complete required/recommended provider inventory and its current-product evidence are recorded in [`docs/DEPENDENCY_AUDIT.md`](docs/DEPENDENCY_AUDIT.md).
 

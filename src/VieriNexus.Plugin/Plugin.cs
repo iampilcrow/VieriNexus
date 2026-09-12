@@ -53,6 +53,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly NavigationLibraryService navigationLibrary;
     private readonly AutoDutyMigrationService autoDutyMigration;
+    private readonly CodexMigrationService codexMigration;
     private readonly CommandCenterMigrationService commandCenterMigration;
     private readonly CommandCenterCatalogService commandCenterCatalog;
     private readonly ProgressionProviderService progressionProviders;
@@ -100,6 +101,11 @@ public sealed class Plugin : IDalamudPlugin
             legacyInventory,
             PluginInterface.GetPluginConfigDirectory(),
             autoDutyImport.Imported ? autoDutyImport.ReceiptId : null);
+        LegacyImportState codexImport = Configuration.ForLegacyImport("codex");
+        codexMigration = new CodexMigrationService(
+            legacyInventory,
+            PluginInterface.GetPluginConfigDirectory(),
+            codexImport.Imported ? codexImport.ReceiptId : null);
         LegacyImportState commandCenterImport = Configuration.ForLegacyImport("deck");
         commandCenterMigration = new CommandCenterMigrationService(
             legacyInventory,
@@ -262,7 +268,7 @@ public sealed class Plugin : IDalamudPlugin
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
-            commandCenterMigration, commandCenterCatalog,
+            codexMigration, commandCenterMigration, commandCenterCatalog,
             navigationLibrary, navigationActivation, navigationDiagnostics,
             navigationRuntime, progressionProviders, progressionRuntime, soloDutyRotation,
             progressAtlas, progressAtlasActions,

@@ -123,7 +123,8 @@ public sealed record ReachJobLevelGoalDraft(
     bool AllowDuties,
     int MinimumGilReserve,
     int CurrentItemLevel = 0,
-    int CurrentGil = 0);
+    int CurrentGil = 0,
+    bool AllowMainScenario = false);
 
 public enum ProgressionPlanIssueSeverity
 {
@@ -191,8 +192,8 @@ public static class ReachJobLevelPlanner
             issues.Add(new(ProgressionPlanIssueSeverity.Blocker, "gil-reserve-invalid",
                 "The gil reserve cannot be negative."));
 
-        bool questLaneRequested = draft.AllowJobQuests || draft.AllowHuntingLog || draft.AllowSideQuests;
-        bool connectedQuestLaneRequested = draft.AllowJobQuests || draft.AllowSideQuests;
+        bool questLaneRequested = draft.AllowMainScenario || draft.AllowJobQuests || draft.AllowHuntingLog || draft.AllowSideQuests;
+        bool connectedQuestLaneRequested = draft.AllowMainScenario || draft.AllowJobQuests || draft.AllowSideQuests;
         bool dutyLaneRequested = draft.AllowDuties;
         if (!questLaneRequested && !dutyLaneRequested)
             issues.Add(new(ProgressionPlanIssueSeverity.Blocker, "no-leveling-method",
@@ -252,6 +253,7 @@ public static class ReachJobLevelPlanner
         {
             string[] methods =
             [
+                .. (draft.AllowMainScenario ? new[] { "Main Scenario quests" } : Array.Empty<string>()),
                 .. (draft.AllowJobQuests ? new[] { "Class/Job/Role quests" } : Array.Empty<string>()),
                 .. (draft.AllowSideQuests ? new[] { "general side quests" } : Array.Empty<string>()),
             ];
@@ -320,7 +322,7 @@ public static class ReachJobLevelPlanner
         issues.Add(new(ProgressionPlanIssueSeverity.Information,
             executionConnected ? "bounded-progression-connected" : "execution-not-connected",
             executionConnected
-                ? "Nexus can execute exact Class/Job/Role quests, Hunting Log targets, general side quests, and duties as verified bounded activities, with Nexus-owned gear readiness before each new activity pass."
+                ? "Nexus can execute exact Main Scenario, Class/Job/Role, general side quests, Hunting Log targets, and duties as verified bounded activities, with Nexus-owned gear readiness before each new activity pass."
                 : "This plan has no bounded provider task that Nexus can execute yet."));
         return new ReachJobLevelPlan(
             true,

@@ -51,9 +51,10 @@ internal sealed class ProgressionRuntimeService
     internal IReadOnlyList<ProgressionQuestCandidate> EligibleQuests(
         uint classJobId,
         int currentLevel,
+        bool includeMainScenario,
         bool includeClassJobRole,
         bool includeGeneralSideQuests) => provider.EligibleQuests(
-            classJobId, currentLevel, includeClassJobRole, includeGeneralSideQuests);
+            classJobId, currentLevel, includeMainScenario, includeClassJobRole, includeGeneralSideQuests);
 
     internal bool IsGearReadinessReady => provider.IsGearReadinessReady;
 
@@ -125,7 +126,8 @@ internal sealed class ProgressionRuntimeService
             configuration.AllowDuties,
             configuration.MinimumGilReserve,
             metrics.ItemLevel,
-            metrics.Gil);
+            metrics.Gil,
+            configuration.AllowMainScenario);
         ProgressionProviderSnapshot providers = provider.Snapshot();
         ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
             draft,
@@ -135,9 +137,10 @@ internal sealed class ProgressionRuntimeService
             HuntingLogReadinessDetail);
         bool hasEligibleActivity =
             configuration.AllowDuties && EligibleDuties(character.Level).Count > 0 ||
-            (configuration.AllowJobQuests || configuration.AllowSideQuests) && EligibleQuests(
+            (configuration.AllowMainScenario || configuration.AllowJobQuests || configuration.AllowSideQuests) && EligibleQuests(
                 character.ClassJobId,
                 character.Level,
+                configuration.AllowMainScenario,
                 configuration.AllowJobQuests,
                 configuration.AllowSideQuests).Count > 0 ||
             configuration.AllowHuntingLog && EligibleHuntingTargets(

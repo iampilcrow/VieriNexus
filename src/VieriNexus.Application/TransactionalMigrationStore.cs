@@ -76,6 +76,23 @@ public sealed class TransactionalMigrationStore
         return new(result.Success, result.Message, result.Receipt, result.Snapshot);
     }
 
+    public StagedCodexReadResult ReadStagedCodexState(
+        string receiptPath,
+        string expectedSourceId,
+        string expectedNexusTargetPath)
+    {
+        StagedJsonReadResult<CodexMigrationSnapshot> result = ReadStagedJsonState<CodexMigrationSnapshot>(
+            receiptPath,
+            expectedSourceId,
+            expectedNexusTargetPath,
+            snapshot => snapshot.SchemaVersion == 1 && snapshot.TargetLevel is >= 1 and <= 100 &&
+                        snapshot.QueueSteps.Count <= 100 && snapshot.QueueSteps.All(step =>
+                            step.ClassJobId <= 43 && step.TargetLevel is >= 1 and <= 100 &&
+                            step.Method is >= 0 and <= 3 && step.FallbackPolicy is >= 0 and <= 6),
+            CodexSuccessMessage);
+        return new(result.Success, result.Message, result.Receipt, result.Snapshot);
+    }
+
     public MigrationWriteResult Apply(
         string sourceId,
         string sourcePath,
@@ -105,6 +122,16 @@ public sealed class TransactionalMigrationStore
         CommandCenterSnapshot snapshot) =>
         ApplyJson(sourceId, sourcePath, nexusTargetPath, backupRoot, receiptRoot, snapshot,
             CommandCenterSuccessMessage(snapshot.Favorites.Count, snapshot.CustomCommands.Count));
+
+    public MigrationWriteResult ApplyCodex(
+        string sourceId,
+        string sourcePath,
+        string nexusTargetPath,
+        string backupRoot,
+        string receiptRoot,
+        CodexMigrationSnapshot snapshot) =>
+        ApplyJson(sourceId, sourcePath, nexusTargetPath, backupRoot, receiptRoot, snapshot,
+            CodexSuccessMessage(snapshot));
 
     public MigrationWriteResult Rollback(string receiptPath)
     {
@@ -255,6 +282,9 @@ public sealed class TransactionalMigrationStore
 
     private static string CommandCenterSuccessMessage(int favoriteCount, int customGroupCount) =>
         $"Imported VieriDeck settings with {favoriteCount} favorite{(favoriteCount == 1 ? string.Empty : "s")} and {customGroupCount} custom command group{(customGroupCount == 1 ? string.Empty : "s")}.";
+
+    private static string CodexSuccessMessage(CodexMigrationSnapshot snapshot) =>
+        $"Imported VieriCodex progression and Atlas preferences with {snapshot.SavedQueueSteps} saved queue step{(snapshot.SavedQueueSteps == 1 ? string.Empty : "s")}.";
 
     private static bool PathsEqual(string left, string right) =>
         string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);

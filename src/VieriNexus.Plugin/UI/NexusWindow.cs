@@ -36,6 +36,7 @@ internal sealed class NexusWindow : Window
     private readonly LegacyConfigurationInventory legacyInventory;
     private readonly NavigationMigrationService navigationMigration;
     private readonly AutoDutyMigrationService autoDutyMigration;
+    private readonly CodexMigrationService codexMigration;
     private readonly CommandCenterMigrationService commandCenterMigration;
     private readonly CommandCenterCatalogService commandCenterCatalog;
     private readonly NavigationLibraryService navigationLibrary;
@@ -82,6 +83,7 @@ internal sealed class NexusWindow : Window
         LegacyConfigurationInventory legacyInventory,
         NavigationMigrationService navigationMigration,
         AutoDutyMigrationService autoDutyMigration,
+        CodexMigrationService codexMigration,
         CommandCenterMigrationService commandCenterMigration,
         CommandCenterCatalogService commandCenterCatalog,
         NavigationLibraryService navigationLibrary,
@@ -105,6 +107,7 @@ internal sealed class NexusWindow : Window
         this.legacyInventory = legacyInventory;
         this.navigationMigration = navigationMigration;
         this.autoDutyMigration = autoDutyMigration;
+        this.codexMigration = codexMigration;
         this.commandCenterMigration = commandCenterMigration;
         this.commandCenterCatalog = commandCenterCatalog;
         this.navigationLibrary = navigationLibrary;
@@ -407,6 +410,11 @@ internal sealed class NexusWindow : Window
                 DrawAutoDutyMigration();
                 continue;
             }
+            if (source.Id == "codex")
+            {
+                DrawCodexMigration();
+                continue;
+            }
             if (source.Id == "deck")
             {
                 DrawCommandCenterMigration();
@@ -435,29 +443,35 @@ internal sealed class NexusWindow : Window
     {
         NavigationMigrationStatus navigationStatus = navigationMigration.Status();
         AutoDutyMigrationStatus operationsStatus = autoDutyMigration.Status();
+        CodexMigrationStatus codexStatus = codexMigration.Status();
         CommandCenterMigrationStatus commandStatus = commandCenterMigration.Status();
         bool navigationReady = navigationStatus.Preview?.CanImport == true;
         bool operationsReady = operationsStatus.Preview?.CanImport == true;
         bool navigationPrepared = navigationStatus.LastReceipt is not null && navigationLibrary.HasWorkingLibrary;
         bool operationsPrepared = operationsStatus.LastReceipt is not null && autoDutyMigration.HasWorkingProfiles;
+        LegacyImportState codexImportState = plugin.Configuration.ForLegacyImport("codex");
+        bool codexReady = codexStatus.Preview?.CanImport == true;
+        bool codexPrepared = codexStatus.LastReceipt is not null && codexImportState.Activated;
         bool commandReady = commandStatus.Preview?.CanImport == true;
         bool commandPrepared = commandStatus.LastReceipt is not null && commandStatus.WorkingSnapshot is not null;
         bool needsNavigation = navigationReady && !navigationPrepared;
         bool needsOperations = operationsReady && !operationsPrepared;
+        bool needsCodex = codexReady && !codexPrepared;
         bool needsCommands = commandReady && !commandPrepared;
         bool blocked = (navigationStatus.SourceFound && !navigationReady && !navigationPrepared) ||
                        (operationsStatus.SourceFound && !operationsReady && !operationsPrepared) ||
+                       (codexStatus.SourceFound && !codexReady && !codexPrepared) ||
                        (commandStatus.SourceFound && !commandReady && !commandPrepared);
-        bool foundAnything = navigationStatus.SourceFound || operationsStatus.SourceFound ||
-                              commandStatus.SourceFound || navigationPrepared || operationsPrepared || commandPrepared;
+        bool foundAnything = navigationStatus.SourceFound || operationsStatus.SourceFound || codexStatus.SourceFound ||
+                              commandStatus.SourceFound || navigationPrepared || operationsPrepared || codexPrepared || commandPrepared;
 
         BeginAutoPanel("SET UP THIS COMPUTER");
-        if (blocked && !needsNavigation && !needsOperations && !needsCommands)
+        if (blocked && !needsNavigation && !needsOperations && !needsCodex && !needsCommands)
         {
             NexusTheme.StatusDot(NexusTheme.Red,
                 "A detected settings source needs attention in its detailed Migration card");
         }
-        else if (!needsNavigation && !needsOperations && !needsCommands)
+        else if (!needsNavigation && !needsOperations && !needsCodex && !needsCommands)
         {
             NexusTheme.StatusDot(foundAnything ? NexusTheme.Green : NexusTheme.Amber,
                 foundAnything
@@ -467,7 +481,7 @@ internal sealed class NexusWindow : Window
         else
         {
             NexusTheme.StatusDot(NexusTheme.Cyan,
-                $"Detected {(needsNavigation ? 1 : 0) + (needsOperations ? 1 : 0) + (needsCommands ? 1 : 0)} supported settings source(s) ready to prepare");
+                $"Detected {(needsNavigation ? 1 : 0) + (needsOperations ? 1 : 0) + (needsCodex ? 1 : 0) + (needsCommands ? 1 : 0)} supported settings source(s) ready to prepare");
             TextWrapped(NexusTheme.Muted,
                 "This uses only this player's local Dalamud settings, keeps timestamped backups, verifies the imported data, and creates Nexus working copies. Leave the old Vieri products installed until their replacement cards are green.");
             if (ImGui.Button("Back up and prepare detected settings", new Vector2(ButtonWidth("Back up and prepare detected settings"), 0)))
@@ -508,6 +522,26 @@ internal sealed class NexusWindow : Window
                         state.ImportedAt = receipt.CreatedAtUtc;
                         state.ReceiptId = receipt.Id;
                         state.ImportedItemCount = operationsStatus.Preview!.Snapshot!.Profiles.Count;
+                    }
+                }
+                if (needsCodex)
+                {
+                    MigrationWriteResult imported = codexStatus.LastReceipt is null
+                        ? codexMigration.Import()
+                        : new MigrationWriteResult(true, codexStatus.Message, codexStatus.LastReceipt);
+                    results.Add(imported.Message);
+                    CodexMigrationSnapshot? snapshot = codexMigration.Status().StagedSnapshot;
+                    if (imported.Success && imported.Receipt is { } receipt && snapshot is not null)
+                    {
+                        codexImportState.Reviewed = codexImportState.Imported = true;
+                        codexImportState.SourceVersion = "codex-preferences-v1";
+                        codexImportState.ImportedAt = receipt.CreatedAtUtc;
+                        codexImportState.ReceiptId = receipt.Id;
+                        codexImportState.ImportedItemCount = 11 + snapshot.SavedQueueSteps;
+                        if (ApplyCodexPreferences(snapshot, codexImportState, out string applyMessage))
+                            results.Add(applyMessage);
+                        else
+                            results.Add(applyMessage);
                     }
                 }
                 if (needsCommands)
@@ -622,6 +656,195 @@ internal sealed class NexusWindow : Window
             : "Import creates an exact source backup and does not enable duplicate automation.");
         EndPanel();
     }
+
+    private void DrawCodexMigration()
+    {
+        const string importLabel = "Back up and import Progression preferences";
+        const string applyLabel = "Apply to current character";
+        const string rollbackLabel = "Rollback Progression import";
+        CodexMigrationStatus status = codexMigration.Status();
+        LegacyImportState state = plugin.Configuration.ForLegacyImport("codex");
+        string operationMessage = status.Message;
+
+        BeginAutoPanel("PROGRESSION & ATLAS");
+        NexusTheme.StatusDot(status.SourceFound ? NexusTheme.Green : NexusTheme.Muted,
+            status.SourceFound ? "VieriCodex configuration located" : "Not found on this computer");
+        ImGui.TextColored(NexusTheme.Gold, "Destination: Nexus Progression and Progress Atlas");
+        if (status.Preview?.Snapshot is { } preview)
+        {
+            int enabled = new[]
+            {
+                preview.MainScenarioQuests, preview.CombatClassJobQuests || preview.RoleQuests,
+                preview.AetherCurrentQuests, preview.FieldAetherCurrents, preview.AetheryteAttunements,
+                preview.MapExploration, preview.HuntingLogs, preview.SideQuests, preview.Achievements,
+            }.Count(value => value);
+            ImGui.TextUnformatted($"{enabled} enabled activity group(s) • {preview.SavedQueueSteps} saved queue step(s)");
+            TextWrapped(NexusTheme.Muted,
+                "MSQ, Class/Job/Role, logs, currents, travel nodes, exploration, side quests, achievements, duties, and the level stop are mapped together. Old queue instruction pointers are never resumed.");
+            foreach (MigrationIssue issue in status.Preview.Issues.Take(2))
+            {
+                Vector4 color = issue.Severity == MigrationIssueSeverity.Error ? NexusTheme.Red :
+                    issue.Severity == MigrationIssueSeverity.Warning ? NexusTheme.Amber : NexusTheme.Muted;
+                TextWrapped(color, $"• {issue.Message}");
+            }
+        }
+        else
+        {
+            TextWrapped(NexusTheme.Muted, operationMessage);
+        }
+
+        bool canImport = status.Preview?.CanImport == true;
+        ImGui.BeginDisabled(!canImport);
+        if (ImGui.Button(importLabel, new Vector2(ButtonWidth(importLabel), 0)) && canImport)
+        {
+            MigrationWriteResult result = codexMigration.Import();
+            operationMessage = result.Message;
+            if (result.Success && result.Receipt is { } receipt && codexMigration.Status().StagedSnapshot is { } snapshot)
+            {
+                state.Reviewed = state.Imported = true;
+                state.SourceVersion = "codex-preferences-v1";
+                state.ImportedAt = receipt.CreatedAtUtc;
+                state.ReceiptId = receipt.Id;
+                state.ImportedItemCount = 11 + snapshot.SavedQueueSteps;
+                ApplyCodexPreferences(snapshot, state, out operationMessage);
+            }
+        }
+        ImGui.EndDisabled();
+
+        if (status.StagedSnapshot is { } staged && (!state.Activated ||
+            world.Current.Character.Value is { } current && state.AppliedCharacterKey != current.Key.ToString()))
+        {
+            SameLineIfFits(applyLabel);
+            if (ImGui.Button(applyLabel, new Vector2(ButtonWidth(applyLabel), 0)))
+                ApplyCodexPreferences(staged, state, out operationMessage);
+        }
+
+        if (status.LastReceipt is { } savedReceipt)
+        {
+            SameLineIfFits(rollbackLabel);
+            if (ImGui.Button(rollbackLabel, new Vector2(ButtonWidth(rollbackLabel), 0)))
+            {
+                MigrationWriteResult result = codexMigration.Rollback(savedReceipt.Id);
+                operationMessage = result.Message;
+                if (result.Success)
+                {
+                    RestoreCodexPreferences(state);
+                    state.Imported = state.ReadyForActivation = state.Activated = false;
+                    state.ImportedAt = null;
+                    state.ReceiptId = null;
+                    state.ImportedItemCount = 0;
+                    state.AppliedCharacterKey = string.Empty;
+                    state.PreviousProgression = null;
+                    state.PreviousAtlas = null;
+                    plugin.Save();
+                }
+            }
+        }
+
+        TextWrapped(state.Activated ? NexusTheme.Green : NexusTheme.Muted,
+            state.Activated
+                ? $"Preferences are active for {state.AppliedCharacterKey}; the VieriCodex source remains unchanged."
+                : operationMessage);
+        EndAutoPanel();
+    }
+
+    private bool ApplyCodexPreferences(
+        CodexMigrationSnapshot snapshot,
+        LegacyImportState state,
+        out string message)
+    {
+        CharacterSnapshot? character = world.Current.Character.Value;
+        if (character is null || !character.Key.IsKnown)
+        {
+            message = "The import is staged. Log in, then apply it to the current character.";
+            state.ReadyForActivation = true;
+            plugin.Save();
+            return false;
+        }
+
+        string characterKey = character.Key.ToString();
+        CharacterConfiguration configuration = plugin.Configuration.ForCharacter(characterKey);
+        if (!state.Activated || !string.Equals(state.AppliedCharacterKey, characterKey, StringComparison.Ordinal))
+        {
+            state.PreviousProgression = Clone(configuration.Progression);
+            state.PreviousAtlas = Clone(configuration.Atlas);
+        }
+
+        configuration.Progression.AllowMainScenario = snapshot.MainScenarioQuests;
+        configuration.Progression.AllowJobQuests = snapshot.CombatClassJobQuests || snapshot.RoleQuests;
+        configuration.Progression.AllowHuntingLog = snapshot.HuntingLogs;
+        configuration.Progression.AllowSideQuests = snapshot.SideQuests;
+        configuration.Progression.AllowDuties = snapshot.RequiredMsqDungeons;
+        if (snapshot.LevelStopEnabled)
+            configuration.Progression.TargetLevel = snapshot.TargetLevel;
+        CodexQueueStepSnapshot? matchingQueueStep = snapshot.QueueSteps.FirstOrDefault(step =>
+            step.Enabled && step.ClassJobId == character.ClassJobId);
+        if (matchingQueueStep is not null)
+        {
+            configuration.Progression.TargetLevel = matchingQueueStep.TargetLevel;
+            switch (matchingQueueStep.Method)
+            {
+                case 0:
+                    configuration.Progression.AllowHuntingLog = snapshot.QueueSettings.AutomaticUsesHuntingLog;
+                    configuration.Progression.AllowSideQuests = snapshot.QueueSettings.AutomaticUsesSideQuests;
+                    configuration.Progression.AllowDuties = snapshot.QueueSettings.AutomaticUsesDungeonGrind;
+                    break;
+                case 1:
+                    configuration.Progression.AllowHuntingLog = true;
+                    configuration.Progression.AllowSideQuests = configuration.Progression.AllowDuties = false;
+                    break;
+                case 2:
+                    configuration.Progression.AllowSideQuests = true;
+                    configuration.Progression.AllowHuntingLog = configuration.Progression.AllowDuties = false;
+                    break;
+                case 3:
+                    configuration.Progression.AllowDuties = true;
+                    configuration.Progression.AllowHuntingLog = configuration.Progression.AllowSideQuests = false;
+                    break;
+            }
+        }
+        configuration.Atlas.AllowAetherCurrentQuests = snapshot.AetherCurrentQuests;
+        configuration.Atlas.AllowFieldAetherCurrents = snapshot.FieldAetherCurrents;
+        configuration.Atlas.AllowAetheryteAttunements = snapshot.AetheryteAttunements;
+        configuration.Atlas.AllowMapExploration = snapshot.MapExploration;
+        configuration.Atlas.AllowAchievements = snapshot.Achievements;
+        state.Activated = state.ReadyForActivation = true;
+        state.AppliedCharacterKey = characterKey;
+        plugin.Save();
+        message = matchingQueueStep is null
+            ? $"Applied the verified VieriCodex preferences to {character.Name}; saved steps for other jobs remain preserved in staging."
+            : $"Applied the verified VieriCodex preferences and matching level-{matchingQueueStep.TargetLevel} queue goal to {character.Name}.";
+        return true;
+    }
+
+    private void RestoreCodexPreferences(LegacyImportState state)
+    {
+        if (state.AppliedCharacterKey.Length == 0 || state.PreviousProgression is null || state.PreviousAtlas is null)
+            return;
+        CharacterConfiguration configuration = plugin.Configuration.ForCharacter(state.AppliedCharacterKey);
+        configuration.Progression = Clone(state.PreviousProgression);
+        configuration.Atlas = Clone(state.PreviousAtlas);
+    }
+
+    private static ProgressionDraftConfiguration Clone(ProgressionDraftConfiguration value) => new()
+    {
+        TargetLevel = value.TargetLevel,
+        AllowMainScenario = value.AllowMainScenario,
+        AllowJobQuests = value.AllowJobQuests,
+        AllowHuntingLog = value.AllowHuntingLog,
+        AllowSideQuests = value.AllowSideQuests,
+        AllowDuties = value.AllowDuties,
+        MinimumGilReserve = value.MinimumGilReserve,
+    };
+
+    private static AtlasAutomationConfiguration Clone(AtlasAutomationConfiguration value) => new()
+    {
+        AllowAetherCurrentQuests = value.AllowAetherCurrentQuests,
+        AllowFieldAetherCurrents = value.AllowFieldAetherCurrents,
+        AllowAetheryteAttunements = value.AllowAetheryteAttunements,
+        AllowMapExploration = value.AllowMapExploration,
+        AllowAchievements = value.AllowAchievements,
+    };
 
     private void DrawCommandCenterMigration()
     {
@@ -2454,6 +2677,13 @@ internal sealed class NexusWindow : Window
         if (ImGui.BeginTable("###LevelingMethods", 2, ImGuiTableFlags.SizingStretchSame))
         {
             ImGui.TableNextColumn();
+            bool mainScenario = draftConfiguration.AllowMainScenario;
+            if (ImGui.Checkbox("Main Scenario quests", ref mainScenario))
+            {
+                draftConfiguration.AllowMainScenario = mainScenario;
+                changed = true;
+            }
+            ImGui.TableNextColumn();
             bool jobQuests = draftConfiguration.AllowJobQuests;
             if (ImGui.Checkbox("Class/Job/Role Quests", ref jobQuests))
             {
@@ -2513,7 +2743,8 @@ internal sealed class NexusWindow : Window
                 draftConfiguration.AllowDuties,
                 draftConfiguration.MinimumGilReserve,
                 progressionRuntime.CurrentMetrics.ItemLevel,
-                progressionRuntime.CurrentMetrics.Gil),
+                progressionRuntime.CurrentMetrics.Gil,
+                draftConfiguration.AllowMainScenario),
             providers.Questing,
             providers.Duties,
             progressionRuntime.IsHuntingLogReady,
@@ -2693,8 +2924,11 @@ internal sealed class NexusWindow : Window
             IReadOnlyList<ProgressionQuestCandidate> eligibleQuestList = progressionRuntime.EligibleQuests(
                 character.ClassJobId,
                 character.Level,
+                draft.AllowMainScenario,
                 draft.AllowJobQuests,
                 draft.AllowSideQuests);
+            int eligibleMainScenarioQuests = eligibleQuestList.Count(
+                quest => quest.Kind == ProgressionQuestKind.MainScenario);
             int eligibleClassJobRoleQuests = eligibleQuestList.Count(
                 quest => quest.Kind == ProgressionQuestKind.ClassJobRole);
             int eligibleSideQuests = eligibleQuestList.Count(
@@ -2708,7 +2942,7 @@ internal sealed class NexusWindow : Window
                 (eligibleQuests > 0 || eligibleHuntingTargets > 0 || eligibleDuties > 0);
             NexusTheme.StatusDot(hasExecutableStart ? NexusTheme.Green : NexusTheme.Amber,
                 hasExecutableStart
-                    ? $"Ready • {eligibleClassJobRoleQuests} Class/Job/Role • {eligibleHuntingTargets} hunt target(s) • {eligibleSideQuests} side quest(s) • {eligibleDuties} duties"
+                    ? $"Ready • {eligibleMainScenarioQuests} MSQ • {eligibleClassJobRoleQuests} Class/Job/Role • {eligibleHuntingTargets} hunt target(s) • {eligibleSideQuests} side quest(s) • {eligibleDuties} duties"
                     : !progressionRuntime.IsGearReadinessReady
                         ? "Nexus gear shopping is unavailable"
                         : plan.IsExecutionConnected

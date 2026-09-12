@@ -84,6 +84,20 @@ public sealed class ReachJobLevelPlannerTests
     }
 
     [Fact]
+    public void MainScenarioOnlyPlanIsExecutableThroughQuestProvider()
+    {
+        ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
+            Draft(jobQuests: false, huntingLog: false, sideQuests: false, duties: false, mainScenario: true),
+            Ready(ProgressionProviderRole.Questing, "questionable"),
+            Missing(ProgressionProviderRole.Duties));
+
+        Assert.True(plan.IsValid);
+        Assert.True(plan.IsExecutionConnected);
+        ProgressionPlanStep step = Assert.Single(plan.Steps, step => step.Code == "run-supported-quest-work");
+        Assert.Contains("Main Scenario quests", step.Reason);
+    }
+
+    [Fact]
     public void HuntingLogAloneIsBlockedWhenNativeProvidersAreUnavailable()
     {
         ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
@@ -175,7 +189,8 @@ public sealed class ReachJobLevelPlannerTests
         bool huntingLog = true,
         bool sideQuests = true,
         bool duties = true,
-        int gilReserve = 1_000_000) => new(
+        int gilReserve = 1_000_000,
+        bool mainScenario = false) => new(
             new CharacterKey(123, 456),
             41,
             currentLevel,
@@ -184,7 +199,8 @@ public sealed class ReachJobLevelPlannerTests
             huntingLog,
             sideQuests,
             duties,
-            gilReserve);
+            gilReserve,
+            AllowMainScenario: mainScenario);
 
     private static ProgressionProviderSelection Ready(ProgressionProviderRole role, string id)
     {

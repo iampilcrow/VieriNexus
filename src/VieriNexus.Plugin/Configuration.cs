@@ -6,7 +6,7 @@ namespace VieriNexus;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 5;
+    public int Version { get; set; } = 6;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
@@ -31,8 +31,11 @@ public sealed class Configuration : IPluginConfiguration
         Characters = new Dictionary<string, CharacterConfiguration>(Characters ?? [], StringComparer.Ordinal);
         LegacyImports = new Dictionary<string, LegacyImportState>(LegacyImports ?? [], StringComparer.OrdinalIgnoreCase);
         foreach (CharacterConfiguration character in Characters.Values)
+        {
             character.Progression ??= new ProgressionDraftConfiguration();
-        Version = 5;
+            character.Atlas ??= new AtlasAutomationConfiguration();
+        }
+        Version = 6;
     }
 
     public CharacterConfiguration ForCharacter(string key)
@@ -67,17 +70,29 @@ public sealed class CharacterConfiguration
     public bool PauseOnManualTarget { get; set; } = true;
     public int ManualControlQuietPeriodMs { get; set; } = 1500;
     public ProgressionDraftConfiguration Progression { get; set; } = new();
+    public AtlasAutomationConfiguration Atlas { get; set; } = new();
 }
 
 [Serializable]
 public sealed class ProgressionDraftConfiguration
 {
     public int TargetLevel { get; set; }
+    public bool AllowMainScenario { get; set; } = true;
     public bool AllowJobQuests { get; set; } = true;
     public bool AllowHuntingLog { get; set; } = true;
     public bool AllowSideQuests { get; set; } = true;
     public bool AllowDuties { get; set; } = true;
     public int MinimumGilReserve { get; set; } = 1_000_000;
+}
+
+[Serializable]
+public sealed class AtlasAutomationConfiguration
+{
+    public bool AllowAetherCurrentQuests { get; set; } = true;
+    public bool AllowFieldAetherCurrents { get; set; } = true;
+    public bool AllowAetheryteAttunements { get; set; } = true;
+    public bool AllowMapExploration { get; set; } = true;
+    public bool AllowAchievements { get; set; } = true;
 }
 
 [Serializable]
@@ -91,4 +106,7 @@ public sealed class LegacyImportState
     public int ImportedItemCount { get; set; }
     public bool ReadyForActivation { get; set; }
     public bool Activated { get; set; }
+    public string AppliedCharacterKey { get; set; } = string.Empty;
+    public ProgressionDraftConfiguration? PreviousProgression { get; set; }
+    public AtlasAutomationConfiguration? PreviousAtlas { get; set; }
 }

@@ -166,6 +166,41 @@ public sealed class TransactionalMigrationStoreTests : IDisposable
         Assert.Equal(original, File.ReadAllText(source));
     }
 
+    [Fact]
+    public void CodexPreferencesAndQueueAreBackedUpRecoveredAndRolledBackTransactionally()
+    {
+        Directory.CreateDirectory(root);
+        string source = Path.Combine(root, "VieriCodex.json");
+        const string original = "{\"Codex\":{\"MainScenarioQuests\":true}}";
+        File.WriteAllText(source, original);
+        string target = Path.Combine(root, "nexus", "codex-staging.v1.json");
+        string receipts = Path.Combine(root, "receipts");
+        CodexMigrationSnapshot snapshot = new(
+            1, 2, true, true, true, true, true, true, true, true, true, true, true,
+            false, 50,
+            [new(Guid.NewGuid(), true, 31, 100, 3, 0)],
+            new(true, true, true, false, true, true, true, 0));
+        TransactionalMigrationStore store = new();
+
+        MigrationWriteResult applied = store.ApplyCodex(
+            "codex", source, target, Path.Combine(root, "backups"), receipts, snapshot);
+        StagedCodexReadResult recovered = store.ReadStagedCodexState(
+            TransactionalMigrationStore.ReceiptPath(receipts, applied.Receipt!.Id), "codex", target);
+
+        Assert.True(applied.Success);
+        Assert.True(recovered.Success);
+        Assert.True(recovered.Snapshot!.MainScenarioQuests);
+        Assert.Equal(31u, Assert.Single(recovered.Snapshot.QueueSteps).ClassJobId);
+        Assert.Equal(original, File.ReadAllText(source));
+        Assert.Equal(original, File.ReadAllText(applied.Receipt.SourceBackupPath));
+
+        MigrationWriteResult rolledBack = store.Rollback(
+            TransactionalMigrationStore.ReceiptPath(receipts, applied.Receipt.Id));
+        Assert.True(rolledBack.Success);
+        Assert.False(File.Exists(target));
+        Assert.Equal(original, File.ReadAllText(source));
+    }
+
     public void Dispose()
     {
         if (!Directory.Exists(root))

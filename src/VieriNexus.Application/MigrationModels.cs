@@ -200,3 +200,56 @@ public sealed record StagedCommandCenterReadResult(
     string Message,
     MigrationReceipt? Receipt = null,
     CommandCenterSnapshot? Snapshot = null);
+
+public sealed record CodexMigrationSnapshot(
+    int SchemaVersion,
+    int SourceConfigurationVersion,
+    bool MainScenarioQuests,
+    bool CombatClassJobQuests,
+    bool RoleQuests,
+    bool AetherCurrentQuests,
+    bool FieldAetherCurrents,
+    bool AetheryteAttunements,
+    bool MapExploration,
+    bool HuntingLogs,
+    bool SideQuests,
+    bool Achievements,
+    bool RequiredMsqDungeons,
+    bool LevelStopEnabled,
+    int TargetLevel,
+    IReadOnlyList<CodexQueueStepSnapshot> QueueSteps,
+    CodexQueueSettingsSnapshot QueueSettings)
+{
+    public int SavedQueueSteps => QueueSteps.Count;
+}
+
+public sealed record CodexQueueStepSnapshot(
+    Guid Id,
+    bool Enabled,
+    uint ClassJobId,
+    int TargetLevel,
+    int Method,
+    int FallbackPolicy);
+
+public sealed record CodexQueueSettingsSnapshot(
+    bool SkipTargetsAlreadyReached,
+    bool AutomaticallySwitchJobs,
+    bool AutomaticallyAdvance,
+    bool ResumeAfterRestart,
+    bool AutomaticUsesHuntingLog,
+    bool AutomaticUsesSideQuests,
+    bool AutomaticUsesDungeonGrind,
+    int OnStepFailure);
+
+public sealed record CodexMigrationPreview(
+    CodexMigrationSnapshot? Snapshot,
+    IReadOnlyList<MigrationIssue> Issues)
+{
+    public bool CanImport => Snapshot is not null && Issues.All(issue => issue.Severity != MigrationIssueSeverity.Error);
+}
+
+public sealed record StagedCodexReadResult(
+    bool Success,
+    string Message,
+    MigrationReceipt? Receipt = null,
+    CodexMigrationSnapshot? Snapshot = null);

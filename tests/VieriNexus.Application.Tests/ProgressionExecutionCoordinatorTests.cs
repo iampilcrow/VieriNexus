@@ -438,6 +438,32 @@ public sealed class ProgressionExecutionCoordinatorTests
     }
 
     [Fact]
+    public void MainScenarioIsSelectedBeforeOtherUnacceptedQuestKinds()
+    {
+        FakeQuestProvider quest = new()
+        {
+            Candidates =
+            [
+                new("500", "A Test of the Job", 80, false),
+                new("600", "The Next Main Scenario Quest", 80, false, ProgressionQuestKind.MainScenario),
+                new("700", "An Ordinary Side Quest", 80, false, ProgressionQuestKind.GeneralSideQuest),
+            ],
+        };
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), new FakeDutyProvider(),
+            gearProvider: null, questProvider: quest);
+
+        ProgressionActionResult result = coordinator.Start(
+            Draft() with { AllowDuties = false, AllowHuntingLog = false, AllowMainScenario = true }, Plan());
+
+        Assert.True(result.Success);
+        Assert.Equal(["600"], quest.StartedQuestIds);
+        ProgressionQuestTaskPayload payload = System.Text.Json.JsonSerializer.Deserialize<ProgressionQuestTaskPayload>(
+            coordinator.State!.ActiveTask!.PayloadJson)!;
+        Assert.Equal(ProgressionQuestKind.MainScenario, payload.Kind);
+    }
+
+    [Fact]
     public void GeneralSideQuestOnlyGoalStartsAndPersistsItsExactKind()
     {
         FakeDutyProvider duty = new();
@@ -774,14 +800,18 @@ public sealed class ProgressionExecutionCoordinatorTests
         public IReadOnlyList<ProgressionQuestCandidate> EligibleQuests(
             uint classJobId,
             int currentLevel,
+            bool includeMainScenario,
             bool includeClassJobRole,
             bool includeGeneralSideQuests) => IsComplete
             ? []
             : Candidates
                 .Where(candidate => !RejectedQuestIds.Contains(candidate.QuestId))
-                .Where(candidate => candidate.Kind == ProgressionQuestKind.ClassJobRole
-                    ? includeClassJobRole
-                    : includeGeneralSideQuests)
+                .Where(candidate => candidate.Kind switch
+                {
+                    ProgressionQuestKind.MainScenario => includeMainScenario,
+                    ProgressionQuestKind.ClassJobRole => includeClassJobRole,
+                    _ => includeGeneralSideQuests,
+                })
                 .ToArray();
 
         public ProgressionQuestProviderObservation ObserveQuest(string questId) => new(

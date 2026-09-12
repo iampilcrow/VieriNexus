@@ -39,6 +39,8 @@ VieriCodex 1.12.2.82 incorporates Questionable 15.756.2.5's current Beastmaster 
 
 The merged acceptance path keeps `CodexActivityPolicy.SelectAvailableQuestJobs`, refreshes the live gearset list, rejects an empty eligible result before indexing it, and then uses the upstream candidate and missing-gearset failure flow. This is a required regression boundary for future updates.
 
+Nexus 0.1.0.57 removes MSQ selection from that protected fork boundary. Main Scenario quests are classified from current game data, prioritized after already-accepted work and before other new quest kinds, pinned as exact durable Nexus tasks, and delegated through the same stock-compatible one-quest contract. VieriCodex configuration migration now preserves every activity/Atlas preference and the complete saved queue definition transactionally; a matching current-job queue step becomes fresh Nexus desired state without replaying the predecessor's runtime pointer.
+
 ## Exact remaining route delta
 
 After ignoring line endings, BOMs, and formatting-only changes, only five Vieri route corrections remain semantically different from stock 15.756.2.5:
@@ -50,6 +52,8 @@ After ignoring line endings, BOMs, and formatting-only changes, only five Vieri 
 5. Island Sanctuary `The Land, Wind, and Sea`: do not mount for the indoor accept/turn-in points.
 
 They are isolated from all Vieri UI and automation code as commit `b9bbe51d2` on branch `nexus-route-fixes-15.756.2.5`, and the complete 4,337-route semantic validator passes there. This is the finite upstream contribution set; Nexus will not copy Questionable's route library or mutate another plugin's downloaded bundle.
+
+The set was rechecked against upstream `new-main` at `5a751c819` on 2026-09-12. All five corrections are still absent and the diff remains exactly those five files. The repository's contribution policy requires explicit human review and per-action approval before a branch may be rebased/pushed or a pull request opened, so the already-isolated commit remains the reviewable upstream-ready artifact until that approval is given.
 
 ## Nexus-owned solo-duty handoff
 

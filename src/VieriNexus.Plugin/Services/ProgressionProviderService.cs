@@ -61,6 +61,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private long eligibleQuestCacheExpiresAt;
     private uint eligibleQuestCacheClassJob;
     private int eligibleQuestCacheLevel;
+    private bool eligibleQuestCacheIncludesMainScenario;
     private bool eligibleQuestCacheIncludesClassJobRole;
     private bool eligibleQuestCacheIncludesSideQuests;
     private string? eligibleQuestCacheProvider;
@@ -142,9 +143,10 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     IReadOnlyList<ProgressionQuestCandidate> IProgressionQuestProvider.EligibleQuests(
         uint classJobId,
         int currentLevel,
+        bool includeMainScenario,
         bool includeClassJobRole,
         bool includeGeneralSideQuests) => EligibleQuests(
-            classJobId, currentLevel, includeClassJobRole, includeGeneralSideQuests);
+            classJobId, currentLevel, includeMainScenario, includeClassJobRole, includeGeneralSideQuests);
 
     ProgressionQuestProviderObservation IProgressionQuestProvider.ObserveQuest(string questId) =>
         ObserveQuest(questId);
@@ -219,16 +221,18 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     internal IReadOnlyList<ProgressionQuestCandidate> EligibleQuests(
         uint classJobId,
         int currentLevel,
+        bool includeMainScenario,
         bool includeClassJobRole,
         bool includeGeneralSideQuests)
     {
         ProgressionProviderSelection selection = Snapshot().Questing;
-        if (!selection.IsReady || !includeClassJobRole && !includeGeneralSideQuests)
+        if (!selection.IsReady || !includeMainScenario && !includeClassJobRole && !includeGeneralSideQuests)
             return [];
 
         long now = Environment.TickCount64;
         string selectedProvider = selection.Selected!.Id.Value;
         if (eligibleQuestCacheClassJob == classJobId && eligibleQuestCacheLevel == currentLevel &&
+            eligibleQuestCacheIncludesMainScenario == includeMainScenario &&
             eligibleQuestCacheIncludesClassJobRole == includeClassJobRole &&
             eligibleQuestCacheIncludesSideQuests == includeGeneralSideQuests &&
             eligibleQuestCacheProvider == selectedProvider && now < eligibleQuestCacheExpiresAt)
@@ -258,9 +262,11 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 currentChapters,
                 allClassJobRoleChapters)))
             .Where(item => item.Kind == ProgressionQuestKind.ClassJobRole && includeClassJobRole ||
+                           item.Kind == ProgressionQuestKind.MainScenario && includeMainScenario ||
                            item.Kind == ProgressionQuestKind.GeneralSideQuest && includeGeneralSideQuests)
             .Select(item => (item.Quest, Kind: item.Kind!.Value))
-            .OrderBy(item => item.Kind)
+            .OrderBy(item => item.Kind == ProgressionQuestKind.MainScenario ? 0 :
+                item.Kind == ProgressionQuestKind.ClassJobRole ? 1 : 2)
             .ThenBy(item => item.Quest.ClassJobLevel[0])
             .ThenBy(item => item.Quest.SortKey)
             .ThenBy(item => item.Quest.RowId);
@@ -301,6 +307,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
         eligibleQuestCacheClassJob = classJobId;
         eligibleQuestCacheLevel = currentLevel;
+        eligibleQuestCacheIncludesMainScenario = includeMainScenario;
         eligibleQuestCacheIncludesClassJobRole = includeClassJobRole;
         eligibleQuestCacheIncludesSideQuests = includeGeneralSideQuests;
         eligibleQuestCacheProvider = selectedProvider;
@@ -394,6 +401,10 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         uint questId = quest.RowId & 0xFFFF;
         if (aetherCurrentQuestIds.Contains(questId))
             return null;
+        if (isMainScenario)
+            return QuestAllowsClassJob(quest, classJobId)
+                ? ProgressionQuestKind.MainScenario
+                : null;
         bool sideQuest = GeneralSideQuestPolicy.IsGeneralSideQuest(
             questId,
             isMainScenario,
@@ -516,6 +527,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             {
                 ProgressionQuestKind.GeneralSideQuest => "general side quest",
                 ProgressionQuestKind.AetherCurrent => "Aether Current quest",
+                ProgressionQuestKind.MainScenario => "Main Scenario quest",
                 _ => "Class / Job / Role quest",
             };
             if (accepted)

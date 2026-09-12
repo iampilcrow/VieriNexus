@@ -34,6 +34,7 @@ public enum ProgressionQuestKind
     ClassJobRole,
     GeneralSideQuest,
     AetherCurrent,
+    MainScenario,
 }
 
 public sealed record ProgressionQuestCandidate(
@@ -64,6 +65,7 @@ public interface IProgressionQuestProvider
     IReadOnlyList<ProgressionQuestCandidate> EligibleQuests(
         uint classJobId,
         int currentLevel,
+        bool includeMainScenario,
         bool includeClassJobRole,
         bool includeGeneralSideQuests);
 
@@ -141,7 +143,8 @@ public sealed record ReachJobLevelDesiredState(
     bool AllowHuntingLog,
     bool AllowSideQuests,
     bool AllowDuties,
-    int MinimumGilReserve);
+    int MinimumGilReserve,
+    bool AllowMainScenario = false);
 
 public sealed record ProgressionDutyTaskPayload(
     uint TerritoryId,
@@ -437,10 +440,10 @@ public sealed class ProgressionExecutionCoordinator
             return new(false, "Wait for the current character to finish loading.");
         if (!plan.IsValid || plan.IsSatisfied)
             return new(false, plan.Summary);
-        bool questEnabled = (draft.AllowJobQuests || draft.AllowSideQuests) && questProvider is not null;
+        bool questEnabled = (draft.AllowMainScenario || draft.AllowJobQuests || draft.AllowSideQuests) && questProvider is not null;
         bool huntingEnabled = draft.AllowHuntingLog && huntingProvider is not null;
         if (!draft.AllowDuties && !questEnabled && !huntingEnabled)
-            return new(false, "Enable Class/Job/Role quests, Hunting Log, general side quests, or Duties with a compatible provider before starting.");
+            return new(false, "Enable Main Scenario, Class/Job/Role, Hunting Log, general side quests, or Duties with a compatible provider before starting.");
         if (State?.Goal.Status is GoalStatus.Active)
             return new(false, "A Progression goal is already active.");
         if (State?.Goal.Status is GoalStatus.Paused or GoalStatus.Blocked)
@@ -452,6 +455,7 @@ public sealed class ProgressionExecutionCoordinator
         ProgressionQuestCandidate? quest = SelectQuest(
             draft.ClassJobId,
             draft.CurrentLevel,
+            draft.AllowMainScenario,
             draft.AllowJobQuests,
             draft.AllowSideQuests);
         ProgressionHuntingTargetCandidate? hunt = SelectHuntingTarget(
@@ -470,7 +474,8 @@ public sealed class ProgressionExecutionCoordinator
             draft.AllowHuntingLog,
             draft.AllowSideQuests,
             draft.AllowDuties,
-            draft.MinimumGilReserve);
+            draft.MinimumGilReserve,
+            draft.AllowMainScenario);
         NexusGoal goal = new(
             goalId,
             ReachJobLevelKind,
@@ -1060,6 +1065,7 @@ public sealed class ProgressionExecutionCoordinator
         ProgressionQuestCandidate? quest = SelectQuest(
             desired.ClassJobId,
             currentLevel,
+            desired.AllowMainScenario,
             desired.AllowJobQuests,
             desired.AllowSideQuests);
         if (quest is not null)
@@ -1083,7 +1089,7 @@ public sealed class ProgressionExecutionCoordinator
 
     private ProgressionActionResult BlockNoActivity(ReachJobLevelDesiredState desired)
     {
-        bool anyQuest = desired.AllowJobQuests || desired.AllowSideQuests;
+        bool anyQuest = desired.AllowMainScenario || desired.AllowJobQuests || desired.AllowSideQuests;
         bool anyOpenWorld = anyQuest || desired.AllowHuntingLog;
         string reason = anyOpenWorld && desired.AllowDuties
             ? "No eligible supported quest, Hunting Log target, or unlocked leveling duty is currently available."
@@ -1097,11 +1103,13 @@ public sealed class ProgressionExecutionCoordinator
     private ProgressionQuestCandidate? SelectQuest(
         uint classJobId,
         int currentLevel,
+        bool includeMainScenario,
         bool includeClassJobRole,
         bool includeGeneralSideQuests) =>
-        questProvider?.EligibleQuests(classJobId, currentLevel, includeClassJobRole, includeGeneralSideQuests)
+        questProvider?.EligibleQuests(classJobId, currentLevel, includeMainScenario, includeClassJobRole, includeGeneralSideQuests)
             .OrderByDescending(candidate => candidate.IsAccepted)
-            .ThenBy(candidate => candidate.Kind)
+            .ThenBy(candidate => candidate.Kind == ProgressionQuestKind.MainScenario ? 0 :
+                candidate.Kind == ProgressionQuestKind.ClassJobRole ? 1 : 2)
             .ThenBy(candidate => candidate.RequiredLevel)
             .ThenBy(candidate => candidate.QuestId, StringComparer.Ordinal)
             .FirstOrDefault();
@@ -1566,6 +1574,7 @@ public sealed class ProgressionExecutionCoordinator
         ProgressionQuestKind.ClassJobRole => "Class/Job/Role quest",
         ProgressionQuestKind.GeneralSideQuest => "general side quest",
         ProgressionQuestKind.AetherCurrent => "Aether Current quest",
+        ProgressionQuestKind.MainScenario => "Main Scenario quest",
         _ => "quest",
     };
 
