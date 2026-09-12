@@ -53,6 +53,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly AutoDutyMigrationService autoDutyMigration;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
+    private readonly SoloDutyRotationRuntimeService soloDutyRotation;
     private readonly ProgressAtlasService progressAtlas;
     private readonly ProgressAtlasActionService progressAtlasActions;
     private readonly NexusHuntingLogService huntingLog;
@@ -205,6 +206,13 @@ public sealed class Plugin : IDalamudPlugin
             huntingLog,
             DutyState,
             Log);
+        soloDutyRotation = new SoloDutyRotationRuntimeService(
+            PluginInterface,
+            progressionProviders,
+            progressionRuntime,
+            progressAtlasActions,
+            TargetManager,
+            Log);
         gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
         maintenanceRuntime = new NexusMaintenanceRuntimeService(
             resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager,
@@ -225,8 +233,8 @@ public sealed class Plugin : IDalamudPlugin
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
             navigationLibrary, navigationActivation, navigationDiagnostics,
-            navigationRuntime, progressionProviders, progressionRuntime, progressAtlas,
-            progressAtlasActions,
+            navigationRuntime, progressionProviders, progressionRuntime, soloDutyRotation,
+            progressAtlas, progressAtlasActions,
             gearShoppingRuntime, maintenanceRuntime,
             moduleRegistry, worldStore, logo);
         windows.AddWindow(mainWindow);
@@ -289,6 +297,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        soloDutyRotation.Dispose();
         progressAtlasActions.Shutdown();
         huntingLog.Shutdown();
         maintenanceRuntime.Shutdown();
@@ -327,11 +336,13 @@ public sealed class Plugin : IDalamudPlugin
         gearShoppingRuntime.Update();
         maintenanceRuntime.Update(DateTimeOffset.UtcNow);
         strikingDummyTravel.Update(DateTimeOffset.UtcNow);
+        bool isInDuty = Condition[ConditionFlag.BoundByDuty] ||
+                        Condition[ConditionFlag.BoundByDuty56] ||
+                        Condition[ConditionFlag.BoundByDuty95];
         progressionRuntime.Update(
             worldStore.Current.Character.Value,
-            Condition[ConditionFlag.BoundByDuty] ||
-            Condition[ConditionFlag.BoundByDuty56] ||
-            Condition[ConditionFlag.BoundByDuty95]);
+            isInDuty);
+        soloDutyRotation.Update(DateTimeOffset.UtcNow, isInDuty);
 
         if (!ClientState.IsLoggedIn)
         {

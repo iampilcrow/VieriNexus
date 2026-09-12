@@ -40,4 +40,24 @@ public sealed class SoloDutyCombatPolicyTests
     {
         Assert.Equal("EncounterProvider", SoloDutyCombatPolicy.MovementOwner);
     }
+
+    [Theory]
+    [InlineData(true, true, true, true, true)]
+    [InlineData(false, true, true, true, false)]
+    [InlineData(true, false, true, true, false)]
+    [InlineData(true, true, false, true, false)]
+    [InlineData(true, true, true, false, false)]
+    public void NexusOnlyOwnsRotationForItsStockQuestionableSoloDuty(
+        bool stockQuestionableSelected,
+        bool nexusQuestActive,
+        bool isInDuty,
+        bool rotationProviderReady,
+        bool expected)
+    {
+        Assert.Equal(expected, SoloDutyCombatPolicy.ShouldOwnRotation(
+            stockQuestionableSelected,
+            nexusQuestActive,
+            isInDuty,
+            rotationProviderReady));
+    }
 }

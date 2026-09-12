@@ -77,6 +77,8 @@ internal sealed class ProgressAtlasActionService
         objective?.Title ?? "Progress Atlas",
         message);
 
+    internal bool IsQuestExecutionActive => phase == Phase.Questing;
+
     internal int RemainingAetherytes => atlas.AetheryteTargets.Count(target =>
         !ProgressAtlasService.IsAetheryteUnlocked(target.Id) && IsTerritoryAccessible(target.TerritoryId));
 

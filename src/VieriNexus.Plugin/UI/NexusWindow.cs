@@ -41,6 +41,7 @@ internal sealed class NexusWindow : Window
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
+    private readonly SoloDutyRotationRuntimeService soloDutyRotation;
     private readonly ProgressAtlasService progressAtlas;
     private readonly ProgressAtlasActionService progressAtlasActions;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
@@ -80,6 +81,7 @@ internal sealed class NexusWindow : Window
         NavigationRouteRuntimeService navigationRuntime,
         ProgressionProviderService progressionProviders,
         ProgressionRuntimeService progressionRuntime,
+        SoloDutyRotationRuntimeService soloDutyRotation,
         ProgressAtlasService progressAtlas,
         ProgressAtlasActionService progressAtlasActions,
         GearShoppingRuntimeService gearShoppingRuntime,
@@ -100,6 +102,7 @@ internal sealed class NexusWindow : Window
         this.navigationRuntime = navigationRuntime;
         this.progressionProviders = progressionProviders;
         this.progressionRuntime = progressionRuntime;
+        this.soloDutyRotation = soloDutyRotation;
         this.progressAtlas = progressAtlas;
         this.progressAtlasActions = progressAtlasActions;
         this.gearShoppingRuntime = gearShoppingRuntime;
@@ -2209,6 +2212,9 @@ internal sealed class NexusWindow : Window
             TextWrapped(NexusTheme.Muted, activeTask.StatusDetail ?? activeTask.Reason);
             ImGui.TextUnformatted($"Task state: {activeTask.Status} • Provider: {activeTask.Provider?.Value ?? "Nexus"}");
         }
+        SoloDutyRotationRuntimeStatus rotation = soloDutyRotation.Status;
+        if (rotation.IsRelevant)
+            TextWrapped(rotation.IsActive ? NexusTheme.Green : NexusTheme.Amber, rotation.Message);
 
         if (state.Goal.Status == GoalStatus.Active)
         {

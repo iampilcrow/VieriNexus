@@ -15,6 +15,13 @@ public static class SoloDutyCombatPolicy
     public static string FallbackRotationTargetingMode => "NearestHostile";
     public static string MovementOwner => "EncounterProvider";
 
+    public static bool ShouldOwnRotation(
+        bool stockQuestionableSelected,
+        bool nexusQuestActive,
+        bool isInDuty,
+        bool rotationProviderReady) =>
+        stockQuestionableSelected && nexusQuestActive && isInDuty && rotationProviderReady;
+
     public static bool ShouldEnableFallback(bool hasUsableHostileTarget, TimeSpan missingFor, bool retryAllowed) =>
         !hasUsableHostileTarget && retryAllowed && missingFor >= TargetFallbackDelay;
 

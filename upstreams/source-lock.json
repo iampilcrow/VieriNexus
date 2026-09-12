@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAtUtc": "2026-09-12T11:58:48Z",
+  "capturedAtUtc": "2026-09-12T14:46:10Z",
   "migrationSources": [
     {
       "name": "VieriAutoDuty",
@@ -26,9 +26,9 @@
     {
       "name": "VieriCodex",
       "repository": "https://github.com/iampilcrow/VieriCodex.git",
-      "commit": "1bc749b1e6f04519608b04caaca21c882e28412f",
+      "commit": "173d6ad599d2c057e0f88cea76ed302a7746bf32",
       "upstreamRepository": "https://github.com/PunishXIV/Questionable.git",
-      "upstreamCommit": "f1b6da5ee5a9509c2f955f1fa93e73d5bfc4ffb8"
+      "upstreamCommit": "e21fec6934db687829b9530394a709a5c1eb1d52"
     },
     {
       "name": "VieriDeck",

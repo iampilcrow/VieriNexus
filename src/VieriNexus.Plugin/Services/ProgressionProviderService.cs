@@ -176,6 +176,9 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
     internal bool IsGearReadinessReady => gearExecution.IsReady;
 
+    internal bool IsStockQuestionableSelected =>
+        Snapshot().Questing.Selected?.Id == QuestionableProviderId;
+
     internal bool IsGearShoppingPreviewReady => gearCatalog.IsAvailable;
 
     internal bool IsGearShoppingExecutionReady => gearExecution.IsReady;

@@ -40,6 +40,9 @@ internal sealed class ProgressionRuntimeService
 
     internal ProgressionGoalState? State => coordinator?.State;
 
+    internal bool IsQuestExecutionActive =>
+        State is { Goal.Status: GoalStatus.Active, ActiveTask.Kind.Value: "vieri.quest.run-one/v1" };
+
     internal string? LoadError { get; private set; }
 
     internal IReadOnlyList<ProgressionDutyCandidate> EligibleDuties(int currentLevel) =>
