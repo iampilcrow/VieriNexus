@@ -6,7 +6,7 @@ namespace VieriNexus;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 6;
+    public int Version { get; set; } = 7;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
@@ -16,6 +16,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool LockOperationsOverlay { get; set; }
     public bool OperationsOverlayTransparent { get; set; }
     public bool ShowOperationsStatus { get; set; } = true;
+    public bool ManageQuestionableRouteCorrections { get; set; } = true;
     public Guid? AppliedOperationsReceiptId { get; set; }
     public ulong AppliedOperationsCharacterId { get; set; }
     public Dictionary<string, CharacterConfiguration> Characters { get; set; } = new(StringComparer.Ordinal);
@@ -35,7 +36,7 @@ public sealed class Configuration : IPluginConfiguration
             character.Progression ??= new ProgressionDraftConfiguration();
             character.Atlas ??= new AtlasAutomationConfiguration();
         }
-        Version = 6;
+        Version = 7;
     }
 
     public CharacterConfiguration ForCharacter(string key)

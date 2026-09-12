@@ -56,6 +56,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly CodexMigrationService codexMigration;
     private readonly CommandCenterMigrationService commandCenterMigration;
     private readonly CommandCenterCatalogService commandCenterCatalog;
+    private readonly QuestionableCompatibilityService questionableCompatibility;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
     private readonly SoloDutyRotationRuntimeService soloDutyRotation;
@@ -112,6 +113,12 @@ public sealed class Plugin : IDalamudPlugin
             PluginInterface.GetPluginConfigDirectory(),
             commandCenterImport.Imported ? commandCenterImport.ReceiptId : null);
         commandCenterCatalog = new CommandCenterCatalogService(PluginInterface, CommandManager, Log);
+        questionableCompatibility = new QuestionableCompatibilityService(
+            PluginInterface,
+            dependencyService,
+            CommandManager,
+            Log,
+            () => Configuration.ManageQuestionableRouteCorrections);
         LegacyImportState navigationImport = Configuration.ForLegacyImport("navplotter");
         var navigationMigration = new NavigationMigrationService(
             legacyInventory,
@@ -211,7 +218,7 @@ public sealed class Plugin : IDalamudPlugin
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
         progressAtlas = new ProgressAtlasService(DataManager, ClientState, PlayerState);
         progressionProviders = new ProgressionProviderService(
-            PluginInterface, dependencyService, DataManager, PlayerState, ObjectTable,
+            PluginInterface, questionableCompatibility, dependencyService, DataManager, PlayerState, ObjectTable,
             ClientState, Condition, GameGui, navigationLibrary, suiteTravelProvider);
         progressAtlasActions = new ProgressAtlasActionService(
             progressAtlas,
@@ -268,7 +275,7 @@ public sealed class Plugin : IDalamudPlugin
         var logoPath = Path.Combine(PluginInterface.AssemblyLocation.DirectoryName!, "Assets", "VieriNexusLogo.png");
         ISharedImmediateTexture logo = TextureProvider.GetFromFile(logoPath);
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
-            codexMigration, commandCenterMigration, commandCenterCatalog,
+            codexMigration, commandCenterMigration, commandCenterCatalog, questionableCompatibility,
             navigationLibrary, navigationActivation, navigationDiagnostics,
             navigationRuntime, progressionProviders, progressionRuntime, soloDutyRotation,
             progressAtlas, progressAtlasActions,
@@ -394,6 +401,7 @@ public sealed class Plugin : IDalamudPlugin
         navigationRuntime.Update(now);
         navigationRecovery.Update(now);
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
+        questionableCompatibility.Update(DateTimeOffset.UtcNow);
         progressionProviders.UpdateGearAdapter();
         progressAtlas.Update(DateTimeOffset.UtcNow);
         progressAtlasActions.Update(DateTimeOffset.UtcNow);

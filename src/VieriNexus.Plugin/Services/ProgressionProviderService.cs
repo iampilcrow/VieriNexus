@@ -39,6 +39,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly ICallGateSubscriber<string, bool> codexIsQuestAccepted;
     private readonly ICallGateSubscriber<string, bool> codexStop;
     private readonly ICallGateSubscriber<bool> questionableIsRunning;
+    private readonly QuestionableCompatibilityService questionableCompatibility;
     private readonly ICallGateSubscriber<string?> questionableCurrentQuest;
     private readonly ICallGateSubscriber<string, bool> questionableStartSingleQuest;
     private readonly ICallGateSubscriber<string, bool> questionableIsQuestLocked;
@@ -76,6 +77,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
     internal ProgressionProviderService(
         IDalamudPluginInterface pluginInterface,
+        QuestionableCompatibilityService questionableCompatibility,
         DependencyService dependencies,
         IDataManager dataManager,
         IPlayerState playerState,
@@ -103,6 +105,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         codexIsReadyToAcceptQuest = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsReadyToAcceptQuest");
         codexIsQuestAccepted = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsQuestAccepted");
         codexStop = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.Stop");
+        this.questionableCompatibility = questionableCompatibility;
         questionableIsRunning = pluginInterface.GetIpcSubscriber<bool>("Questionable.IsRunning");
         questionableCurrentQuest = pluginInterface.GetIpcSubscriber<string?>("Questionable.GetCurrentQuestId");
         questionableStartSingleQuest = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.StartSingleQuest");
@@ -520,7 +523,11 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 return new(false, false,
                     $"{selection.Selected!.DisplayName} is already running work Nexus does not own. Stop it before starting this goal.");
 
-            bool accepted = selection.Selected!.Id == CodexProviderId
+            if (selection.Selected!.Id == QuestionableProviderId && !questionableCompatibility.CanRun(quest.QuestId))
+                return new(false, false,
+                    $"Nexus is still preparing the protected Questionable route for {quest.Name}. It will retry after the compatibility pack is active.");
+
+            bool accepted = selection.Selected.Id == CodexProviderId
                 ? codexStartSingleQuest.InvokeFunc(quest.QuestId)
                 : questionableStartSingleQuest.InvokeFunc(quest.QuestId);
             string kind = quest.Kind switch

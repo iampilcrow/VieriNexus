@@ -39,6 +39,7 @@ internal sealed class NexusWindow : Window
     private readonly CodexMigrationService codexMigration;
     private readonly CommandCenterMigrationService commandCenterMigration;
     private readonly CommandCenterCatalogService commandCenterCatalog;
+    private readonly QuestionableCompatibilityService questionableCompatibility;
     private readonly NavigationLibraryService navigationLibrary;
     private readonly NavigationActivationService navigationActivation;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
@@ -76,6 +77,8 @@ internal sealed class NexusWindow : Window
     private string commandCenterCustomCommand = string.Empty;
     private string commandCenterCustomDescription = string.Empty;
     private string commandCenterMessage = string.Empty;
+    private string questionableCompatibilityMessage = string.Empty;
+    private bool confirmQuestionableCompatibilityRollback;
 
     internal NexusWindow(
         Plugin plugin,
@@ -86,6 +89,7 @@ internal sealed class NexusWindow : Window
         CodexMigrationService codexMigration,
         CommandCenterMigrationService commandCenterMigration,
         CommandCenterCatalogService commandCenterCatalog,
+        QuestionableCompatibilityService questionableCompatibility,
         NavigationLibraryService navigationLibrary,
         NavigationActivationService navigationActivation,
         NavigationDiagnosticsService navigationDiagnostics,
@@ -110,6 +114,7 @@ internal sealed class NexusWindow : Window
         this.codexMigration = codexMigration;
         this.commandCenterMigration = commandCenterMigration;
         this.commandCenterCatalog = commandCenterCatalog;
+        this.questionableCompatibility = questionableCompatibility;
         this.navigationLibrary = navigationLibrary;
         this.navigationActivation = navigationActivation;
         this.navigationDiagnostics = navigationDiagnostics;
@@ -397,6 +402,7 @@ internal sealed class NexusWindow : Window
         ImGui.Spacing();
 
         DrawMigrationQuickStart();
+        DrawQuestionableCompatibility();
 
         foreach (var source in legacyInventory.Scan())
         {
@@ -655,6 +661,80 @@ internal sealed class NexusWindow : Window
             ? "Verified staging plus a separate Nexus working copy • source configuration remains unchanged • only native Nexus actions can use it"
             : "Import creates an exact source backup and does not enable duplicate automation.");
         EndPanel();
+    }
+
+    private void DrawQuestionableCompatibility()
+    {
+        QuestionableCompatibilityStatus status = questionableCompatibility.Status;
+        Vector4 color = status.Health switch
+        {
+            QuestionableCompatibilityHealth.Active or QuestionableCompatibilityHealth.Native => NexusTheme.Green,
+            QuestionableCompatibilityHealth.Conflict or QuestionableCompatibilityHealth.Failed => NexusTheme.Red,
+            QuestionableCompatibilityHealth.Checking => NexusTheme.Cyan,
+            _ => NexusTheme.Amber,
+        };
+
+        BeginAutoPanel("QUESTIONABLE COMPATIBILITY");
+        NexusTheme.StatusDot(color, status.Health switch
+        {
+            QuestionableCompatibilityHealth.Active => "Protected stock Questionable routes ready",
+            QuestionableCompatibilityHealth.Native => "Stock Questionable already contains every correction",
+            QuestionableCompatibilityHealth.Conflict => "A protected route changed unexpectedly",
+            QuestionableCompatibilityHealth.Failed => "Compatibility preparation failed safely",
+            QuestionableCompatibilityHealth.Disabled => "Compatibility management disabled",
+            _ => "Preparing protected stock Questionable routes",
+        });
+        TextWrapped(NexusTheme.Muted, status.Message);
+        TextWrapped(NexusTheme.Muted,
+            "Nexus manages only five exact quest-route corrections. Every other route and all quest execution remain stock Questionable-owned and update normally.");
+
+        if (!plugin.Configuration.ManageQuestionableRouteCorrections)
+        {
+            if (ImGui.Button("Enable automatic route protection"))
+            {
+                plugin.Configuration.ManageQuestionableRouteCorrections = true;
+                plugin.Save();
+                questionableCompatibility.RequestRecheck();
+                questionableCompatibilityMessage = "Automatic protection enabled; Nexus will verify the current stock bundle while Questionable is idle.";
+            }
+        }
+        else if (status.Health == QuestionableCompatibilityHealth.Active)
+        {
+            if (!confirmQuestionableCompatibilityRollback)
+            {
+                if (ImGui.Button("Restore stock routes only..."))
+                    confirmQuestionableCompatibilityRollback = true;
+            }
+            else
+            {
+                ImGui.TextColored(NexusTheme.Amber,
+                    "Restore the exact pre-Nexus bundle and stop managing these five corrections?");
+                if (ImGui.Button("Confirm restore stock routes"))
+                {
+                    QuestionableCompatibilityInstallResult result = questionableCompatibility.RestoreOfficialBundle();
+                    questionableCompatibilityMessage = result.Message;
+                    if (result.State != QuestionableCompatibilityInstallState.Failed &&
+                        result.State != QuestionableCompatibilityInstallState.Conflict)
+                    {
+                        plugin.Configuration.ManageQuestionableRouteCorrections = false;
+                        plugin.Save();
+                    }
+                    confirmQuestionableCompatibilityRollback = false;
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel"))
+                    confirmQuestionableCompatibilityRollback = false;
+            }
+        }
+        else if (status.Health is QuestionableCompatibilityHealth.Conflict or QuestionableCompatibilityHealth.Failed)
+        {
+            if (ImGui.Button("Check current Questionable bundle again"))
+                questionableCompatibility.RequestRecheck();
+        }
+
+        if (!string.IsNullOrWhiteSpace(questionableCompatibilityMessage))
+            TextWrapped(NexusTheme.Cyan, questionableCompatibilityMessage);
+        EndAutoPanel();
     }
 
     private void DrawCodexMigration()
@@ -3044,6 +3124,12 @@ internal sealed class NexusWindow : Window
         ImGui.TableNextColumn();
         DrawProgressionProvider("DUTIES", providers.Duties);
         ImGui.EndTable();
+        QuestionableCompatibilityStatus compatibility = questionableCompatibility.Status;
+        Vector4 compatibilityColor = compatibility.IsReady ? NexusTheme.Green :
+            compatibility.Health is QuestionableCompatibilityHealth.Conflict or QuestionableCompatibilityHealth.Failed
+                ? NexusTheme.Red
+                : NexusTheme.Muted;
+        TextWrapped(compatibilityColor, $"Questionable route protection: {compatibility.Message}");
     }
 
     private void DrawProgressionProvider(string title, ProgressionProviderSelection selection)

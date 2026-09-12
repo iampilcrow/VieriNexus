@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAtUtc": "2026-09-12T14:46:10Z",
+  "capturedAtUtc": "2026-09-12T20:30:00Z",
   "migrationSources": [
     {
       "name": "VieriAutoDuty",
@@ -67,6 +67,14 @@
     }
   ],
   "verifiedExternalProviders": [
+    {
+      "name": "Questionable",
+      "internalName": "Questionable",
+      "version": "15.756.2.5",
+      "repository": "https://github.com/PunishXIV/Questionable.git",
+      "commit": "5a751c81969e8383c3ab64ee066b4d7cbffb4550",
+      "compatibility": "The permanent single-quest IPC contract remains available. Official path-data version 1789230462 (SHA-256 FCBA23F671852C996650CE83417E9F52154564976AB1BFB47811416D3258596A) still lacks five finite Vieri corrections; Nexus layers only those exact entries transactionally and leaves all other stock data and execution unchanged."
+    },
     {
       "name": "Boss Mod",
       "internalName": "BossMod",

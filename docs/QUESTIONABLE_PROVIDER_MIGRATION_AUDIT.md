@@ -41,6 +41,8 @@ The merged acceptance path keeps `CodexActivityPolicy.SelectAvailableQuestJobs`,
 
 Nexus 0.1.0.57 removes MSQ selection from that protected fork boundary. Main Scenario quests are classified from current game data, prioritized after already-accepted work and before other new quest kinds, pinned as exact durable Nexus tasks, and delegated through the same stock-compatible one-quest contract. VieriCodex configuration migration now preserves every activity/Atlas preference and the complete saved queue definition transactionally; a matching current-job queue step becomes fresh Nexus desired state without replaying the predecessor's runtime pointer.
 
+Nexus 0.1.0.58 closes the remaining local route boundary without an upstream submission. It layers only the five exact corrections below onto Questionable's complete downloaded route bundle, retains an exact hash-addressed official backup and receipt, verifies the result before atomic replacement, and asks stock Questionable to reload only after its public activity contract confirms it is idle. Nexus blocks only an affected quest until that corrected bundle is actually loaded. Every other quest and all quest execution remain stock Questionable-owned.
+
 ## Exact remaining route delta
 
 After ignoring line endings, BOMs, and formatting-only changes, only five Vieri route corrections remain semantically different from stock 15.756.2.5:
@@ -51,9 +53,11 @@ After ignoring line endings, BOMs, and formatting-only changes, only five Vieri 
 4. Sage `Sage's Focus`: retain flight on both resumable approaches to the solo duty.
 5. Island Sanctuary `The Land, Wind, and Sea`: do not mount for the indoor accept/turn-in points.
 
-They are isolated from all Vieri UI and automation code as commit `b9bbe51d2` on branch `nexus-route-fixes-15.756.2.5`, and the complete 4,337-route semantic validator passes there. This is the finite upstream contribution set; Nexus will not copy Questionable's route library or mutate another plugin's downloaded bundle.
+They were originally isolated from all Vieri UI and automation code as commit `b9bbe51d2` on branch `nexus-route-fixes-15.756.2.5`, where the complete 4,337-route semantic validator passes. That branch is retained only as provenance and will not be pushed or submitted upstream at the user's direction.
 
-The set was rechecked against upstream `new-main` at `5a751c819` on 2026-09-12. All five corrections are still absent and the diff remains exactly those five files. The repository's contribution policy requires explicit human review and per-action approval before a branch may be rebased/pushed or a pull request opened, so the already-isolated commit remains the reviewable upstream-ready artifact until that approval is given.
+The set was rechecked against upstream `new-main` at `5a751c819` and the independently updated official route bundle data version `1789230462` (SHA-256 `FCBA23F671852C996650CE83417E9F52154564976AB1BFB47811416D3258596A`) on 2026-09-12. All five corrections are still absent. The Nexus compatibility pack locates each route by exact quest ID, validates the expected sequence, object, territory, interaction, and old value, then edits only that ZIP entry. A missing route, duplicate route, unexpected shape, or changed value is a conflict: the whole bundle is left untouched and the affected quests remain blocked. When stock data already contains all corrections, Nexus recognizes it as native and performs no write.
+
+Questionable updates remain automatic. A changed bundle immediately revokes readiness, is rechecked while Questionable is disabled or confirmed idle, and receives the same guarded layer only when still required. Rollback restores the byte-identical official bundle only if both current and backup hashes still match the receipt. Nexus never changes Questionable's DLL, settings, provider contract, or unrelated route entries.
 
 ## Nexus-owned solo-duty handoff
 
