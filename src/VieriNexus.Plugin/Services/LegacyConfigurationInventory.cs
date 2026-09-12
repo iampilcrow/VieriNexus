@@ -18,7 +18,7 @@ internal sealed class LegacyConfigurationInventory
         ("automarket", "VieriAutoMarket", "Market", ["VieriAutoMarket.json", "VieriAutoMarket"]),
         ("avarice", "VieriAvarice", "Positional Guidance", ["VieriAvarice.json", "VieriAvarice"]),
         ("codex", "VieriCodex", "Progression and Questing", ["VieriCodex.json", "VieriCodex"]),
-        ("deck", "VieriDeck", "Command Center", ["VieriDeck.json", "VieriDeck"]),
+        ("deck", "VieriDeck", "Plugins", ["VieriDeck.json", "VieriDeck"]),
         ("delvui", "VieriDelvUI", "Custom UI", ["VieriDelvUI.json", "VieriDelvUI"]),
         ("link", "VieriLink", "Communications", ["VieriLink.json", "VieriLink"]),
         ("rotation", "VieriRotationHelper", "Rotation Engine", ["VieriRotationHelper.json", "VieriRotationHelper"]),

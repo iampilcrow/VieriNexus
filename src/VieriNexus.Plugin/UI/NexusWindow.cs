@@ -19,7 +19,7 @@ internal sealed class NexusWindow : Window
         ("OVERVIEW", "Progression", "Progression"),
         ("OVERVIEW", "Progress Atlas", "Atlas"),
         ("OVERVIEW", "Queue", "Queue"),
-        ("OVERVIEW", "Command Center", "Commands"),
+        ("OVERVIEW", "Plugins", "Plugins"),
         ("MODULES", "Combat", "Combat"),
         ("MODULES", "Gear & Inventory", "Gear"),
         ("MODULES", "Routes & Navigation", "Routes"),
@@ -72,7 +72,6 @@ internal sealed class NexusWindow : Window
     private NexusItemTransactionPreview? protectedSalePreview;
     private string migrationQuickStartMessage = string.Empty;
     private string commandCenterSearch = string.Empty;
-    private string commandCenterSelectedId = string.Empty;
     private string commandCenterCustomCommand = string.Empty;
     private string commandCenterCustomDescription = string.Empty;
     private string commandCenterMessage = string.Empty;
@@ -134,6 +133,8 @@ internal sealed class NexusWindow : Window
     public override void PreDraw()
     {
         NexusTheme.Push();
+        if (plugin.Configuration.SelectedPage == "Command Center")
+            plugin.Configuration.SelectedPage = "Plugins";
         var setupLocked = !plugin.Configuration.FirstRunComplete || !dependencies.RequiredReady;
         if (setupLocked && plugin.Configuration.SelectedPage is not ("Dependencies" or "Migration" or "Settings"))
             plugin.Configuration.SelectedPage = "Dependencies";
@@ -208,7 +209,8 @@ internal sealed class NexusWindow : Window
             case "Progress Atlas": DrawProgressAtlas(); break;
             case "Gear & Inventory": DrawGearAndInventory(); break;
             case "Routes & Navigation": DrawRoutesAndNavigation(); break;
-            case "Command Center": DrawCommandCenter(); break;
+            case "Plugins": DrawPlugins(); break;
+            case "Command Center": DrawPlugins(); break;
             case "Dependencies": DrawDependencies(); break;
             case "Migration": DrawMigration(); break;
             case "Settings": DrawSettings(); break;
@@ -623,17 +625,17 @@ internal sealed class NexusWindow : Window
 
     private void DrawCommandCenterMigration()
     {
-        const string importLabel = "Create backup and import Command Center";
-        const string rollbackLabel = "Rollback Command Center import";
+        const string importLabel = "Create backup and import Plugins";
+        const string rollbackLabel = "Rollback Plugins import";
         CommandCenterMigrationStatus status = commandCenterMigration.Status();
         LegacyImportState state = plugin.Configuration.ForLegacyImport("deck");
         bool staged = status.LastReceipt is not null;
         string operationMessage = status.Message;
 
-        BeginAutoPanel("COMMAND CENTER");
+        BeginAutoPanel("PLUGIN LAUNCHER");
         NexusTheme.StatusDot(status.SourceFound ? NexusTheme.Green : NexusTheme.Muted,
             status.SourceFound ? "VieriDeck configuration located" : "Not found on this computer");
-        ImGui.TextColored(NexusTheme.Gold, "Destination: Nexus Command Center");
+        ImGui.TextColored(NexusTheme.Gold, "Destination: Nexus Plugins");
         if (status.Preview?.Snapshot is { } snapshot)
         {
             int customCommands = snapshot.CustomCommands.Values.Sum(commands => commands.Count);
@@ -697,14 +699,14 @@ internal sealed class NexusWindow : Window
         EndAutoPanel();
     }
 
-    private void DrawCommandCenter()
+    private void DrawPlugins()
     {
-        PageHeading("Command Center", "Open installed plugins and run discovered or saved commands from one Nexus page.");
+        PageHeading("Plugins", "Open installed plugins, keep favorites close, and view each plugin's commands in place.");
         CommandCenterSnapshot? settings = commandCenterMigration.WorkingSnapshot;
         if (settings is null)
         {
             BeginAutoPanel("SETUP REQUIRED");
-            NexusTheme.StatusDot(NexusTheme.Amber, "No Nexus Command Center settings yet");
+            NexusTheme.StatusDot(NexusTheme.Amber, "The Nexus plugin page is not initialized yet");
             ImGui.TextWrapped("Import VieriDeck on the Migration page to preserve this computer's favorites, commands, filters, and hotkey.");
             if (ImGui.Button("Open Migration", new Vector2(ButtonWidth("Open Migration"), 0)))
             {
@@ -719,15 +721,34 @@ internal sealed class NexusWindow : Window
         }
 
         commandCenterCatalog.Refresh();
+
+        BeginAutoPanel("DALAMUD");
+        if (ImGui.Button("Dalamud Plugins", new Vector2(ButtonWidth("Dalamud Plugins"), 0)))
+            commandCenterMessage = commandCenterCatalog.Run("/xlplugins")
+                ? "Opened Dalamud Plugins."
+                : "Dalamud Plugins could not be opened.";
+        SameLineIfFits("Dalamud Settings");
+        if (ImGui.Button("Dalamud Settings", new Vector2(ButtonWidth("Dalamud Settings"), 0)))
+            commandCenterMessage = commandCenterCatalog.Run("/xlsettings")
+                ? "Opened Dalamud Settings."
+                : "Dalamud Settings could not be opened.";
+        SameLineIfFits("Refresh plugin list");
+        if (ImGui.Button("Refresh plugin list", new Vector2(ButtonWidth("Refresh plugin list"), 0)))
+        {
+            commandCenterCatalog.Refresh(true);
+            commandCenterMessage = "Refreshed the installed plugin list and commands.";
+        }
+        EndAutoPanel();
+
+        BeginAutoPanel("FIND PLUGINS");
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("###plugin-search", "Search plugins or commands", ref commandCenterSearch, 180);
         bool showUnloaded = settings.ShowUnloadedPlugins;
         if (ImGui.Checkbox("Show disabled plugins", ref showUnloaded))
             UpdateCommandCenter(value => value with { ShowUnloadedPlugins = showUnloaded });
-        ImGui.SameLine();
-        bool favoritesOnly = settings.OnlyShowFavorites;
-        if (ImGui.Checkbox("Favorites only", ref favoritesOnly))
-            UpdateCommandCenter(value => value with { OnlyShowFavorites = favoritesOnly });
+        SameLineIfFits("Hide plugins without actions");
         bool hideEmpty = settings.HidePluginsWithoutActions;
-        if (ImGui.Checkbox("Hide entries without actions", ref hideEmpty))
+        if (ImGui.Checkbox("Hide plugins without actions", ref hideEmpty))
             UpdateCommandCenter(value => value with { HidePluginsWithoutActions = hideEmpty });
         if (settings.HiddenPlugins.Count > 0)
         {
@@ -736,94 +757,58 @@ internal sealed class NexusWindow : Window
             if (ImGui.Button(restoreLabel))
                 UpdateCommandCenter(value => value with { HiddenPlugins = [] });
         }
-        ImGui.SetNextItemWidth(-1);
-        ImGui.InputTextWithHint("###command-center-search", "Search plugins or commands", ref commandCenterSearch, 180);
+        EndAutoPanel();
 
         HashSet<string> favorites = settings.Favorites.ToHashSet(StringComparer.OrdinalIgnoreCase);
         HashSet<string> hidden = settings.HiddenPlugins.ToHashSet(StringComparer.OrdinalIgnoreCase);
         CommandCenterEntry[] visible = commandCenterCatalog.Entries
+            .Where(entry => entry.Id != "__dalamud")
             .Where(entry => !hidden.Contains(entry.Id))
-            .Where(entry => settings.ShowUnloadedPlugins || entry.IsLoaded)
-            .Where(entry => !settings.HidePluginsWithoutActions || CanOpen(entry, settings) || CommandsFor(entry, settings).Count > 0)
-            .Where(entry => !settings.OnlyShowFavorites || favorites.Contains(entry.Id))
+            .Where(entry => showUnloaded || entry.IsLoaded)
+            .Where(entry => !hideEmpty || CanOpen(entry, settings) || CommandsFor(entry, settings).Count > 0)
             .Where(entry => string.IsNullOrWhiteSpace(commandCenterSearch) ||
                             entry.Name.Contains(commandCenterSearch, StringComparison.OrdinalIgnoreCase) ||
                             entry.Description.Contains(commandCenterSearch, StringComparison.OrdinalIgnoreCase) ||
                             CommandsFor(entry, settings).Any(command => command.Command.Contains(commandCenterSearch, StringComparison.OrdinalIgnoreCase) ||
                                                                        command.Help.Contains(commandCenterSearch, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        BeginAutoPanel("PLUGINS & TOOLS");
-        NexusTheme.StatusDot(NexusTheme.Green, $"{visible.Length} matching entr{(visible.Length == 1 ? "y" : "ies")}");
-        foreach (CommandCenterEntry entry in visible)
-        {
-            ImGui.PushID("command-center-" + entry.Id);
-            ImGui.Separator();
-            bool favorite = favorites.Contains(entry.Id);
-            if (ImGui.SmallButton(favorite ? "★" : "☆"))
-                ToggleCommandCenterFavorite(entry.Id, favorite);
-            ImGui.SameLine();
-            ImGui.TextColored(entry.IsLoaded ? NexusTheme.Green : NexusTheme.Muted,
-                entry.Name + (string.IsNullOrWhiteSpace(entry.Version) ? string.Empty : $"  {entry.Version}"));
-            if (!entry.IsLoaded)
-            {
-                ImGui.SameLine();
-                ImGui.TextDisabled("Disabled");
-            }
-            bool hasPluginWindow = HasPluginWindow(entry);
-            bool canOpen = CanOpen(entry, settings);
-            if (!canOpen)
-                ImGui.BeginDisabled();
-            if (ImGui.Button(hasPluginWindow ? "Open" : "Run quick") && canOpen)
-            {
-                commandCenterMessage = OpenCommandCenterEntry(entry, settings);
-                if (settings.CloseAfterOpeningPlugin &&
-                    (commandCenterMessage.StartsWith("Opened", StringComparison.Ordinal) ||
-                     commandCenterMessage.StartsWith("Ran", StringComparison.Ordinal)))
-                    IsOpen = false;
-            }
-            if (!canOpen)
-                ImGui.EndDisabled();
-            ImGui.SameLine();
-            bool canSettings = entry.Id == "__dalamud" || entry.Plugin is { IsLoaded: true, HasConfigUi: true };
-            if (!canSettings)
-                ImGui.BeginDisabled();
-            if (ImGui.Button("Settings") && canSettings)
-            {
-                commandCenterCatalog.Open(entry, settings: true, out _);
-                if (settings.CloseAfterOpeningPlugin)
-                    IsOpen = false;
-            }
-            if (!canSettings)
-                ImGui.EndDisabled();
-            ImGui.SameLine();
-            if (ImGui.Button($"Commands ({CommandsFor(entry, settings).Count})"))
-            {
-                commandCenterSelectedId = entry.Id;
-                UpdateCommandCenter(value => value with { SelectedPluginId = entry.Id, CommandPanelOpen = true });
-            }
-            ImGui.SameLine();
-            if (ImGui.SmallButton("Hide"))
-                HideCommandCenterEntry(entry.Id);
-            ImGui.TextWrapped(entry.Description);
-            ImGui.PopID();
-        }
+        PluginPageGroups groups = PluginPagePolicy.Group(visible.Select(entry => entry.Id).ToArray(), settings.Favorites);
+        Dictionary<string, CommandCenterEntry> byId = visible.ToDictionary(entry => entry.Id, StringComparer.OrdinalIgnoreCase);
+        CommandCenterEntry[] favoriteEntries = groups.Favorites.Select(id => byId[id]).ToArray();
+        BeginAutoPanel("★ FAVORITES");
+        ImGui.TextDisabled($"{favoriteEntries.Length} plugin{(favoriteEntries.Length == 1 ? string.Empty : "s")}");
+        bool favoritesOnly = settings.OnlyShowFavorites;
+        if (ImGui.Checkbox("Only show favorites", ref favoritesOnly))
+            UpdateCommandCenter(value => value with { OnlyShowFavorites = favoritesOnly });
+        if (favoriteEntries.Length == 0)
+            ImGui.TextDisabled("Select ☆ on any plugin below to pin it here.");
+        foreach (CommandCenterEntry entry in favoriteEntries)
+            DrawPluginCard(entry, settings, favorites);
         EndAutoPanel();
 
-        string selectedId = string.IsNullOrWhiteSpace(commandCenterSelectedId) ? settings.SelectedPluginId : commandCenterSelectedId;
-        CommandCenterEntry? selected = commandCenterCatalog.Entries.FirstOrDefault(entry => entry.Id.Equals(selectedId, StringComparison.OrdinalIgnoreCase));
-        if (settings.CommandPanelOpen && selected is not null)
-            DrawCommandCenterCommands(selected, settings);
+        if (!favoritesOnly)
+        {
+            CommandCenterEntry[] remaining = groups.AllOtherPlugins.Select(id => byId[id]).ToArray();
+            BeginAutoPanel("ALL PLUGINS");
+            NexusTheme.StatusDot(NexusTheme.Green, $"{remaining.Length} plugin{(remaining.Length == 1 ? string.Empty : "s")}");
+            if (remaining.Length == 0)
+                ImGui.TextDisabled("No other plugins match the current filters.");
+            foreach (CommandCenterEntry entry in remaining)
+                DrawPluginCard(entry, settings, favorites);
+            EndAutoPanel();
+        }
 
         if (!string.IsNullOrWhiteSpace(commandCenterMessage))
             TextWrapped(NexusTheme.Green, commandCenterMessage);
 
-        BeginAutoPanel("COMMAND CENTER BEHAVIOR");
+        BeginAutoPanel("PLUGIN PAGE BEHAVIOR");
         bool closeAfter = settings.CloseAfterOpeningPlugin;
         if (ImGui.Checkbox("Close Nexus after opening a plugin", ref closeAfter))
             UpdateCommandCenter(value => value with { CloseAfterOpeningPlugin = closeAfter });
         bool hotkeyEnabled = settings.HotkeyEnabled;
-        if (ImGui.Checkbox("Enable Command Center hotkey", ref hotkeyEnabled))
+        if (ImGui.Checkbox("Enable Plugins page hotkey", ref hotkeyEnabled))
             UpdateCommandCenter(value => value with { HotkeyEnabled = hotkeyEnabled });
         ImGui.TextUnformatted($"Hotkey: {plugin.CommandCenterHotkeyName}");
         if (plugin.IsCapturingCommandCenterHotkey)
@@ -840,16 +825,78 @@ internal sealed class NexusWindow : Window
         bool exact = settings.ExactModifiers;
         if (ImGui.Checkbox("Require exact modifier keys", ref exact))
             UpdateCommandCenter(value => value with { ExactModifiers = exact });
-        TextWrapped(NexusTheme.Muted, "The Command Center is always available through /nexus commands.");
+        TextWrapped(NexusTheme.Muted, "Open this page directly with /nexus plugins. The older /nexus commands alias still works.");
         EndAutoPanel();
     }
 
-    private void DrawCommandCenterCommands(CommandCenterEntry entry, CommandCenterSnapshot settings)
+    private void DrawPluginCard(CommandCenterEntry entry, CommandCenterSnapshot settings, HashSet<string> favorites)
     {
-        BeginAutoPanel($"{entry.Name.ToUpperInvariant()} COMMANDS");
-        if (ImGui.Button("Close commands"))
-            UpdateCommandCenter(value => value with { CommandPanelOpen = false });
+        ImGui.PushID("plugin-" + entry.Id);
+        ImGui.Separator();
+        bool favorite = favorites.Contains(entry.Id);
+        if (ImGui.SmallButton(favorite ? "★" : "☆"))
+            ToggleCommandCenterFavorite(entry.Id, favorite);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(favorite ? "Remove from Favorites" : "Add to Favorites");
+        ImGui.SameLine();
+        ImGui.TextColored(entry.IsLoaded ? NexusTheme.Green : NexusTheme.Muted, "●");
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(entry.IsLoaded ? $"Loaded • {entry.Version}" : $"Disabled • {entry.Version}");
+        ImGui.SameLine();
+        ImGui.TextUnformatted(entry.Name);
+
+        bool canOpen = CanOpen(entry, settings);
+        if (!canOpen)
+            ImGui.BeginDisabled();
+        if (ImGui.SmallButton(canOpen ? "Show/Hide Settings" : "No plugin window") && canOpen)
+        {
+            commandCenterMessage = OpenCommandCenterEntry(entry, settings);
+            if (settings.CloseAfterOpeningPlugin &&
+                (commandCenterMessage.StartsWith("Opened", StringComparison.Ordinal) ||
+                 commandCenterMessage.StartsWith("Ran", StringComparison.Ordinal)))
+                IsOpen = false;
+        }
+        if (!canOpen)
+            ImGui.EndDisabled();
+
         IReadOnlyList<CommandCenterCommand> commands = CommandsFor(entry, settings);
+        bool showCommands = settings.CommandPanelOpen &&
+                            settings.SelectedPluginId.Equals(entry.Id, StringComparison.OrdinalIgnoreCase);
+        SameLineIfFits(showCommands ? "Hide Commands" : $"Show Commands ({commands.Count})");
+        if (ImGui.SmallButton(showCommands ? "Hide Commands" : $"Show Commands ({commands.Count})"))
+        {
+            PluginCommandPanelState state = PluginPagePolicy.ToggleCommands(
+                settings.CommandPanelOpen,
+                settings.SelectedPluginId,
+                entry.Id);
+            showCommands = state.IsOpen;
+            UpdateCommandCenter(value => value with
+            {
+                SelectedPluginId = state.SelectedPluginId,
+                CommandPanelOpen = state.IsOpen,
+            });
+        }
+        SameLineIfFits("Hide from list");
+        if (ImGui.SmallButton("Hide from list"))
+            HideCommandCenterEntry(entry.Id);
+        if (!string.IsNullOrWhiteSpace(entry.Description))
+            TextWrapped(NexusTheme.Muted, entry.Description);
+
+        if (showCommands)
+            DrawPluginCommands(entry, settings, commands);
+        ImGui.PopID();
+    }
+
+    private void DrawPluginCommands(
+        CommandCenterEntry entry,
+        CommandCenterSnapshot settings,
+        IReadOnlyList<CommandCenterCommand> commands)
+    {
+        ImGui.Indent(24f);
+        ImGui.TextColored(NexusTheme.Gold, $"{entry.Name.ToUpperInvariant()} COMMANDS");
+        ImGui.Separator();
+        if (commands.Count == 0)
+            ImGui.TextDisabled("No registered or saved commands were found for this plugin.");
         string? preferred = settings.PreferredCommands.GetValueOrDefault(entry.Id);
         foreach (CommandCenterCommand command in commands)
         {
@@ -882,7 +929,7 @@ internal sealed class NexusWindow : Window
             commandCenterCustomCommand = string.Empty;
             commandCenterCustomDescription = string.Empty;
         }
-        EndAutoPanel();
+        ImGui.Unindent(24f);
     }
 
     private IReadOnlyList<CommandCenterCommand> CommandsFor(CommandCenterEntry entry, CommandCenterSnapshot settings)

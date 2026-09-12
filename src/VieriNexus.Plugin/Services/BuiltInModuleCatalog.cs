@@ -15,7 +15,7 @@ internal static class BuiltInModuleCatalog
         Register(registry, "market", "Market", "Retainer scans, pricing decisions, and verified adjustments.", "Economy", "vieri.capability.market.reprice/v1");
         Register(registry, "custom-ui", "Custom UI", "HUD, nameplates, layouts, and overlay presentation.", "Interface", "vieri.capability.ui.custom/v1");
         Register(registry, "communications", "Communications", "Discord status, notifications, and authorized remote commands.", "Services", "vieri.capability.notify.discord/v1");
-        Register(registry, "command-center", "Command Center", "Search, hotkeys, quick actions, and feature navigation.", "Services", "vieri.capability.command.invoke/v1");
+        Register(registry, "command-center", "Plugins", "Plugin favorites, settings, commands, hotkeys, and quick actions.", "Services", "vieri.capability.command.invoke/v1");
         Register(registry, "navigation", "Routes & Navigation", "Named route recording, manual plotting, world previews, playback, and reusable automation assignments.", "Automation", "vieri.capability.navigation.route/v1");
         return registry;
     }

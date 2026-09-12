@@ -315,11 +315,11 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Pages: commands, routes, progression, atlas, migration. Controls: status, start, resume, last, stop, maintenance, repair, extract, register, coffers, desynth, gcturnin, storage, sell, play <route>, preview <route>.",
+            HelpMessage = "Open VieriNexus. Pages: plugins, routes, progression, atlas, migration. Controls: status, start, resume, last, stop, maintenance, repair, extract, register, coffers, desynth, gcturnin, storage, sell, play <route>, preview <route>.",
         });
         CommandManager.AddHandler(ShortCommand, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Use /nexus commands for Command Center.",
+            HelpMessage = "Open VieriNexus. Use /nexus plugins for the plugin launcher.",
         });
         PluginInterface.UiBuilder.Draw += Draw;
         PluginInterface.UiBuilder.OpenMainUi += OpenMain;
@@ -476,7 +476,7 @@ public sealed class Plugin : IDalamudPlugin
         bool down = KeyState.IsVirtualKeyValid(key) && KeyState[key] && modifiersMatch;
         if (down && !commandCenterHotkeyWasDown)
         {
-            Configuration.SelectedPage = "Command Center";
+            Configuration.SelectedPage = "Plugins";
             mainWindow.Toggle();
         }
         commandCenterHotkeyWasDown = down;
@@ -570,7 +570,8 @@ public sealed class Plugin : IDalamudPlugin
             case "commands":
             case "commandcenter":
             case "deck":
-                Configuration.SelectedPage = "Command Center";
+            case "plugins":
+                Configuration.SelectedPage = "Plugins";
                 mainWindow.IsOpen = true;
                 break;
             case "stop":

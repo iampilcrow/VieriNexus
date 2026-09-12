@@ -54,7 +54,7 @@ internal sealed class CommandCenterMigrationService
     {
         if (WorkingSnapshot is not null)
         {
-            result = "The Nexus Command Center is already initialized.";
+            result = "The Nexus Plugins page is already initialized.";
             return true;
         }
         try
@@ -70,12 +70,12 @@ internal sealed class CommandCenterMigrationService
             workingStore.SaveImported(new CommandCenterWorkingLibrary(1, localId, snapshot));
             workingReceiptId = localId;
             Volatile.Write(ref workingSnapshot, snapshot);
-            result = message = "Started a fresh Nexus Command Center.";
+            result = message = "Started a fresh Nexus plugin launcher.";
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
         {
-            result = message = "Nexus could not initialize the Command Center; no existing settings were changed.";
+            result = message = "Nexus could not initialize the Plugins page; no existing settings were changed.";
             return false;
         }
     }
@@ -166,12 +166,12 @@ internal sealed class CommandCenterMigrationService
             CommandCenterSnapshot updated = change(current);
             workingStore.Save(new CommandCenterWorkingLibrary(1, workingReceiptId.Value, updated));
             Volatile.Write(ref workingSnapshot, updated);
-            result = "Command Center settings saved.";
+            result = "Plugin page settings saved.";
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
         {
-            result = "Command Center settings could not be saved; the prior working copy remains active.";
+            result = "Plugin page settings could not be saved; the prior working copy remains active.";
             return false;
         }
     }
@@ -196,7 +196,7 @@ internal sealed class CommandCenterMigrationService
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
             {
-                message = "The staged Command Center import is verified, but its working copy could not be recovered.";
+                message = "The staged Plugins import is verified, but its working copy could not be recovered.";
             }
         }
     }
