@@ -722,7 +722,7 @@ internal sealed class NexusWindow : Window
 
         commandCenterCatalog.Refresh();
 
-        BeginAutoPanel("DALAMUD");
+        BeginAutoPanel("QUICK ACCESS");
         if (ImGui.Button("Dalamud Plugins", new Vector2(ButtonWidth("Dalamud Plugins"), 0)))
             commandCenterMessage = commandCenterCatalog.Run("/xlplugins")
                 ? "Opened Dalamud Plugins."
@@ -737,6 +737,24 @@ internal sealed class NexusWindow : Window
         {
             commandCenterCatalog.Refresh(true);
             commandCenterMessage = "Refreshed the installed plugin list and commands.";
+        }
+        string overlayLabel = plugin.Configuration.ShowOperationsOverlay
+            ? "Hide Nexus Overlay"
+            : "Show Nexus Overlay";
+        SameLineIfFits(overlayLabel);
+        if (ImGui.Button(overlayLabel, new Vector2(ButtonWidth(overlayLabel), 0)))
+        {
+            plugin.Configuration.ShowOperationsOverlay = !plugin.Configuration.ShowOperationsOverlay;
+            plugin.Save();
+            commandCenterMessage = plugin.Configuration.ShowOperationsOverlay
+                ? "Opened the Nexus operations overlay."
+                : "Closed the Nexus operations overlay.";
+        }
+        SameLineIfFits("Nexus Settings");
+        if (ImGui.Button("Nexus Settings", new Vector2(ButtonWidth("Nexus Settings"), 0)))
+        {
+            plugin.Configuration.SelectedPage = "Settings";
+            plugin.Save();
         }
         EndAutoPanel();
 
@@ -825,6 +843,8 @@ internal sealed class NexusWindow : Window
         bool exact = settings.ExactModifiers;
         if (ImGui.Checkbox("Require exact modifier keys", ref exact))
             UpdateCommandCenter(value => value with { ExactModifiers = exact });
+        if (settings.Hotkey != 0 && !settings.HotkeyControl && !settings.HotkeyShift && !settings.HotkeyAlt)
+            TextWrapped(NexusTheme.Amber, "This unmodified key can also trigger while you are typing in chat.");
         TextWrapped(NexusTheme.Muted, "Open this page directly with /nexus plugins. The older /nexus commands alias still works.");
         EndAutoPanel();
     }
@@ -834,8 +854,12 @@ internal sealed class NexusWindow : Window
         ImGui.PushID("plugin-" + entry.Id);
         ImGui.Separator();
         bool favorite = favorites.Contains(entry.Id);
+        ImGui.PushStyleColor(ImGuiCol.Text, favorite
+            ? new Vector4(1f, .78f, .18f, 1f)
+            : new Vector4(.72f, .72f, .72f, 1f));
         if (ImGui.SmallButton(favorite ? "★" : "☆"))
             ToggleCommandCenterFavorite(entry.Id, favorite);
+        ImGui.PopStyleColor();
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(favorite ? "Remove from Favorites" : "Add to Favorites");
         ImGui.SameLine();
@@ -844,6 +868,11 @@ internal sealed class NexusWindow : Window
             ImGui.SetTooltip(entry.IsLoaded ? $"Loaded • {entry.Version}" : $"Disabled • {entry.Version}");
         ImGui.SameLine();
         ImGui.TextUnformatted(entry.Name);
+        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
+            ImGui.OpenPopup("###plugin-actions");
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Right-click for more plugin actions.");
+        DrawPluginActionsPopup(entry, settings);
 
         bool canOpen = CanOpen(entry, settings);
         if (!canOpen)
@@ -876,9 +905,6 @@ internal sealed class NexusWindow : Window
                 CommandPanelOpen = state.IsOpen,
             });
         }
-        SameLineIfFits("Hide from list");
-        if (ImGui.SmallButton("Hide from list"))
-            HideCommandCenterEntry(entry.Id);
         if (!string.IsNullOrWhiteSpace(entry.Description))
             TextWrapped(NexusTheme.Muted, entry.Description);
 
@@ -895,8 +921,20 @@ internal sealed class NexusWindow : Window
         ImGui.Indent(24f);
         ImGui.TextColored(NexusTheme.Gold, $"{entry.Name.ToUpperInvariant()} COMMANDS");
         ImGui.Separator();
+        bool canSettings = entry.Plugin is { IsLoaded: true, HasConfigUi: true };
+        if (!canSettings)
+            ImGui.BeginDisabled();
+        if (ImGui.SmallButton("Open Plugin Settings") && canSettings)
+        {
+            commandCenterCatalog.Open(entry, settings: true, out _);
+            if (settings.CloseAfterOpeningPlugin)
+                IsOpen = false;
+        }
+        if (!canSettings)
+            ImGui.EndDisabled();
+        ImGui.TextDisabled("Left-click runs a command. Right-click copies it.");
         if (commands.Count == 0)
-            ImGui.TextDisabled("No registered or saved commands were found for this plugin.");
+            ImGui.TextDisabled("No slash commands were published, documented, or saved for this plugin.");
         string? preferred = settings.PreferredCommands.GetValueOrDefault(entry.Id);
         foreach (CommandCenterCommand command in commands)
         {
@@ -906,30 +944,74 @@ internal sealed class NexusWindow : Window
                 commandCenterMessage = commandCenterCatalog.Run(command.Command)
                     ? $"Ran {command.Command}."
                     : $"Command unavailable: {command.Command}";
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
+            {
+                ImGui.SetClipboardText(command.Command);
+                commandCenterMessage = $"Copied {command.Command}.";
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Left-click: run command\nRight-click: copy command");
             ImGui.SameLine();
             if (ImGui.SmallButton(isPreferred ? "Quick action" : "Make quick"))
                 SetPreferredCommand(entry.Id, command.Command);
-            if (command.IsCustom)
-            {
-                ImGui.SameLine();
-                if (ImGui.SmallButton("Remove"))
-                    RemoveCustomCommand(entry.Id, command.Command);
-            }
-            if (!string.IsNullOrWhiteSpace(command.Help))
-                ImGui.TextWrapped(command.Help);
+            ImGui.TextWrapped(CommandDescription(command));
             ImGui.PopID();
         }
-        ImGui.Separator();
-        ImGui.SetNextItemWidth(Math.Min(430, ImGui.GetContentRegionAvail().X));
-        ImGui.InputTextWithHint("###new-command", "/command or /command subcommand", ref commandCenterCustomCommand, 1_024);
-        ImGui.SetNextItemWidth(-1);
-        ImGui.InputTextWithHint("###new-command-description", "Optional description", ref commandCenterCustomDescription, 2_048);
-        if (ImGui.Button("Add custom command") && AddCustomCommand(entry.Id))
+        if (ImGui.CollapsingHeader("Custom commands"))
         {
-            commandCenterCustomCommand = string.Empty;
-            commandCenterCustomDescription = string.Empty;
+            TextWrapped(NexusTheme.Muted,
+                "Add a command when a plugin does not publish it through Dalamud. Include required arguments in the command itself.");
+            ImGui.SetNextItemWidth(Math.Min(430, ImGui.GetContentRegionAvail().X));
+            ImGui.InputTextWithHint("###new-command", "/command or /command subcommand", ref commandCenterCustomCommand, 1_024);
+            ImGui.SetNextItemWidth(-1);
+            ImGui.InputTextWithHint("###new-command-description", "Optional description", ref commandCenterCustomDescription, 2_048);
+            if (ImGui.Button("Add custom command") && AddCustomCommand(entry.Id))
+            {
+                commandCenterCustomCommand = string.Empty;
+                commandCenterCustomDescription = string.Empty;
+            }
+            if (settings.CustomCommands.TryGetValue(entry.Id, out IReadOnlyList<CommandCenterCustomCommand>? custom))
+            {
+                foreach (CommandCenterCustomCommand item in custom)
+                {
+                    ImGui.TextUnformatted(item.Command);
+                    ImGui.SameLine();
+                    if (ImGui.SmallButton($"Remove###remove-{item.Command}"))
+                        RemoveCustomCommand(entry.Id, item.Command);
+                }
+            }
         }
         ImGui.Unindent(24f);
+    }
+
+    private void DrawPluginActionsPopup(CommandCenterEntry entry, CommandCenterSnapshot settings)
+    {
+        if (!ImGui.BeginPopup("###plugin-actions"))
+            return;
+        bool canSettings = entry.Plugin is { IsLoaded: true, HasConfigUi: true };
+        if (ImGui.MenuItem("Open settings", string.Empty, false, canSettings))
+        {
+            commandCenterCatalog.Open(entry, settings: true, out _);
+            if (settings.CloseAfterOpeningPlugin)
+                IsOpen = false;
+        }
+        if (ImGui.MenuItem("Hide from list"))
+            HideCommandCenterEntry(entry.Id);
+        if (ImGui.MenuItem("Copy internal name"))
+        {
+            ImGui.SetClipboardText(entry.Id);
+            commandCenterMessage = $"Copied {entry.Id}.";
+        }
+        ImGui.EndPopup();
+    }
+
+    private static string CommandDescription(CommandCenterCommand command)
+    {
+        if (string.IsNullOrWhiteSpace(command.Help))
+            return "No description was supplied by this plugin.";
+        return command.Help.Contains('\n')
+            ? "Base command. Its documented subcommands are listed separately."
+            : command.Help;
     }
 
     private IReadOnlyList<CommandCenterCommand> CommandsFor(CommandCenterEntry entry, CommandCenterSnapshot settings)

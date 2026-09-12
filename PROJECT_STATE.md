@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-12 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.55`
-Current published source: `0.1.0.55`, release source `73fc2352fb0ba755d6bbd89ac3d526548fa21513`, website release `9b24d36893f65ef2288b18666a8c818a69d37f51`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.55 is published and live. It rebuilds the former Command Center as the Plugins page, matching the actual VieriDeck-replacement purpose. Dalamud Plugins and Dalamud Settings are top actions; favorites render above all remaining plugins; and Show/Hide Commands expands immediately beneath the clicked plugin instead of appearing out of sight after the complete list. Existing VieriDeck imports, working settings, old selected-page state, and `/nexus commands` remain compatible. Separately, stock AutoDuty 0.0.0.335's only remaining generic recovery difference is isolated with five passing policy tests on branch `nexus-recovery-fixes-0.0.0.335` at `2c583870c216573a054af109d11fafdd85d556be`.
+Current product version: `0.1.0.56`
+Current published source: `0.1.0.55`, release source `73fc2352fb0ba755d6bbd89ac3d526548fa21513`, website release `9b24d36893f65ef2288b18666a8c818a69d37f51`; version 0.1.0.56 is locally verified and awaiting publication. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current workstream: version 0.1.0.56 completes the VieriDeck parity/retirement audit. Favorite stars use the yellow filled/gray unfilled Deck states; Quick Access adds the Nexus operations-overlay and Nexus Settings equivalents; the plugin action menu preserves direct settings, hiding, and internal-name copy; command buttons restore right-click copy; and the hotkey area restores the unmodified-key warning. The detached command pane and standalone Deck layout controls are intentionally superseded by the user-requested integrated one-scrollbar Nexus page. VieriDeck becomes safe to disable after one ordinary 0.1.0.56 acceptance/persistence pass. Separately, stock AutoDuty 0.0.0.335's only remaining generic recovery difference is isolated with five passing policy tests on branch `nexus-recovery-fixes-0.0.0.335` at `2c583870c216573a054af109d11fafdd85d556be`.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -730,7 +730,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.55`. Dalamud API 15. Version 0.1.0.55 is published through the production feed.
+- Plugin project version: `0.1.0.56`. Dalamud API 15. Version 0.1.0.55 remains published while 0.1.0.56 completes publication.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.
