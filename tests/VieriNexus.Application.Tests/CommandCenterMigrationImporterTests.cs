@@ -81,6 +81,16 @@ public sealed class CommandCenterMigrationImporterTests
         Assert.Contains(preview.Issues, issue => issue.Severity == MigrationIssueSeverity.Warning);
     }
 
+    [Fact]
+    public void HotkeyUsesVirtualKeysUnsignedUnderlyingTypeAndRejectsOutOfRangeValues()
+    {
+        CommandCenterMigrationPreview valid = new CommandCenterMigrationImporter().Preview("""{ "Hotkey": 123 }""");
+        CommandCenterMigrationPreview invalid = new CommandCenterMigrationImporter().Preview("""{ "Hotkey": 70000 }""");
+
+        Assert.Equal((ushort)123, valid.Snapshot!.Hotkey);
+        Assert.Equal((ushort)0, invalid.Snapshot!.Hotkey);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("[]")]

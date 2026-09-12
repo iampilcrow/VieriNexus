@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-12 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.53`
+Current product version: `0.1.0.54` release candidate
 Current published source: `0.1.0.53`, release source `3388bbe1a223a6cf9162c01e774d118cb8a47635`, website release `00fb484fb8aad1819cc1e80b28b4f8e367e68c6c`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.53 is published and live. It completes the Nexus-owned Command Center and the complete transactional VieriDeck configuration handoff. Nexus can preserve each computer's filters, favorites, hidden items, selected command panel, preferred/custom commands, hotkey, and layout reference, or initialize cleanly without a predecessor; its editable atomic working copy survives after VieriDeck is disabled. The runtime discovers plugin windows/settings/commands, derives documented command actions, preserves Lifestream shortcuts, safely toggles non-overlay windows, runs command-only quick actions, supports custom-command removal and hotkey capture, and stays on one page scrollbar. Separately, stock AutoDuty 0.0.0.335's only remaining generic recovery difference is now isolated as five source-file changes with five passing policy tests on branch `nexus-recovery-fixes-0.0.0.335` at `2c583870c216573a054af109d11fafdd85d556be`; upstream development does not yet contain equivalent stale-path/death/re-entry handling. The next retirement gates are ordinary in-game Command Center acceptance and an upstream/stock AutoDuty recovery path before the deliberate predecessor/feed retirement steps.
+Current workstream: version 0.1.0.54 corrects the first 0.1.0.53 setup attempt's draw-time hotkey exception. The imported hotkey now uses the same `UInt16` representation as Dalamud's `VirtualKey`, enum validation is strongly typed, and out-of-range source values normalize to no assignment. The transactional import itself had completed and its stored numeric JSON remains compatible, so no re-import is required. Version 0.1.0.53 otherwise completed the Nexus-owned Command Center and complete VieriDeck configuration handoff. Separately, stock AutoDuty 0.0.0.335's only remaining generic recovery difference is isolated with five passing policy tests on branch `nexus-recovery-fixes-0.0.0.335` at `2c583870c216573a054af109d11fafdd85d556be`.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -289,7 +289,7 @@ There are 291 automated tests across the application/domain policies, including 
 - `ProgressAtlasActionCatalogTests.cs`
 - `HuntingLogCandidatePolicyTests.cs`
 
-The published 0.1.0.53 source passes all 291 tests plus a zero-warning full plugin build.
+The 0.1.0.54 release candidate passes all 292 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -730,7 +730,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.53`. Dalamud API 15. Version 0.1.0.53 is published through the production feed.
+- Plugin project version: `0.1.0.54` release candidate. Dalamud API 15. Version 0.1.0.53 remains published until the corrective release passes public verification.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.

@@ -178,7 +178,7 @@ public sealed record CommandCenterSnapshot(
     float SourceWindowPositionX,
     float SourceWindowPositionY,
     bool HotkeyEnabled,
-    int Hotkey,
+    ushort Hotkey,
     bool HotkeyControl,
     bool HotkeyShift,
     bool HotkeyAlt,

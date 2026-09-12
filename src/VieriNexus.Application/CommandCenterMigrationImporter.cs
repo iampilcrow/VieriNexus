@@ -44,7 +44,7 @@ public sealed class CommandCenterMigrationImporter
                 Float(root, "DeckPositionX", 0f, -50_000f, 50_000f),
                 Float(root, "DeckPositionY", 0f, -50_000f, 50_000f),
                 Boolean(root, "HotkeyEnabled", true),
-                Number(root, "Hotkey", 0),
+                UnsignedShort(root, "Hotkey"),
                 Boolean(root, "HotkeyControl", false),
                 Boolean(root, "HotkeyShift", false),
                 Boolean(root, "HotkeyAlt", false),
@@ -75,6 +75,12 @@ public sealed class CommandCenterMigrationImporter
         root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int number)
             ? number
             : fallback;
+
+    private static ushort UnsignedShort(JsonElement root, string name) =>
+        root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number &&
+        value.TryGetUInt16(out ushort number)
+            ? number
+            : (ushort)0;
 
     private static float Float(JsonElement root, string name, float fallback, float minimum, float maximum) =>
         root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetSingle(out float number) && float.IsFinite(number)

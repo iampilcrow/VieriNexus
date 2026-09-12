@@ -77,7 +77,7 @@ public sealed class Plugin : IDalamudPlugin
         get
         {
             CommandCenterSnapshot? settings = commandCenterMigration.WorkingSnapshot;
-            if (settings is null || settings.Hotkey == 0 || !Enum.IsDefined(typeof(VirtualKey), settings.Hotkey))
+            if (settings is null || settings.Hotkey == 0 || !Enum.IsDefined((VirtualKey)settings.Hotkey))
                 return "Not assigned";
             List<string> parts = [];
             if (settings.HotkeyControl) parts.Add("Ctrl");
@@ -461,7 +461,7 @@ public sealed class Plugin : IDalamudPlugin
         }
         CommandCenterSnapshot? settings = commandCenterMigration.WorkingSnapshot;
         if (settings is not { HotkeyEnabled: true } || settings.Hotkey == 0 ||
-            !Enum.IsDefined(typeof(VirtualKey), settings.Hotkey))
+            !Enum.IsDefined((VirtualKey)settings.Hotkey))
         {
             commandCenterHotkeyWasDown = false;
             return;
@@ -503,7 +503,7 @@ public sealed class Plugin : IDalamudPlugin
             commandCenterMigration.Update(settings => settings with
             {
                 HotkeyEnabled = true,
-                Hotkey = (int)key,
+                Hotkey = (ushort)key,
                 HotkeyControl = control,
                 HotkeyShift = shift,
                 HotkeyAlt = alt,
