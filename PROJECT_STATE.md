@@ -3,8 +3,8 @@
 Working snapshot: 2026-09-12 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
 Current product version: `0.1.0.52`
-Current release candidate source: `0.1.0.52`, implementation commit `f6204d2f51b55de2102326134ed04d6491ee8c09`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.52 is at the production release gate. Nexus now owns stock Questionable's missing solo-duty rotation boundary through public Wrath-compatible IPC only when a Nexus-started exact quest is inside a duty; Boss Mod remains the sole movement owner, the player's hard target is untouched, and provider failure restores Boss Mod rotation. VieriCodex 1.12.2.82 integrates Questionable 15.756.2.5's 149-file update while preserving the Vieri Progress Atlas, Progression Queue, named-route, gearset-policy, branding, saved-setting, and transition-safety layers. The apparent 61-file route delta has been normalized to five semantic fixes isolated on validated branch `nexus-route-fixes-15.756.2.5` at `b9bbe51d2`. Stock acceptance of those routes and the solo-duty runtime remains the last Questionable retirement gate.
+Current published source: `0.1.0.52`, state commit `bea458dc16ed3c82ef5bc30e02f770f0d93bf10c`, implementation commit `f6204d2f51b55de2102326134ed04d6491ee8c09`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current workstream: version 0.1.0.52 is published and live. Nexus now owns stock Questionable's missing solo-duty rotation boundary through public Wrath-compatible IPC only when a Nexus-started exact quest is inside a duty; Boss Mod remains the sole movement owner, the player's hard target is untouched, and provider failure restores Boss Mod rotation. VieriCodex 1.12.2.82 integrates Questionable 15.756.2.5's 149-file update while preserving the Vieri Progress Atlas, Progression Queue, named-route, gearset-policy, branding, saved-setting, and transition-safety layers. The apparent 61-file route delta has been normalized to five semantic fixes isolated on validated branch `nexus-route-fixes-15.756.2.5` at `b9bbe51d2`. Stock acceptance of those routes and the solo-duty runtime remains the last Questionable retirement gate; the next broad development slice closes stock AutoDuty's isolated recovery parity and continues predecessor retirement.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -287,7 +287,7 @@ There are 280 automated tests across the application/domain policies, including 
 - `ProgressAtlasActionCatalogTests.cs`
 - `HuntingLogCandidatePolicyTests.cs`
 
-The 0.1.0.52 release candidate passes all 285 tests plus a zero-warning full plugin build.
+The published 0.1.0.52 source passes all 285 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -723,12 +723,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current release-candidate implementation commit: `f6204d2f51b55de2102326134ed04d6491ee8c09 Move solo-duty rotation handoff into Nexus` (version 0.1.0.52).
-- `origin/main` contains the released implementation commit.
+- Current published state commit: `bea458dc16ed3c82ef5bc30e02f770f0d93bf10c Update project state for Nexus 0.1.0.52`; implementation commit: `f6204d2f51b55de2102326134ed04d6491ee8c09 Move solo-duty rotation handoff into Nexus`.
+- `origin/main` contains both the released implementation and published-source state commits.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.52`. Dalamud API 15. Version 0.1.0.52 is at the production release gate.
+- Plugin project version: `0.1.0.52`. Dalamud API 15. Version 0.1.0.52 is published through the production feed.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -900,7 +900,7 @@ Version 0.1.0.50 is published from Nexus source `4e34de0553a42bae66aef791ac19b53
 
 Version 0.1.0.51 is published from Nexus source `782d3e010939763916a2c3d51601f8215b8bc165` alongside VieriCodex 1.12.2.81 source `1bc749b1e6f04519608b04caaca21c882e28412f`, incorporating Questionable 15.756.2.4 tag commit `f1b6da5ee5a9509c2f955f1fa93e73d5bfc4ffb8`. Daily Pilcrow release commit `4d0ae2ead3512860d411090991a877c80f57f72f` and documentation commit `29da88e632f2387d7cb528aa0475c9a541b2dea6` are pushed; final production deployment `dpl_GVyecd4sWizVxJZ5TNM973NzVECY` is Ready. All 280 Nexus tests, the zero-warning Nexus Release build, all 13,257 VieriCodex solution tests, VieriCodex's six-warning/zero-error plugin baseline, 205 website tests, typecheck, focused validation for both packages, the 13-entry inventory guard, production build, and final live HTTP/ZIP/hash validation pass. Discord changelog workflow `34692667685` succeeded. Nexus runtime/source SHA-256: `3C641A35A2959EF6D07D0ED976C811C90BBF59E383C0526BF9F59FEBAFB5D632` / `C1DEF5E5E059B68EB53774757BF11FB9547C2763A899F206F2CE164429A55CFC`. VieriCodex runtime/source SHA-256: `47EA6DB77AD707039788A69CC5BE2D4CAB27080B5717B584A34BDE9B9ED008F8` / `5AD9D66AC36D7A5E288C37676425DA360E606B94818E4596B4E64B46E8A7BCDE`.
 
-Version 0.1.0.52 is prepared from Nexus implementation source `f6204d2f51b55de2102326134ed04d6491ee8c09` alongside VieriCodex 1.12.2.82 source `173d6ad599d2c057e0f88cea76ed302a7746bf32`, incorporating Questionable 15.756.2.5 tag commit `e21fec6934db687829b9530394a709a5c1eb1d52`. Nexus owns the stock-Questionable solo-duty Wrath/Boss Mod handoff; the remaining five semantic route fixes are isolated at `b9bbe51d2`. All 285 Nexus tests, the zero-warning Nexus Release build, all 13,257 VieriCodex solution tests, VieriCodex's six-warning/zero-error plugin baseline, 205 website tests, typecheck, focused package validation, the 13-entry inventory guard, and production build pass. Live deployment, focused public hash checks, and Discord workflow verification are pending.
+Version 0.1.0.52 is published from Nexus source `bea458dc16ed3c82ef5bc30e02f770f0d93bf10c` (implementation `f6204d2f51b55de2102326134ed04d6491ee8c09`) alongside VieriCodex 1.12.2.82 source `173d6ad599d2c057e0f88cea76ed302a7746bf32`, incorporating Questionable 15.756.2.5 tag commit `e21fec6934db687829b9530394a709a5c1eb1d52`. Nexus owns the stock-Questionable solo-duty Wrath/Boss Mod handoff; the remaining five semantic route fixes are isolated at `b9bbe51d2`. Daily Pilcrow release commit `944b1b8dca971916c99896d9c0a8c305002b10d4` and documentation commit `b2b22964c3a81f023b88cc3daa789ea633596c76` are pushed; final production deployment `dpl_AqW8ATvo5N5UR7A4qe4gU7qoQEof` is Ready. All 285 Nexus tests, the zero-warning Nexus Release build, all 13,257 VieriCodex solution tests, VieriCodex's six-warning/zero-error plugin baseline, 205 website tests, typecheck, focused package validation, the 13-entry inventory guard, production build, and final public HTTP/ZIP/hash checks pass. Discord changelog workflow `34700595178` succeeded. Nexus runtime/source SHA-256: `FDF11ABB9287A25188B4D1318D01790CDD1F79EAC9AA37579E74B840FD3F47C0` / `05F63D4B11A06F85A9F94466A4E50E6EA606AB578D1AA4832F106B917A2D02B2`. VieriCodex runtime/source SHA-256: `FE95A9D8888BCDC7C5D11EA1ECDA318527BE53794A50D4D2DCBE699E613EEB5F` / `C35460CB187C9B4C91DD310F349961E1053C3DF35DB259424A42B624995A624A`.
 
 The same release completes the first preserved custom-overlay slice: Inventory exposes only working native maintenance actions; Goto restores the expansion-grouped striking-dummy catalog and uses compatible Lifestream teleport plus Nexus-owned vnavmesh approach; the global Stop covers navigation, dummy travel, gear, maintenance, and Progression. Migration now leads with one **Set Up This Computer** action that imports detected NavPlotter and AutoDuty state, creates working copies, applies imported overlay preferences, and leaves predecessors/configuration untouched. This is the required path for every user—including another player: install Nexus first on that computer, prepare that computer's own settings, verify replacement readiness, then disable predecessors. Nexus never ships or copies one user's routes, content IDs, settings, or secrets to another.
 
