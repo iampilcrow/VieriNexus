@@ -3,8 +3,8 @@
 Working snapshot: 2026-09-12 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
 Current product version: `0.1.0.51`
-Current published release source: `0.1.0.50`, commit `4e34de0553a42bae66aef791ac19b53580c9a59f`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.51 is in production release validation and completes the equivalent stock-Questionable handoff boundary. VieriCodex 1.12.2.81 is pushed with Questionable 15.756.2.4's 305-file update while preserving the Vieri Progress Atlas, Progression Queue, named-route, solo-duty, gearset-policy, branding, and saved-setting layers. Nexus now blocks VieriCodex and stock Questionable from running together before either quest IPC is called and automatically selects stock after VieriCodex is disabled. Version 0.1.0.50 remains the current published Nexus release until this paired package deployment is verified.
+Current published release source: `0.1.0.51`, commit `782d3e010939763916a2c3d51601f8215b8bc165`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current workstream: version 0.1.0.51 is published and completes the equivalent stock-Questionable handoff boundary. VieriCodex 1.12.2.81 is also published with Questionable 15.756.2.4's 305-file update while preserving the Vieri Progress Atlas, Progression Queue, named-route, solo-duty, gearset-policy, branding, and saved-setting layers. Nexus now blocks VieriCodex and stock Questionable from running together before either quest IPC is called and automatically selects stock after VieriCodex is disabled. The remaining fork-retirement gates are exact route-correction parity and the solo-duty rotation handoff; ordinary compatible Questionable updates should not require a Nexus source change.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -287,7 +287,7 @@ There are 280 automated tests across the application/domain policies, including 
 - `ProgressAtlasActionCatalogTests.cs`
 - `HuntingLogCandidatePolicyTests.cs`
 
-The 0.1.0.51 candidate passes all 280 tests plus a zero-warning full plugin build before publication.
+The 0.1.0.51 release passes all 280 tests plus a zero-warning full plugin build.
 
 ## 4. Major Systems and Features
 
@@ -723,12 +723,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current published implementation commit: `4e34de0553a42bae66aef791ac19b53580c9a59f Harden AutoDuty provider handoff` (version 0.1.0.50).
+- Current published implementation commit: `782d3e010939763916a2c3d51601f8215b8bc165 Harden Questionable provider handoff` (version 0.1.0.51).
 - `origin/main` contains the released implementation commit.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.51`. Dalamud API 15. Version 0.1.0.50 remains published and live through the production Dalamud feed until the 0.1.0.51 deployment completes.
+- Plugin project version: `0.1.0.51`. Dalamud API 15. Version 0.1.0.51 is published and live through the production Dalamud feed.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The exact source/deployment repository/path for the live feed and hosted archives must be discovered from the current working release infrastructure if it is not already present in the active local workspace; do not infer it from the Nexus repository alone.
@@ -897,6 +897,8 @@ Version 0.1.0.49 moves the remaining VieriAutoDuty-specific control/status role 
 Version 0.1.0.49 is published from Nexus source `748f9ba13f18c08d2fda4cf03229785b14fde3a0`. Daily Pilcrow release commit `249d30b189585b77c4a06886c54197077df98d54` and documentation commit `06522b06d8236eb1f4cfe9b67c572b8c29599be3` are pushed; final production deployment `dpl_JCuEggJLTMbVTzjsSch7Q8BtUSYm` is Ready. All 271 Nexus tests, the zero-warning Release build, 205 website tests, focused package validation, the 13-entry inventory guard, production build, and final live HTTP/ZIP/hash validation pass. Discord changelog workflow `34657703986` succeeded. Runtime/source SHA-256: `141F38DE17C5B6FFE560FC21A2DA4335A384D078BE7CD3EDE503BC3C77BB8235` / `D15BB5D9A2966A3FA2513495A2DE9DB335C02DA4595901F5B0256CF37D2A8069`.
 
 Version 0.1.0.50 is published from Nexus source `4e34de0553a42bae66aef791ac19b53580c9a59f` alongside VieriAutoDuty 1.0.0.443 source `e1318fcf3cc950cf928a5a95058cb806a27f76a4`. Daily Pilcrow release commit `ee7de4c2d8a2f7c0e7d10d0ccc31e62d64f1594e` and documentation commit `6150f97036b8593aa496579e36bb08ab9335f63c` are pushed; final production deployment `dpl_9xMynD1dziAspvc3UhXPSWM7sBFS` is Ready. All 276 Nexus tests, all 342 AutoDuty tests, the zero-warning Nexus Release build, AutoDuty's unchanged 32-warning/zero-error upstream baseline, 205 website tests, typecheck, focused validation for both packages, the 13-entry inventory guard, production build, and final live HTTP/ZIP/hash validation pass. Discord changelog workflow `34691760398` succeeded. Nexus runtime/source SHA-256: `592C73F44CF0C93FD0110A0B6D396056EDCCE5205C4D834FE8E6869AFB52985D` / `867ED1E61A1872E60A783BC11F92E72620BADDEA092EEADCC3D116069DB2DC83`. AutoDuty runtime/source SHA-256: `498F5B5D5877CAD3E93DDBD97DC5554A3ED6A85617F95072D9164F77A55774AA` / `82D309963CA6038191E4E412E9F8370643DE3FC50265D8AED436823A66950C74D`.
+
+Version 0.1.0.51 is published from Nexus source `782d3e010939763916a2c3d51601f8215b8bc165` alongside VieriCodex 1.12.2.81 source `1bc749b1e6f04519608b04caaca21c882e28412f`, incorporating Questionable 15.756.2.4 tag commit `f1b6da5ee5a9509c2f955f1fa93e73d5bfc4ffb8`. Daily Pilcrow release commit `4d0ae2ead3512860d411090991a877c80f57f72f` is pushed and production deployment `dpl_DFpntQEsHhuzW4BBX7yeWjW4nHxx` is Ready. All 280 Nexus tests, the zero-warning Nexus Release build, all 13,257 VieriCodex solution tests, VieriCodex's six-warning/zero-error plugin baseline, 205 website tests, typecheck, focused validation for both packages, the 13-entry inventory guard, production build, and final live HTTP/ZIP/hash validation pass. Discord changelog workflow `34692667685` succeeded. Nexus runtime/source SHA-256: `3C641A35A2959EF6D07D0ED976C811C90BBF59E383C0526BF9F59FEBAFB5D632` / `C1DEF5E5E059B68EB53774757BF11FB9547C2763A899F206F2CE164429A55CFC`. VieriCodex runtime/source SHA-256: `47EA6DB77AD707039788A69CC5BE2D4CAB27080B5717B584A34BDE9B9ED008F8` / `5AD9D66AC36D7A5E288C37676425DA360E606B94818E4596B4E64B46E8A7BCDE`.
 
 The same release completes the first preserved custom-overlay slice: Inventory exposes only working native maintenance actions; Goto restores the expansion-grouped striking-dummy catalog and uses compatible Lifestream teleport plus Nexus-owned vnavmesh approach; the global Stop covers navigation, dummy travel, gear, maintenance, and Progression. Migration now leads with one **Set Up This Computer** action that imports detected NavPlotter and AutoDuty state, creates working copies, applies imported overlay preferences, and leaves predecessors/configuration untouched. This is the required path for every user—including another player: install Nexus first on that computer, prepare that computer's own settings, verify replacement readiness, then disable predecessors. Nexus never ships or copies one user's routes, content IDs, settings, or secrets to another.
 
