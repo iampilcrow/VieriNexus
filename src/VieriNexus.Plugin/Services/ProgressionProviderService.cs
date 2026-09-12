@@ -966,7 +966,28 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
     private ProgressionProviderCandidate[] DutyCandidates()
     {
-        PluginPresence presence = dependencies.FindPlugin("AutoDuty");
+        IReadOnlyList<PluginPresence> family = dependencies.FindPlugins("AutoDuty");
+        PluginPresence[] loaded = family.Where(candidate => candidate.IsLoaded).ToArray();
+        AutoDutyProviderIdentityAssessment identity = AutoDutyProviderIdentityPolicy.Assess(
+            family.Select(candidate => new AutoDutyProviderInstance(
+                candidate.IsLoaded,
+                candidate.DisplayName,
+                candidate.Version)),
+            vieriAutoDutyProgression.HasFunction);
+        if (identity.Identity == AutoDutyProviderIdentity.Conflict)
+        {
+            return loaded.Select((presence, index) => new ProgressionProviderCandidate(
+                new ProviderId($"vieri.provider.autoduty-conflict-{index + 1}/v1"),
+                presence.DisplayName ?? "AutoDuty",
+                ProgressionProviderRole.Duties,
+                IsVieriName(presence.DisplayName)
+                    ? ProgressionProviderFlavor.VieriCompatibility
+                    : ProgressionProviderFlavor.Stock,
+                ProgressionProviderReadiness.Conflict,
+                presence.Version,
+                identity.Detail)).ToArray();
+        }
+
         bool canResetLeveling = autoDutySetLevelingMode.HasAction || autoDutySetConfig.HasAction;
         bool stockContractReady = autoDutyContentHasPath.HasFunction && autoDutyIsStopped.HasFunction &&
                                   autoDutyRun.HasAction && autoDutyStop.HasAction && canResetLeveling;
@@ -984,51 +1005,35 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         string contract = missing.Count == 0
             ? "ContentHasPath, Run, IsStopped, Stop, and leveling-mode reset"
             : $"missing {string.Join(", ", missing)}";
-        bool isVieriCompatibilityProvider = vieriAutoDutyProgression.HasFunction ||
-            string.Equals(presence.DisplayName, "VieriAutoDuty", StringComparison.OrdinalIgnoreCase);
-        ProgressionProviderCandidate compatibility = isVieriCompatibilityProvider
-            ? Candidate(
-                AutoDutyCompatibilityProviderId,
-                "VieriAutoDuty",
-                ProgressionProviderRole.Duties,
-                ProgressionProviderFlavor.VieriCompatibility,
-                presence,
-                stockContractReady,
-                contract)
-            : UnavailableDutyCandidate(
-                AutoDutyCompatibilityProviderId,
-                "VieriAutoDuty",
-                ProgressionProviderFlavor.VieriCompatibility,
-                "The VieriAutoDuty migration source is not active.");
-        ProgressionProviderCandidate stock = !isVieriCompatibilityProvider
-            ? Candidate(
-                AutoDutyStockProviderId,
-                "AutoDuty",
-                ProgressionProviderRole.Duties,
-                ProgressionProviderFlavor.Stock,
-                presence,
-                stockContractReady,
-                contract)
-            : UnavailableDutyCandidate(
-                AutoDutyStockProviderId,
-                "AutoDuty",
-                ProgressionProviderFlavor.Stock,
-                "Target provider after Nexus absorbs the remaining VieriAutoDuty behavior; do not enable it beside the fork.");
+        PluginPresence? active = loaded.SingleOrDefault();
+        bool activeIsVieri = identity.Identity == AutoDutyProviderIdentity.VieriCompatibility;
+        PluginPresence? vieriPresence = activeIsVieri
+            ? active
+            : family.FirstOrDefault(candidate => IsVieriName(candidate.DisplayName));
+        PluginPresence? stockPresence = active is not null && !activeIsVieri
+            ? active
+            : family.FirstOrDefault(candidate => !candidate.IsLoaded && !IsVieriName(candidate.DisplayName));
+        ProgressionProviderCandidate compatibility = Candidate(
+            AutoDutyCompatibilityProviderId,
+            "VieriAutoDuty",
+            ProgressionProviderRole.Duties,
+            ProgressionProviderFlavor.VieriCompatibility,
+            vieriPresence ?? new PluginPresence(false, false, null),
+            activeIsVieri && stockContractReady,
+            contract);
+        ProgressionProviderCandidate stock = Candidate(
+            AutoDutyStockProviderId,
+            "AutoDuty",
+            ProgressionProviderRole.Duties,
+            ProgressionProviderFlavor.Stock,
+            stockPresence ?? new PluginPresence(false, false, null),
+            active is not null && !activeIsVieri && stockContractReady,
+            contract);
         return [compatibility, stock];
     }
 
-    private static ProgressionProviderCandidate UnavailableDutyCandidate(
-        ProviderId id,
-        string displayName,
-        ProgressionProviderFlavor flavor,
-        string detail) => new(
-        id,
-        displayName,
-        ProgressionProviderRole.Duties,
-        flavor,
-        ProgressionProviderReadiness.Missing,
-        null,
-        detail);
+    private static bool IsVieriName(string? displayName) =>
+        string.Equals(displayName, "VieriAutoDuty", StringComparison.OrdinalIgnoreCase);
 
     private static ProgressionProviderCandidate Candidate(
         ProviderId id,

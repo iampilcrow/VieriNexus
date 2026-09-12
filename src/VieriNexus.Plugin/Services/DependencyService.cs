@@ -45,10 +45,22 @@ internal sealed class DependencyService(IDalamudPluginInterface pluginInterface)
 
     internal PluginPresence FindPlugin(string internalName)
     {
-        var plugin = pluginInterface.InstalledPlugins.FirstOrDefault(candidate =>
-            string.Equals(candidate.InternalName, internalName, StringComparison.OrdinalIgnoreCase));
-        return new(plugin is not null, plugin?.IsLoaded == true, plugin?.Version?.ToString(), plugin?.Name);
+        return FindPlugins(internalName).FirstOrDefault()
+            ?? new PluginPresence(false, false, null);
     }
+
+    internal IReadOnlyList<PluginPresence> FindPlugins(string internalName) =>
+        pluginInterface.InstalledPlugins
+            .Where(candidate => string.Equals(
+                candidate.InternalName,
+                internalName,
+                StringComparison.OrdinalIgnoreCase))
+            .Select(plugin => new PluginPresence(
+                true,
+                plugin.IsLoaded,
+                plugin.Version?.ToString(),
+                plugin.Name))
+            .ToArray();
 
     internal void OpenInstaller(DependencyStatus dependency)
     {

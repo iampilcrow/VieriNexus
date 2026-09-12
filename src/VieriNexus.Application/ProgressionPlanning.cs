@@ -51,6 +51,18 @@ public static class ProgressionProviderPolicy
         ProgressionProviderCandidate[] relevant = candidates
             .Where(candidate => candidate.Role == role)
             .ToArray();
+        ProgressionProviderCandidate[] conflicts = relevant
+            .Where(candidate => candidate.Readiness == ProgressionProviderReadiness.Conflict)
+            .ToArray();
+        if (conflicts.Length > 0)
+        {
+            return new ProgressionProviderSelection(
+                role,
+                ProgressionProviderReadiness.Conflict,
+                null,
+                relevant,
+                string.Join(" ", conflicts.Select(candidate => candidate.Detail).Distinct()));
+        }
         ProgressionProviderCandidate[] ready = relevant
             .Where(candidate => candidate.Readiness == ProgressionProviderReadiness.Ready)
             .ToArray();

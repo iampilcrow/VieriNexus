@@ -1,7 +1,7 @@
 # AutoDuty provider migration audit
 
-Snapshot: 2026-09-11
-Vieri source: `0a81501e7f00d682ad66211080fb2a2f1ae92fe0` (`1.0.0.442`)
+Snapshot: 2026-09-12
+Vieri source: `e1318fcf3cc950cf928a5a95058cb806a27f76a4` (`1.0.0.443`)
 Stock upstream: `2b0943ed113da76f3ce9df0df2f302151f828292`
 Common ancestor: `17f54e99235d84fe39582258eca7058fc5fb3e2b`
 
@@ -13,9 +13,21 @@ This matches the stock-Questionable direction: compatible upstream updates shoul
 
 ## Measured fork delta
 
-Compared with current stock AutoDuty, the Vieri tree contains 105 commits after the common ancestor and changes 110 files: 8,712 insertions and 1,156 deletions. The changed-file distribution is 70 helpers, 18 tests, 9 core files, 6 UI/config files, 4 IPC files, one duty path, and two root/provenance files.
+The Vieri branch contains 108 commits after the common ancestor and its final tree changes 112 files: 9,143 insertions and 1,156 deletions. Those totals include the accumulated Nexus-transition surface, tests, formatting, and provenance—not 112 distinct behaviors that must be migrated. The normalized final-tree review below is the retirement boundary.
 
-Stock upstream is currently one substantive commit plus its merge ahead of the fork's common ancestor. That change corrects character gathering to use the home world rather than the current world. The Vieri final tree still uses the current world at that call site, so this is a pending one-line upstream correction while the fork remains in service; it must be integrated and released through the normal VieriAutoDuty verification path, not hidden inside this documentation-only audit. The source lock already records the current Vieri and upstream revisions. This audit classifies the final tree difference; it does not assume that every historical intermediate commit still represents distinct live behavior.
+Stock upstream is one substantive commit plus its merge ahead of the fork's common ancestor. That change corrects first-time character/profile gathering to use the home world rather than the currently visited world. VieriAutoDuty 1.0.0.443 integrates the same one-line correction at source `e1318fcf3cc950cf928a5a95058cb806a27f76a4`; all 342 fork tests pass and the source lock now records both current revisions. This audit classifies the final tree difference and does not assume that every historical intermediate commit still represents distinct live behavior.
+
+## Final duty-engine delta after current-upstream synchronization
+
+The apparently large historical fork no longer implies a second dungeon engine that Nexus must absorb. Comparing the final trees and normalizing formatting produces this bounded disposition:
+
+- The Ktisis Hyperboreia duty-path JSON is semantically identical to current stock after whitespace normalization; no Nexus copy or fork-only path is required.
+- The remaining generic duty behavior is the fork's stale-path/death/re-entry recovery: it stops and clears an old vnavmesh path when territory/path execution is restarted, and chooses a safe authored restart index after death/shortcut recovery. This belongs in stock AutoDuty or must be proven equivalent there before fork retirement. Nexus keeps only its outer fail-closed provider-loss/completion checks and does not copy these engine internals.
+- Boss Mod close-range buffering and transient positional propagation are provider/combat-integration differences, not duty-path ownership. They belong behind the eventual Nexus Combat/provider contract, with Boss Mod still owning movement/mechanics.
+- queue-ready counters are telemetry only; Nexus already derives its authoritative duty completion and scheduling decisions independently.
+- routes, vendors, shopping, item maintenance, progression looping/Last Run, commands, status, and the custom overlay are already assigned to and implemented in Nexus; they are not remaining stock duty-engine parity work.
+
+Version 0.1.0.50 also closes the shared-identity ambiguity: Nexus inventories every installed plugin whose internal name is `AutoDuty`, selects stock automatically only when it is the sole loaded implementation, and reports a hard conflict if multiple instances are loaded even when their colliding IPC registrations look partly healthy.
 
 ## Why Nexus used to say “through VieriAutoDuty”
 
@@ -117,8 +129,8 @@ Each receives one of three outcomes before retirement: an exact Nexus mapping, a
 6. **Safe native maintenance and striking-dummy travel implemented in 0.1.0.38:** Nexus promotes the verified operations import into an independent atomic working library, resolves the current character's profile, and directly executes self-repair, materia extraction, Triple Triad/minion/orchestrion registration, and eligible coffer opening under exclusive UI/inventory leases and explicit Stop. The preserved overlay exposes those actions and the full striking-dummy destination catalog; Lifestream performs only compatible travel and vnavmesh performs the final approach. Selling, desynthesis, Grand Company turn-ins, Armoire/Glamour ordering, and in-duty withdrawal remain pending behind destructive-item review and recovery contracts.
 7. **Protected item transactions implemented in 0.1.0.47 and prerequisite ownership completed in 0.1.0.48:** Nexus owns imported ordering, exact selling selection/approval, gearset/EXP/collectable protection, desynthesis filtering, resource leases, Stop, timeout, and completion observation. For Grand Company turn-ins and Armoire/Glamour storage it also owns destination selection, Lifestream travel, vnavmesh approach, exact furnishing interaction, empty-set no-op handling, and final eligible-set verification. It invokes no AutoDuty maintenance endpoint. AutoRetainer remains a narrow Grand Company mechanics provider and Glamour Log remains a narrow eligible-storage mechanics provider. In-duty withdrawal stays inactive rather than treating AutoDuty Stop as a fake leave/resume contract.
 8. **Custom control/status ownership implemented in 0.1.0.49:** one Nexus gateway backs chat, the preserved overlay, and versioned companion IPC. It owns Start/Resume/Last Run, routes, maintenance, protected-selling review, page opening, character scoping, request replay protection, live character/duty/queue/gear/inventory/activity telemetry, and one Stop covering Progression, Atlas, gear, maintenance, dummy travel, and routes. Fork-only fake leave/pause/loop behavior is deliberately rejected.
-9. Audit the remaining duty-engine tree diff against then-current stock AutoDuty. Upstream generic fixes or prove the stock behavior equivalent; do not copy the full duty engine into Nexus.
-10. Run coexistence, provider-loss, duty completion, Last Run, gear interruption, reload, maintenance recovery, and clean stock-provider tests.
+9. **Final-tree duty audit completed in 0.1.0.50:** current stock's home-world correction is integrated into VieriAutoDuty 1.0.0.443; Ktisis content is semantically identical; the remaining generic delta is isolated to stale-path/death/re-entry recovery. Nexus now blocks duplicate loaded implementations sharing the `AutoDuty` identity before any provider call.
+10. Upstream or prove equivalent the isolated generic recovery behavior, then run one clean stock-provider coexistence/provider-loss/duty-completion/Last Run/reload acceptance sequence. Gear and maintenance no longer depend on AutoDuty and do not need to be re-proven as part of this handoff.
 11. Only then enable stock AutoDuty beside Nexus by default and retire the VieriAutoDuty package/feed entry through the deliberate retirement process.
 
 ## Non-goals

@@ -49,6 +49,34 @@ public sealed class ProgressionProviderPolicyTests
     }
 
     [Fact]
+    public void ExplicitDuplicateIdentityConflictWinsEvenWhenIpcRegistrationIsIncomplete()
+    {
+        ProgressionProviderCandidate conflict = Candidate(
+            "autoduty-duplicate",
+            ProgressionProviderFlavor.Stock,
+            ProgressionProviderReadiness.Conflict) with
+        {
+            Role = ProgressionProviderRole.Duties,
+            Detail = "More than one loaded plugin claims the AutoDuty identity.",
+        };
+        ProgressionProviderCandidate incompatible = Candidate(
+            "autoduty",
+            ProgressionProviderFlavor.VieriCompatibility,
+            ProgressionProviderReadiness.Incompatible) with
+        {
+            Role = ProgressionProviderRole.Duties,
+        };
+
+        ProgressionProviderSelection result = ProgressionProviderPolicy.Select(
+            ProgressionProviderRole.Duties,
+            [conflict, incompatible]);
+
+        Assert.Equal(ProgressionProviderReadiness.Conflict, result.Readiness);
+        Assert.Null(result.Selected);
+        Assert.Contains("more than one", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void IgnoresCandidatesForOtherRole()
     {
         ProgressionProviderCandidate duty = Candidate(
