@@ -2,8 +2,8 @@
 
 Working snapshot: 2026-09-13 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.64` (implementation complete; publication in progress)
-Current published source: `0.1.0.63`, source `2c4e3f30dbc13266f7790e3eabbecb514688e661`, website release `35816c8b3d74a73d4e5b5cd81b745f48f0757329`, verification documentation `ae1e27f01681a57961bbc605866511978f691fa6`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current product version: `0.1.0.64`
+Current published source: `0.1.0.64`, source `9e090588c2e343144c39dc3af8d12e7e4fc70945`, website release `cbcc1d114fd3202a1f7e6ee59b80ffd1beab2c3a`, verification documentation `d06bfcf702a16fe9129f0e583b9d5c53423d8f5e`. Production deployment `dpl_CkL2eLWdaDLTbLenKVC3kBcYWQaD` is Ready on both canonical aliases; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `44490C6E07696D278D036272079CD784B0347F188A06732628E31D74CF4EE3AB` / `39FE9EB05E5880A4AA0470D12DC51334A77A463BD3C84963DF6C5FD88387E402`; Discord workflow `34741300233` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
 Current workstream: version 0.1.0.64 consolidates Progression and Job Queue into Automation with automatic ownership handoff; restores the proven VieriAutoDuty overlay surface and preferences under Nexus ownership; routes Inn and preferred bell travel through stock Lifestream; makes stock Wrath the live rotation engine observed by Nexus suggestions; waits for post-load vnavmesh readiness; restores detailed searchable/actionable Progress Atlas browsing; and gives required stock providers explicit repository/install setup. Version 0.1.0.63 remains the ordinary stock AutoDuty and verified maintenance cutover foundation.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
