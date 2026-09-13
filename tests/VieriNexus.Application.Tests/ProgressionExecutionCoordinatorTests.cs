@@ -161,6 +161,27 @@ public sealed class ProgressionExecutionCoordinatorTests
     }
 
     [Fact]
+    public void LastRunSkipsConfiguredMaintenanceAfterVerifiedDuty()
+    {
+        FakeDutyProvider duty = new();
+        FakeMaintenanceProvider maintenance = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), duty, maintenanceProvider: maintenance);
+        coordinator.Start(Draft(targetLevel: 95), Plan());
+        Assert.True(coordinator.StopAfterCurrentDuty().Success);
+
+        duty.IsStopped = false;
+        coordinator.Update(World(level: 90, inDuty: true));
+        coordinator.ObserveDutyCompletion(200);
+        duty.IsStopped = true;
+        coordinator.Update(World(level: 91, inDuty: false));
+
+        Assert.Equal(GoalStatus.Paused, coordinator.State!.Goal.Status);
+        Assert.Equal(0, maintenance.StartCalls);
+        Assert.Single(duty.StartedTerritories);
+    }
+
+    [Fact]
     public void CompletedDutyReplansAndStartsExactlyOneNextRun()
     {
         FakeDutyProvider provider = new();
@@ -179,6 +200,121 @@ public sealed class ProgressionExecutionCoordinatorTests
         Assert.Equal(NexusTaskStatus.Succeeded, coordinator.State.Tasks[0].Status);
         Assert.Equal(NexusTaskStatus.Acquiring, coordinator.State.Tasks[1].Status);
         Assert.Equal(2, coordinator.State.Goal.PlanRevision);
+    }
+
+    [Fact]
+    public void CompletedDutyRunsConfiguredMaintenanceBeforePlanningAnotherDuty()
+    {
+        FakeDutyProvider duty = new();
+        FakeMaintenanceProvider maintenance = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(),
+            new ResourceLeaseManager(),
+            duty,
+            maintenanceProvider: maintenance);
+        coordinator.Start(Draft(targetLevel: 95), Plan());
+
+        duty.IsStopped = false;
+        coordinator.Update(World(level: 90, inDuty: true));
+        coordinator.ObserveDutyCompletion(200);
+        duty.IsStopped = true;
+        coordinator.Update(World(level: 91, inDuty: false));
+
+        Assert.Single(duty.StartedTerritories);
+        Assert.Equal(1, maintenance.StartCalls);
+        Assert.Equal("vieri.inventory.run-between-duty-maintenance/v1", coordinator.State!.ActiveTask!.Kind.Value);
+
+        maintenance.Complete();
+        coordinator.Update(World(level: 91, inDuty: false));
+
+        Assert.Equal(2, duty.StartedTerritories.Count);
+        Assert.Equal(NexusTaskStatus.Succeeded, coordinator.State.Tasks[1].Status);
+        Assert.Equal("vieri.duties.run-one/v1", coordinator.State.ActiveTask!.Kind.Value);
+    }
+
+    [Fact]
+    public void StopDuringBetweenDutyMaintenanceUsesMaintenanceStopOnly()
+    {
+        FakeDutyProvider duty = new();
+        FakeMaintenanceProvider maintenance = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(),
+            new ResourceLeaseManager(),
+            duty,
+            maintenanceProvider: maintenance);
+        coordinator.Start(Draft(targetLevel: 95), Plan());
+        duty.IsStopped = false;
+        coordinator.Update(World(level: 90, inDuty: true));
+        coordinator.ObserveDutyCompletion(200);
+        duty.IsStopped = true;
+        coordinator.Update(World(level: 91, inDuty: false));
+
+        ProgressionActionResult stopped = coordinator.StopNow();
+        maintenance.IsBusy = false;
+        coordinator.Update(World(level: 91, inDuty: false));
+
+        Assert.True(stopped.Success);
+        Assert.Equal(1, maintenance.StopCalls);
+        Assert.Equal(0, duty.StopCalls);
+        Assert.Equal(GoalStatus.Cancelled, coordinator.State!.Goal.Status);
+        Assert.Equal(2, coordinator.State.Tasks.Count);
+    }
+
+    [Fact]
+    public void VerifiedMaintenanceReturnsThroughGearReadinessBeforeNextDuty()
+    {
+        FakeDutyProvider duty = new();
+        FakeGearProvider gear = new();
+        FakeMaintenanceProvider maintenance = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(),
+            new ResourceLeaseManager(),
+            duty,
+            gear,
+            maintenanceProvider: maintenance);
+        ProgressionWorldObservation world = World(90, false) with { ItemLevel = 640, Gil = 1_500_000 };
+        coordinator.Start(Draft(targetLevel: 95) with { CurrentItemLevel = 640, CurrentGil = 1_500_000 }, Plan());
+        gear.IsBusy = true;
+        coordinator.Update(world);
+        gear.IsBusy = false;
+        coordinator.Update(world);
+        Assert.Single(duty.StartedTerritories);
+
+        duty.IsStopped = false;
+        coordinator.Update(world with { IsInDuty = true });
+        coordinator.ObserveDutyCompletion(200);
+        duty.IsStopped = true;
+        ProgressionWorldObservation returned = world with { Level = 91 };
+        coordinator.Update(returned);
+        maintenance.Complete();
+        coordinator.Update(returned);
+
+        Assert.Single(duty.StartedTerritories);
+        Assert.Equal(2, gear.StartedGilFloors.Count);
+        Assert.Equal("vieri.gear.ensure-readiness/v1", coordinator.State!.ActiveTask!.Kind.Value);
+    }
+
+    [Fact]
+    public void FailedMaintenanceCannotBeCountedAsCompleteOrStartAnotherDuty()
+    {
+        FakeDutyProvider duty = new();
+        FakeMaintenanceProvider maintenance = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), duty, maintenanceProvider: maintenance);
+        coordinator.Start(Draft(targetLevel: 95), Plan());
+
+        duty.IsStopped = false;
+        coordinator.Update(World(level: 90, inDuty: true));
+        coordinator.ObserveDutyCompletion(200);
+        duty.IsStopped = true;
+        coordinator.Update(World(level: 91, inDuty: false));
+        maintenance.Fail();
+        coordinator.Update(World(level: 91, inDuty: false));
+
+        Assert.Equal(GoalStatus.Blocked, coordinator.State!.Goal.Status);
+        Assert.Null(coordinator.State.ActiveTask);
+        Assert.Equal("maintenance-not-completed", coordinator.State.Tasks[1].Failure!.Code);
+        Assert.Single(duty.StartedTerritories);
     }
 
     [Fact]
@@ -781,6 +917,55 @@ public sealed class ProgressionExecutionCoordinatorTests
         }
 
         public void EndWithoutCompletion() => isBusy = false;
+    }
+
+    private sealed class FakeMaintenanceProvider : IProgressionMaintenanceProvider
+    {
+        public ProviderId Id { get; } = new("provider.maintenance-test/v1");
+        public bool Available { get; set; } = true;
+        public bool HasConfiguredOperations { get; set; } = true;
+        public bool IsBusy { get; set; }
+        public long StartedSequence { get; private set; }
+        public long CompletedSequence { get; private set; }
+        public int StartCalls { get; private set; }
+        public int StopCalls { get; private set; }
+
+        public ProgressionMaintenanceProviderObservation ObserveMaintenance() => new(
+            Available,
+            HasConfiguredOperations,
+            Available ? IsBusy : null,
+            StartedSequence,
+            CompletedSequence,
+            IsBusy ? "running maintenance" : "maintenance inactive");
+
+        public bool TryStartConfiguredMaintenance(out string message)
+        {
+            StartCalls++;
+            if (!Available || !HasConfiguredOperations)
+            {
+                message = "maintenance unavailable";
+                return false;
+            }
+            StartedSequence++;
+            IsBusy = true;
+            message = "started maintenance";
+            return true;
+        }
+
+        public bool TryStopMaintenance(out string message)
+        {
+            StopCalls++;
+            message = Available ? "maintenance stop requested" : "maintenance unavailable";
+            return Available;
+        }
+
+        public void Complete()
+        {
+            IsBusy = false;
+            CompletedSequence = StartedSequence;
+        }
+
+        public void Fail() => IsBusy = false;
     }
 
     private sealed class FakeQuestProvider : IProgressionQuestProvider

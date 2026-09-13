@@ -21,7 +21,6 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     IManualGearShoppingProvider
 {
     private static readonly ProviderId QuestionableProviderId = new("vieri.provider.questionable-stock/v1");
-    private static readonly ProviderId AutoDutyCompatibilityProviderId = new("vieri.provider.autoduty-compat/v1");
     private static readonly ProviderId AutoDutyStockProviderId = new("vieri.provider.autoduty-stock/v1");
     private static readonly ProviderId NexusGearProviderId = new("vieri.provider.nexus-gear/v1");
 
@@ -44,7 +43,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly ICallGateSubscriber<object> autoDutyStop;
     private readonly ICallGateSubscriber<int, object> autoDutySetLevelingMode;
     private readonly ICallGateSubscriber<string, object, object> autoDutySetConfig;
-    private readonly ICallGateSubscriber<int, string> vieriAutoDutyProgression;
+    // Identity marker only. Nexus never dispatches this VieriAutoDuty-only endpoint.
+    private readonly ICallGateSubscriber<int, string> vieriAutoDutyIdentityMarker;
     private readonly VnavmeshNavigationStopProvider navigationStop;
     private readonly NexusGearCatalogService gearCatalog;
     private readonly NexusGearExecutionService gearExecution;
@@ -106,7 +106,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         autoDutyStop = pluginInterface.GetIpcSubscriber<object>("AutoDuty.Stop");
         autoDutySetLevelingMode = pluginInterface.GetIpcSubscriber<int, object>("AutoDuty.SetLevelingMode");
         autoDutySetConfig = pluginInterface.GetIpcSubscriber<string, object, object>("AutoDuty.SetConfig");
-        vieriAutoDutyProgression = pluginInterface.GetIpcSubscriber<int, string>("AutoDuty.StartProgressionLeveling");
+        vieriAutoDutyIdentityMarker = pluginInterface.GetIpcSubscriber<int, string>("AutoDuty.StartProgressionLeveling");
         gearCatalog = new NexusGearCatalogService(dataManager, playerState, objectTable);
         gearExecution = new NexusGearExecutionService(
             gearCatalog, navigationLibrary, routeTravel, clientState, playerState, objectTable,
@@ -114,7 +114,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     }
 
     ProviderId IProgressionDutyProvider.Id =>
-        Snapshot().Duties.Selected?.Id ?? AutoDutyCompatibilityProviderId;
+        Snapshot().Duties.Selected?.Id ?? AutoDutyStockProviderId;
 
     IReadOnlyList<ProgressionDutyCandidate> IProgressionDutyProvider.EligibleDuties(int currentLevel) =>
         EligibleDuties(currentLevel);
@@ -962,7 +962,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 candidate.IsLoaded,
                 candidate.DisplayName,
                 candidate.Version)),
-            vieriAutoDutyProgression.HasFunction);
+            vieriAutoDutyIdentityMarker.HasFunction);
         if (identity.Identity == AutoDutyProviderIdentity.Conflict)
         {
             return loaded.Select((presence, index) => new ProgressionProviderCandidate(
@@ -996,20 +996,23 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             : $"missing {string.Join(", ", missing)}";
         PluginPresence? active = loaded.SingleOrDefault();
         bool activeIsVieri = identity.Identity == AutoDutyProviderIdentity.VieriCompatibility;
-        PluginPresence? vieriPresence = activeIsVieri
-            ? active
-            : family.FirstOrDefault(candidate => IsVieriName(candidate.DisplayName));
         PluginPresence? stockPresence = active is not null && !activeIsVieri
             ? active
-            : family.FirstOrDefault(candidate => !candidate.IsLoaded && !IsVieriName(candidate.DisplayName));
-        ProgressionProviderCandidate compatibility = Candidate(
-            AutoDutyCompatibilityProviderId,
-            "VieriAutoDuty",
-            ProgressionProviderRole.Duties,
-            ProgressionProviderFlavor.VieriCompatibility,
-            vieriPresence ?? new PluginPresence(false, false, null),
-            activeIsVieri && stockContractReady,
-            contract);
+            : family.FirstOrDefault(candidate => !IsVieriName(candidate.DisplayName));
+        if (activeIsVieri)
+        {
+            return
+            [
+                new ProgressionProviderCandidate(
+                    AutoDutyStockProviderId,
+                    "AutoDuty",
+                    ProgressionProviderRole.Duties,
+                    ProgressionProviderFlavor.Stock,
+                    ProgressionProviderReadiness.Conflict,
+                    active?.Version,
+                    "VieriAutoDuty is a settings-migration source only. Disable it and enable stock AutoDuty for duty execution."),
+            ];
+        }
         ProgressionProviderCandidate stock = Candidate(
             AutoDutyStockProviderId,
             "AutoDuty",
@@ -1018,7 +1021,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             stockPresence ?? new PluginPresence(false, false, null),
             active is not null && !activeIsVieri && stockContractReady,
             contract);
-        return [compatibility, stock];
+        return [stock];
     }
 
     private static bool IsVieriName(string? displayName) =>

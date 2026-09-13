@@ -136,6 +136,25 @@ public interface IProgressionGearProvider
     bool TryStopGearReadiness(out string message);
 }
 
+public sealed record ProgressionMaintenanceProviderObservation(
+    bool IsAvailable,
+    bool HasConfiguredOperations,
+    bool? IsBusy,
+    long StartedSequence,
+    long CompletedSequence,
+    string Detail);
+
+public interface IProgressionMaintenanceProvider
+{
+    ProviderId Id { get; }
+
+    ProgressionMaintenanceProviderObservation ObserveMaintenance();
+
+    bool TryStartConfiguredMaintenance(out string message);
+
+    bool TryStopMaintenance(out string message);
+}
+
 public sealed record ReachJobLevelDesiredState(
     uint ClassJobId,
     int TargetLevel,
@@ -158,6 +177,11 @@ public sealed record ProgressionGearTaskPayload(
     int MinimumGilReserve,
     int StartingItemLevel,
     int StartingGil,
+    long BaselineStartedSequence,
+    long BaselineCompletedSequence);
+
+public sealed record ProgressionMaintenanceTaskPayload(
+    int StartingLevel,
     long BaselineStartedSequence,
     long BaselineCompletedSequence);
 
@@ -346,10 +370,12 @@ public sealed class ProgressionExecutionCoordinator
 {
     private static readonly GoalKind ReachJobLevelKind = new("vieri.progression.reach-job-level/v1");
     private static readonly TaskKind EnsureGearKind = new("vieri.gear.ensure-readiness/v1");
+    private static readonly TaskKind RunMaintenanceKind = new("vieri.inventory.run-between-duty-maintenance/v1");
     private static readonly TaskKind RunQuestKind = new("vieri.quest.run-one/v1");
     private static readonly TaskKind RunHuntingLogKind = new("vieri.hunting-log.complete-target/v1");
     private static readonly TaskKind RunDutyKind = new("vieri.duties.run-one/v1");
     private static readonly CapabilityId GearCapability = new("vieri.capability.gear.ensure-readiness/v1");
+    private static readonly CapabilityId MaintenanceCapability = new("vieri.capability.inventory.run-maintenance/v1");
     private static readonly CapabilityId QuestCapability = new("vieri.capability.quest.run-supported/v1");
     private static readonly CapabilityId HuntingLogCapability = new("vieri.capability.hunting-log.complete-target/v1");
     private static readonly CapabilityId DutyCapability = new("vieri.capability.duty.run/v1");
@@ -366,6 +392,12 @@ public sealed class ProgressionExecutionCoordinator
         ResourceKind.Rotation,
     ];
     private static readonly ResourceKind[] GearResources =
+    [
+        ResourceKind.Teleport,
+        ResourceKind.UiInteraction,
+        ResourceKind.InventoryMutation,
+    ];
+    private static readonly ResourceKind[] MaintenanceResources =
     [
         ResourceKind.Teleport,
         ResourceKind.UiInteraction,
@@ -403,6 +435,7 @@ public sealed class ProgressionExecutionCoordinator
     private readonly ResourceLeaseManager leases;
     private readonly IProgressionDutyProvider provider;
     private readonly IProgressionGearProvider? gearProvider;
+    private readonly IProgressionMaintenanceProvider? maintenanceProvider;
     private readonly IProgressionQuestProvider? questProvider;
     private readonly IProgressionHuntingProvider? huntingProvider;
     private readonly Func<DateTimeOffset> utcNow;
@@ -419,12 +452,14 @@ public sealed class ProgressionExecutionCoordinator
         IProgressionGearProvider? gearProvider = null,
         IProgressionQuestProvider? questProvider = null,
         IProgressionHuntingProvider? huntingProvider = null,
+        IProgressionMaintenanceProvider? maintenanceProvider = null,
         Func<DateTimeOffset>? utcNow = null)
     {
         this.store = store;
         this.leases = leases;
         this.provider = provider;
         this.gearProvider = gearProvider;
+        this.maintenanceProvider = maintenanceProvider;
         this.questProvider = questProvider;
         this.huntingProvider = huntingProvider;
         this.utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
@@ -671,7 +706,7 @@ public sealed class ProgressionExecutionCoordinator
             return;
         }
 
-        if (activeLease is null || !activeLease.Heartbeat(LeaseLifetime))
+        if (task.Kind != RunMaintenanceKind && (activeLease is null || !activeLease.Heartbeat(LeaseLifetime)))
         {
             BeginFailureStop(task, FailureKind.UnsafeState, "lease-lost",
                 "Progression ownership expired. Nexus is stopping the provider and will not schedule more work.", true);
@@ -681,6 +716,12 @@ public sealed class ProgressionExecutionCoordinator
         if (task.Kind == EnsureGearKind)
         {
             UpdateGearReadiness(task, world);
+            return;
+        }
+
+        if (task.Kind == RunMaintenanceKind)
+        {
+            UpdateMaintenance(task, world);
             return;
         }
 
@@ -1046,6 +1087,151 @@ public sealed class ProgressionExecutionCoordinator
         StartNextActivity(ReadDesiredState(), world.Level);
     }
 
+    private ProgressionActionResult StartBetweenDutyMaintenance(ProgressionWorldObservation world)
+    {
+        if (State is null || maintenanceProvider is null)
+            return ContinueAfterMaintenance(world);
+
+        ProgressionMaintenanceProviderObservation observation = maintenanceProvider.ObserveMaintenance();
+        if (!observation.HasConfiguredOperations)
+            return ContinueAfterMaintenance(world);
+        if (!observation.IsAvailable || observation.IsBusy is null)
+        {
+            UpdateGoal(GoalStatus.Blocked, observation.Detail);
+            return new(false, observation.Detail);
+        }
+        if (observation.IsBusy == true)
+        {
+            const string detail = "Nexus maintenance is already running outside this Progression goal. Stop it before resuming.";
+            UpdateGoal(GoalStatus.Blocked, detail);
+            return new(false, detail);
+        }
+
+        DateTimeOffset now = utcNow();
+        TaskId taskId = TaskId.New();
+        ProgressionMaintenanceTaskPayload payload = new(
+            world.Level,
+            observation.StartedSequence,
+            observation.CompletedSequence);
+        NexusTask task = new(
+            taskId,
+            State.Goal.Id,
+            RunMaintenanceKind,
+            1,
+            "Run enabled between-duty maintenance",
+            "Nexus runs the imported safe maintenance profile after a verified duty and before planning another activity.",
+            MaintenanceCapability,
+            maintenanceProvider.Id,
+            MaintenanceResources.ToHashSet(),
+            NexusTaskStatus.Ready,
+            JsonSerializer.Serialize(payload),
+            "Starting the enabled Nexus maintenance sequence.",
+            null);
+
+        State = State with
+        {
+            Tasks = [.. State.Tasks.TakeLast(99), task],
+            ActiveTaskId = taskId,
+            ProviderStartObserved = false,
+            DutyEntryObserved = false,
+            DutyCompletionObserved = false,
+            Goal = State.Goal with
+            {
+                UpdatedAt = now,
+                Status = GoalStatus.Active,
+                StatusDetail = "Running enabled maintenance before the next bounded activity.",
+            },
+            UpdatedAtUtc = now,
+        };
+        Save();
+
+        if (!maintenanceProvider.TryStartConfiguredMaintenance(out string message))
+        {
+            FailTask(State.ActiveTask!, FailureKind.DependencyUnavailable, "maintenance-start-rejected",
+                "The enabled between-duty maintenance sequence could not start.", message, true);
+            return new(false, message);
+        }
+
+        ReplaceTask(State.ActiveTask! with
+        {
+            Status = NexusTaskStatus.Running,
+            StatusDetail = message,
+        });
+        State = State with
+        {
+            ProviderStartObserved = true,
+            Goal = State.Goal with { StatusDetail = message, UpdatedAt = now },
+            UpdatedAtUtc = now,
+        };
+        Save();
+        return new(true, message);
+    }
+
+    private void UpdateMaintenance(NexusTask task, ProgressionWorldObservation world)
+    {
+        if (maintenanceProvider is null)
+        {
+            BeginFailureStop(task, FailureKind.DependencyUnavailable, "maintenance-provider-unavailable",
+                "The Nexus maintenance provider is unavailable.", true);
+            return;
+        }
+
+        ProgressionMaintenanceProviderObservation observation = maintenanceProvider.ObserveMaintenance();
+        if (!observation.IsAvailable || observation.IsBusy is null)
+        {
+            BeginFailureStop(task, FailureKind.DependencyUnavailable, "maintenance-provider-unavailable",
+                "Nexus maintenance became unavailable. Ownership remains blocked until inactivity is confirmed.", true);
+            return;
+        }
+        if (observation.IsBusy == true)
+        {
+            if (task.StatusDetail != observation.Detail)
+            {
+                ReplaceTask(task with { Status = NexusTaskStatus.Running, StatusDetail = observation.Detail });
+                UpdateGoal(GoalStatus.Active, observation.Detail);
+            }
+            return;
+        }
+        if (!world.IsAvailable || world.IsInDuty)
+        {
+            ReplaceTask(task with
+            {
+                Status = NexusTaskStatus.Verifying,
+                StatusDetail = "Maintenance ended; waiting for a stable character snapshot before continuing.",
+            });
+            Save();
+            return;
+        }
+
+        ProgressionMaintenanceTaskPayload payload =
+            JsonSerializer.Deserialize<ProgressionMaintenanceTaskPayload>(task.PayloadJson)
+            ?? throw new InvalidDataException("The maintenance task payload is empty.");
+        if (observation.CompletedSequence <= payload.BaselineCompletedSequence)
+        {
+            FailTask(task, FailureKind.TransientExternal, "maintenance-not-completed",
+                "Nexus maintenance stopped before the enabled sequence was verified complete.", observation.Detail, true);
+            return;
+        }
+
+        ReplaceTask(task with
+        {
+            Status = NexusTaskStatus.Succeeded,
+            StatusDetail = observation.Detail,
+            Failure = null,
+        });
+        State = State! with { ActiveTaskId = null, ProviderStartObserved = false };
+        UpdateGoal(GoalStatus.Active, "Between-duty maintenance is verified; checking gear before the next activity.");
+        ContinueAfterMaintenance(world);
+    }
+
+    private ProgressionActionResult ContinueAfterMaintenance(ProgressionWorldObservation world)
+    {
+        ReachJobLevelDesiredState desired = ReadDesiredState();
+        if (gearProvider is not null)
+            return StartGearReadiness(world.Level, desired.MinimumGilReserve, world.ItemLevel, world.Gil);
+        return StartNextActivity(desired, world.Level);
+    }
+
     private ProgressionActionResult StartNextActivity(
         ReachJobLevelDesiredState desired,
         int currentLevel,
@@ -1337,7 +1523,13 @@ public sealed class ProgressionExecutionCoordinator
         UpdateGoal(GoalStatus.Active,
             $"Verified {payload.TargetName}; selecting the next bounded activity.",
             incrementPlanRevision: true);
-        StartNextActivity(desired, world.Level);
+        bool completedDutyTarget = payload.Locations.Count > 0 &&
+                                   payload.Locations.All(location =>
+                                       !location.IsOpenWorld && location.DutyTerritoryId != 0);
+        if (completedDutyTarget)
+            StartBetweenDutyMaintenance(world);
+        else
+            StartNextActivity(desired, world.Level);
     }
 
     private ProgressionActionResult StartNextQuest(int currentLevel, ProgressionQuestCandidate quest)
@@ -1693,12 +1885,7 @@ public sealed class ProgressionExecutionCoordinator
         UpdateGoal(GoalStatus.Active,
             $"Verified {task.Title}; replanning from level {world.Level}.",
             incrementPlanRevision: true);
-        if (gearProvider is not null)
-        {
-            StartGearReadiness(world.Level, desired.MinimumGilReserve, world.ItemLevel, world.Gil);
-            return;
-        }
-        StartNextActivity(desired, world.Level);
+        StartBetweenDutyMaintenance(world);
     }
 
     private void CompleteCancellation(NexusTask task)
@@ -1875,6 +2062,16 @@ public sealed class ProgressionExecutionCoordinator
             return new(gear.IsAvailable, gear.IsBusy is null ? null : !gear.IsBusy.Value, gear.Detail);
         }
 
+        if (task?.Kind == RunMaintenanceKind)
+        {
+            if (maintenanceProvider is null)
+                return new(false, null, "The Nexus maintenance provider is unavailable.");
+            ProgressionMaintenanceProviderObservation maintenance = maintenanceProvider.ObserveMaintenance();
+            return new(maintenance.IsAvailable,
+                maintenance.IsBusy is null ? null : !maintenance.IsBusy.Value,
+                maintenance.Detail);
+        }
+
         if (task?.Kind == RunQuestKind)
         {
             if (questProvider is null)
@@ -1922,6 +2119,16 @@ public sealed class ProgressionExecutionCoordinator
                 return false;
             }
             return gearProvider.TryStopGearReadiness(out message);
+        }
+
+        if (task?.Kind == RunMaintenanceKind)
+        {
+            if (maintenanceProvider is null)
+            {
+                message = "The Nexus maintenance Stop contract is unavailable.";
+                return false;
+            }
+            return maintenanceProvider.TryStopMaintenance(out message);
         }
 
         if (task?.Kind == RunQuestKind)

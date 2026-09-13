@@ -7,7 +7,7 @@ Common ancestor: `17f54e99235d84fe39582258eca7058fc5fb3e2b`
 
 ## Decision
 
-The permanent dependency is stock AutoDuty as a replaceable, module-scoped Duty provider. VieriAutoDuty is a migration source and temporary compatibility provider, not the final duty engine inside Nexus. Nexus owns Vieri-specific goals, policy, UI, routes, travel composition, gear/inventory decisions, maintenance scheduling, telemetry, commands, and cross-provider coordination. Stock AutoDuty continues to own its supported duty paths and internal duty state machine.
+The permanent dependency is stock AutoDuty as a replaceable, module-scoped Duty provider. As of Nexus 0.1.0.63, VieriAutoDuty is a settings-migration source only and is not an executable provider candidate. Nexus owns Vieri-specific goals, policy, UI, routes, travel composition, gear/inventory decisions, maintenance scheduling, telemetry, commands, and cross-provider coordination. Stock AutoDuty continues to own its supported duty paths and internal duty state machine.
 
 This matches the stock-Questionable direction: compatible upstream updates should normally require only a provider-contract check, not a Vieri fork merge or a Nexus source change.
 
@@ -57,7 +57,7 @@ The following Vieri endpoints are additions and cannot be assumed on stock:
 | `ExecuteVieriCommand` | Start/stop/leave/pause/resume/loops/sell/repair/inn/job gateway | Implemented in Nexus 0.1.0.49 as the character-scoped, idempotent `VieriNexus.Commands.V1.Execute` gateway over Nexus-owned commands and narrow providers; unsupported leave/pause/loop requests fail closed |
 | `GetVieriStatus` | Character, duty, queue, gear, durability, and completion telemetry | Implemented in Nexus 0.1.0.49 as `VieriNexus.Operations.V1.GetStatus`, composed from Nexus world/runtime state without calling VieriAutoDuty status IPC |
 
-Stock AutoDuty is therefore usable now for bounded duty start/stop and path eligibility, but it cannot replace VieriAutoDuty in production until the Vieri-only responsibilities below have moved or been proven unnecessary.
+Stock AutoDuty is the production provider for bounded duty start/stop and path eligibility. The Vieri-only responsibilities below have moved to Nexus or were deliberately excluded because the stock provider does not expose a safe contract.
 
 ## Custom behavior inventory and destination
 
@@ -130,8 +130,9 @@ Each receives one of three outcomes before retirement: an exact Nexus mapping, a
 7. **Protected item transactions implemented in 0.1.0.47 and prerequisite ownership completed in 0.1.0.48:** Nexus owns imported ordering, exact selling selection/approval, gearset/EXP/collectable protection, desynthesis filtering, resource leases, Stop, timeout, and completion observation. For Grand Company turn-ins and Armoire/Glamour storage it also owns destination selection, Lifestream travel, vnavmesh approach, exact furnishing interaction, empty-set no-op handling, and final eligible-set verification. It invokes no AutoDuty maintenance endpoint. AutoRetainer remains a narrow Grand Company mechanics provider and Glamour Log remains a narrow eligible-storage mechanics provider. In-duty withdrawal stays inactive rather than treating AutoDuty Stop as a fake leave/resume contract.
 8. **Custom control/status ownership implemented in 0.1.0.49:** one Nexus gateway backs chat, the preserved overlay, and versioned companion IPC. It owns Start/Resume/Last Run, routes, maintenance, protected-selling review, page opening, character scoping, request replay protection, live character/duty/queue/gear/inventory/activity telemetry, and one Stop covering Progression, Atlas, gear, maintenance, dummy travel, and routes. Fork-only fake leave/pause/loop behavior is deliberately rejected.
 9. **Final-tree duty audit completed in 0.1.0.50:** current stock's home-world correction is integrated into VieriAutoDuty 1.0.0.443; Ktisis content is semantically identical; the remaining generic delta is isolated to stale-path/death/re-entry recovery. Nexus now blocks duplicate loaded implementations sharing the `AutoDuty` identity before any provider call.
-10. **Generic recovery patch isolated and verified:** branch `nexus-recovery-fixes-0.0.0.335` at `2c583870c216573a054af109d11fafdd85d556be` contains only the territory/start stale-path clearing and authored death-restart policy required from the final-tree audit. Its five dedicated tests and stock Release build pass. Upstream acceptance (or equivalent stock behavior) plus one clean stock-provider coexistence/provider-loss/duty-completion/Last Run/reload acceptance sequence remain required. Gear and maintenance no longer depend on AutoDuty and do not need to be re-proven as part of this handoff.
-11. Only then enable stock AutoDuty beside Nexus by default and retire the VieriAutoDuty package/feed entry through the deliberate retirement process.
+10. **Generic AutoDuty recovery patch retained only as audit evidence:** the isolated branch remains unsubmitted and is not a Nexus runtime dependency. Nexus clears stale vnavmesh work before each fresh stock dispatch and treats provider loss or an unverified end as a failed bounded activity. Authored mid-duty death/re-entry index selection remains stock AutoDuty behavior; Nexus does not copy or patch the stock duty engine and never falls back to VieriAutoDuty.
+11. **Runtime cutover completed in 0.1.0.63:** stock AutoDuty is the sole executable duty candidate. VieriAutoDuty is detected only as a migration source and blocks dispatch if loaded. Verified duty completion now automatically runs enabled Nexus maintenance, verifies a new completion checkpoint, checks gear, and then replans. Last Run pauses before maintenance, while maintenance Stop/failure cannot advance the goal.
+12. Retire the VieriAutoDuty package/feed entry only through the deliberate retirement process after settings preparation remains available to every intended computer.
 
 ## Non-goals
 

@@ -284,11 +284,16 @@ public sealed class Plugin : IDalamudPlugin
             TargetManager,
             Condition,
             CommandManager);
+        gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
+        maintenanceRuntime = new NexusMaintenanceRuntimeService(
+            resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager,
+            ClientState, suiteTravelProvider, PluginInterface, GameInteropProvider);
         progressionRuntime = new ProgressionRuntimeService(
             PluginInterface.GetPluginConfigDirectory(),
             resourceLeases,
             progressionProviders,
             huntingLog,
+            maintenanceRuntime,
             DutyState,
             Log);
         fastJobSwitch = new FastJobSwitchService(PluginInterface, CommandManager, DataManager);
@@ -307,10 +312,6 @@ public sealed class Plugin : IDalamudPlugin
             progressAtlasActions,
             TargetManager,
             Log);
-        gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
-        maintenanceRuntime = new NexusMaintenanceRuntimeService(
-            resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager,
-            ClientState, suiteTravelProvider, PluginInterface, GameInteropProvider);
         strikingDummyTravel = new StrikingDummyTravelService(
             PluginInterface, ClientState, Condition, DataManager, AetheryteList, navigationRuntime);
         worldObserver = new WorldSnapshotObserver(

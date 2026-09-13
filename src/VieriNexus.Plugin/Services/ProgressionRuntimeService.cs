@@ -15,6 +15,7 @@ internal sealed class ProgressionRuntimeService
     private readonly ResourceLeaseManager leases;
     private readonly ProgressionProviderService provider;
     private readonly NexusHuntingLogService huntingLog;
+    private readonly IProgressionMaintenanceProvider maintenance;
     private readonly IPluginLog log;
     private readonly IDutyState dutyState;
     private ProgressionExecutionCoordinator? coordinator;
@@ -26,6 +27,7 @@ internal sealed class ProgressionRuntimeService
         ResourceLeaseManager leases,
         ProgressionProviderService provider,
         NexusHuntingLogService huntingLog,
+        IProgressionMaintenanceProvider maintenance,
         IDutyState dutyState,
         IPluginLog log)
     {
@@ -33,6 +35,7 @@ internal sealed class ProgressionRuntimeService
         this.leases = leases;
         this.provider = provider;
         this.huntingLog = huntingLog;
+        this.maintenance = maintenance;
         this.dutyState = dutyState;
         this.log = log;
         dutyState.DutyCompleted += OnDutyCompleted;
@@ -195,7 +198,8 @@ internal sealed class ProgressionRuntimeService
                 provider,
                 provider,
                 provider,
-                huntingLog);
+                huntingLog,
+                maintenance);
         }
         catch (Exception ex)
         {

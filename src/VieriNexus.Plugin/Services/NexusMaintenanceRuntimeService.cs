@@ -31,8 +31,9 @@ internal sealed record NexusMaintenanceStatus(
 /// Nexus-owned maintenance orchestration. Item selection and verification remain in Nexus; narrow
 /// stock providers are used only for mechanics they already expose (GC turn-ins and collection storage).
 /// </summary>
-internal sealed unsafe class NexusMaintenanceRuntimeService
+internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMaintenanceProvider
 {
+    private static readonly ProviderId ProgressionProviderId = new("vieri.provider.nexus-maintenance/v1");
     private delegate void SellItemDelegate(uint inventorySlot, InventoryType inventoryType, uint unknown);
 
     [Signature("48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 8B F2 8B E9")]
@@ -91,6 +92,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
     private bool stopRequested;
     private ProviderPreparationPhase providerPreparation;
     private DateTimeOffset providerPreparationStartedAt;
+    private long runStartedSequence;
+    private long runCompletedSequence;
 
     internal NexusMaintenanceRuntimeService(
         ResourceLeaseManager leases,
@@ -126,6 +129,21 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
 
     internal NexusMaintenanceStatus Status => new(
         current is not null, current, message, completed, total);
+
+    ProviderId IProgressionMaintenanceProvider.Id => ProgressionProviderId;
+
+    ProgressionMaintenanceProviderObservation IProgressionMaintenanceProvider.ObserveMaintenance() => new(
+        CurrentProfile is not null,
+        CurrentProfile is { } profile && OperationsExecutionPolicy.ConfiguredOperations(profile.Maintenance).Count > 0,
+        current is not null,
+        runStartedSequence,
+        runCompletedSequence,
+        message);
+
+    bool IProgressionMaintenanceProvider.TryStartConfiguredMaintenance(out string result) =>
+        StartConfigured(out result);
+
+    bool IProgressionMaintenanceProvider.TryStopMaintenance(out string result) => Stop(out result);
 
     internal AutoDutyProfileSnapshot? CurrentProfile => profiles.ProfileFor(playerState.ContentId);
 
@@ -276,6 +294,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         total = queue.Count;
         completed = 0;
         skippedQuantities.Clear();
+        runStartedSequence++;
         BeginNext(DateTimeOffset.UtcNow);
         result = message;
         return true;
@@ -382,6 +401,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService
         ResetOperationState();
         if (queue.Count == 0)
         {
+            runCompletedSequence = runStartedSequence;
             Reset($"Nexus completed {completed} maintenance operation{(completed == 1 ? string.Empty : "s")}.");
             return;
         }
