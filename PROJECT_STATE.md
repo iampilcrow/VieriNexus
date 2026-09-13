@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-13 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.72`
+Current product version: `0.1.0.73`
 Current published source: `0.1.0.72`, source `dad78d48e9b7e889cf170c6ba8de61cdb87ee1fd`, website release `ac28bef0d56e5aa5c969df293f094235688fce79`, verification documentation `8c58ad6d116ee60d0aa49c6beb0c7f50d7d71aeb`. Release deployment `dpl_7MWbFUHyY5uTBTD5JWpYzvVNjorQ` and final documentation deployment `dpl_83S7PMacLgtG3UfbJQZVuipNdBN4` are Ready on both canonical aliases; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `EEB6DF36FFE75AC79993A621797D43B632B01AC376AE19478C8FF20AB5522F66` / `24C0FD667FF263439593E2F063F93192E119F42DC49EFB98AC2A11D56AC8060D`; Discord workflow `34771965245` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.72 is published. It detects the post-uninstall VieriAutoDuty folder that remains queued for Dalamud startup cleanup and requires that cleanup restart before stock AutoDuty is installed, preventing shared-identity version pruning from deleting the newly installed stock build in the same pass.
+Current workstream: version 0.1.0.73 restores exact standalone VieriAutoDuty overlay structure inside Nexus. The compact surface is Goto, Gear, Inventory, Extras, settings, and close; it restores Sell Inventory and the original Equip/TurnIn/Coffers/Armoire/Triple Triad choices, removes unrelated Nexus maintenance shortcuts from those menus, and keeps protected selling behind an exact in-overlay review. Version 0.1.0.72 remains the current published production feed entry until 0.1.0.73 completes the release workflow.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -215,7 +215,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 9 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety, Progression draft and complete multi-job queue state, one-time verified queue promotion, per-source migration state, and independent embedded-module enablement.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.72`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.73`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -251,7 +251,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 - `Services/EmbeddedModuleManager.cs`, `EmbeddedModuleLoadContext.cs`, and `EmbeddedModuleProxies.cs` — one-predecessor-at-a-time settings preparation, timestamped backup, isolated runtime extraction/loading, module-scoped configuration/UI callbacks, protected VieriLink token validation, independent failure containment, and automatic takeover after the standalone predecessor is disabled.
 - `Services/WorldSnapshotObserver.cs` — throttled Dalamud client/player/object/condition observation plus the current read-only provider-health snapshot.
 - `UI/NexusWindow.cs` — entire current shell and pages, including the one-scrollbar Plugins launcher with top-level Dalamud actions, favorites-first grouping, remaining-plugin list, inline command expansion, preferred/custom actions, hidden restoration, filters, and behavior/hotkey controls.
-- `UI/NexusOperationsOverlay.cs` — optional compact Goto/Gear/Inventory/Duty/Extras surface with the approved predecessor shortcuts, Nexus/Lifestream travel, current operation status, and unified Stop. Historical paused-duty detail is deliberately excluded while the overlay is idle.
+- `UI/NexusOperationsOverlay.cs` — compact standalone-overlay parity surface with the original Goto/Gear/Inventory/Extras ordering, button labels and menus, settings/close icons, Nexus/Lifestream travel, current action status, unified Stop/Pause/Resume/Last Run, and an in-overlay exact-item Sell Inventory approval. Unrelated Nexus maintenance/page shortcuts do not appear in the compact menus.
 - `UI/NexusTheme.cs` — dark/red/gold ImGui theme and shared status/section helpers.
 
 ### `tests/VieriNexus.Application.Tests`

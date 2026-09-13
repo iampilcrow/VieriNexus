@@ -1,5 +1,6 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Interface.Windowing;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
@@ -46,6 +47,8 @@ internal sealed class NexusOperationsOverlay : Window
     private bool quickTravelObservedBusy;
     private string quickTravelDestination = string.Empty;
     private DateTimeOffset quickTravelStartedAt;
+    private NexusItemTransactionPreview? sellPreview;
+    private bool sellReviewRequested;
     private Vector2 lastPosition;
     private int priorLineCount = 1;
     private int currentLineCount = 1;
@@ -118,8 +121,8 @@ internal sealed class NexusOperationsOverlay : Window
         bool maintenanceActive = maintenance.Status.IsActive;
         bool dummyTravelActive = strikingDummies.Status.IsActive;
         AutoDutyOverlayPreferences? overlay = maintenance.CurrentProfile?.Overlay;
-        bool anyActive = navigationActive || gearActive || progressionActive || maintenanceActive || dummyTravelActive ||
-                         quickTravelRequested;
+        bool anyActive = navigationActive || gearActive || progressionActive || progressionPaused || maintenanceActive ||
+                         dummyTravelActive || quickTravelRequested;
         currentLineCount = plugin.Configuration.ShowOperationsStatus &&
                            (anyActive || !string.IsNullOrWhiteSpace(message)) ? 2 : 1;
 
@@ -157,115 +160,133 @@ internal sealed class NexusOperationsOverlay : Window
             ImGui.SameLine();
         }
 
-        if (overlay?.ShowGoto != false)
+        bool controlsEnabled = !anyActive;
+        CategoryButton("Goto", "NexusGoto", controlsEnabled && overlay?.ShowGoto != false);
+        if (ImGui.BeginPopup("NexusGoto"))
         {
-            CategoryButton("Goto", "NexusGoto");
-            if (ImGui.BeginPopup("NexusGoto"))
+            if (ImGui.Selectable("Barracks")) StartGrandCompanyPoint(barracks: true);
+            if (ImGui.Selectable("Inn")) StartInn();
+            if (ImGui.Selectable("Grand Company supply counter")) StartGrandCompanyPoint(barracks: false);
+            if (ImGui.Selectable("Flag marker")) StartFlagMarker();
+            if (ImGui.Selectable("Summoning bell")) StartPreferredSummoningBell();
+            if (ImGui.Selectable("Apartment")) StartLifestream("apartment", "apartment");
+            if (ImGui.Selectable("Personal home")) StartLifestream("home", "personal home");
+            if (ImGui.Selectable("Free Company estate")) StartLifestream("fc", "Free Company estate");
+            if (ImGui.Selectable("Triple Triad trader"))
+                StartPoint("Triple Triad trader", 144, new(-56.1f, 1.6f, 16.6f), 4f);
+            if (ImGui.BeginMenu("Striking Dummies"))
             {
-                if (ImGui.Selectable("Barracks")) StartGrandCompanyPoint(barracks: true);
-                if (ImGui.Selectable("Inn")) StartInn();
-                if (ImGui.Selectable("Grand Company supply counter")) StartGrandCompanyPoint(barracks: false);
-                if (ImGui.Selectable("Flag marker")) StartFlagMarker();
-                if (ImGui.Selectable("Summoning bell")) StartPreferredSummoningBell();
-                if (ImGui.Selectable("Apartment")) StartLifestream("apartment", "apartment");
-                if (ImGui.Selectable("Personal home")) StartLifestream("home", "personal home");
-                if (ImGui.Selectable("Free Company estate")) StartLifestream("fc", "Free Company estate");
-                if (ImGui.Selectable("Triple Triad trader"))
-                    StartPoint("Triple Triad trader", 144, new(-56.1f, 1.6f, 16.6f), 4f);
-                if (ImGui.BeginMenu("Striking dummies"))
+                foreach (IGrouping<string, StrikingDummyDestination> expansion in
+                         StrikingDummyCatalog.Destinations.GroupBy(item => item.Expansion))
                 {
-                    foreach (IGrouping<string, StrikingDummyDestination> expansion in
-                             StrikingDummyCatalog.Destinations.GroupBy(item => item.Expansion))
+                    if (!ImGui.BeginMenu(expansion.Key))
+                        continue;
+                    foreach (StrikingDummyDestination destination in expansion)
                     {
-                        if (!ImGui.BeginMenu(expansion.Key))
-                            continue;
-                        foreach (StrikingDummyDestination destination in expansion)
+                        if (ImGui.Selectable($"{destination.DisplayLocation} — Lv. {destination.Levels}"))
                         {
-                            if (ImGui.Selectable($"{destination.DisplayLocation} — Lv. {destination.Levels}"))
-                            {
-                                ImGui.CloseCurrentPopup();
-                                strikingDummies.Start(destination, out message);
-                            }
+                            ImGui.CloseCurrentPopup();
+                            strikingDummies.Start(destination, out message);
                         }
-                        ImGui.EndMenu();
                     }
                     ImGui.EndMenu();
                 }
-                ImGui.EndPopup();
+                ImGui.EndMenu();
             }
-            ImGui.SameLine();
+            ImGui.EndPopup();
         }
+        ImGui.SameLine();
 
-        if (overlay?.ShowGear != false || overlay?.ShowRepair != false || overlay?.ShowExtract != false ||
-            overlay?.ShowDesynth != false)
+        CategoryButton("Gear", "NexusGear", controlsEnabled);
+        if (ImGui.BeginPopup("NexusGear"))
         {
-            CategoryButton("Gear", "NexusGear");
-            if (ImGui.BeginPopup("NexusGear"))
+            if (ImGui.Selectable("Shop for Upgrades")) Open("Gear & Inventory");
+            if (Selectable("Equip", overlay?.ShowGear != false))
             {
-                if (overlay?.ShowGear != false && ImGui.Selectable("Shop for upgrades")) Open("Gear & Inventory");
-                if (maintenance.HasWorkingProfile && overlay?.ShowRepair != false && ImGui.Selectable("Repair gear"))
-                    maintenance.Start(NexusMaintenanceOperation.Repair, out message);
-                if (maintenance.HasWorkingProfile && overlay?.ShowExtract != false && ImGui.Selectable("Extract materia"))
-                    maintenance.Start(NexusMaintenanceOperation.ExtractMateria, out message);
-                if (maintenance.HasWorkingProfile && overlay?.ShowDesynth != false && ImGui.Selectable("Desynthesize eligible items"))
-                    maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
-                if (gearActive && ImGui.Selectable("Stop gear operation"))
-                    message = gear.Stop().Message;
-                ImGui.EndPopup();
+                ImGui.CloseCurrentPopup();
+                message = Plugin.CommandManager.ProcessCommand("/ad autoequip")
+                    ? "AutoDuty is equipping its recommended gear."
+                    : "AutoDuty is not ready to equip recommended gear.";
             }
-            ImGui.SameLine();
+            if (Selectable("Repair", maintenance.HasWorkingProfile && overlay?.ShowRepair != false))
+                maintenance.Start(NexusMaintenanceOperation.Repair, out message);
+            if (Selectable("Extract Materia", maintenance.HasWorkingProfile && overlay?.ShowExtract != false))
+                maintenance.Start(NexusMaintenanceOperation.ExtractMateria, out message);
+            if (Selectable("Desynth", maintenance.HasWorkingProfile && overlay?.ShowDesynth != false))
+                maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
+            ImGui.EndPopup();
         }
+        ImGui.SameLine();
 
-        CategoryButton("Inventory", "NexusInventory");
+        CategoryButton("Inventory", "NexusInventory", controlsEnabled);
         if (ImGui.BeginPopup("NexusInventory"))
         {
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Run enabled maintenance"))
+            if (Selectable("Sell Inventory", maintenance.HasWorkingProfile && overlay?.ShowSell != false))
             {
                 ImGui.CloseCurrentPopup();
-                maintenance.StartConfigured(out message);
+                sellReviewRequested = true;
             }
-            if (maintenance.HasWorkingProfile && overlay?.ShowCoffers != false && ImGui.Selectable("Open coffers"))
-            {
-                ImGui.CloseCurrentPopup();
-                maintenance.Start(NexusMaintenanceOperation.OpenCoffers, out message);
-            }
-            if (maintenance.HasWorkingProfile && overlay?.ShowTurnIn != false && ImGui.Selectable("Grand Company turn-ins"))
+            if (Selectable("TurnIn", maintenance.HasWorkingProfile && overlay?.ShowTurnIn != false))
             {
                 ImGui.CloseCurrentPopup();
                 maintenance.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out message);
             }
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Entrust eligible Armoire items"))
+            if (Selectable("Coffers", maintenance.HasWorkingProfile && overlay?.ShowCoffers != false))
+            {
+                ImGui.CloseCurrentPopup();
+                maintenance.Start(NexusMaintenanceOperation.OpenCoffers, out message);
+            }
+            if (Selectable("Armoire", maintenance.HasWorkingProfile))
                 maintenance.Start(NexusMaintenanceOperation.EntrustArmoire, out message);
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Entrust eligible Glamour Dresser items"))
-                maintenance.Start(NexusMaintenanceOperation.EntrustGlamourChest, out message);
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Review protected selling"))
-                Open("Gear & Inventory");
             ImGui.EndPopup();
         }
 
         ImGui.SameLine();
-        CategoryButton("Extras", "NexusExtras");
+        CategoryButton("Extras", "NexusExtras", controlsEnabled);
         if (ImGui.BeginPopup("NexusExtras"))
         {
-            if (maintenance.HasWorkingProfile && overlay?.ShowTripleTriad != false && ImGui.Selectable("Register Triple Triad cards"))
-                maintenance.Start(NexusMaintenanceOperation.RegisterTripleTriadCards, out message);
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Register minions"))
-                maintenance.Start(NexusMaintenanceOperation.RegisterMinions, out message);
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Register orchestrion rolls"))
-                maintenance.Start(NexusMaintenanceOperation.RegisterOrchestrionRolls, out message);
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Run all enabled maintenance"))
-                maintenance.StartConfigured(out message);
-            ImGui.Separator();
-            if (ImGui.Selectable("Nexus settings")) Open("Settings");
+            bool tripleTriadEnabled = maintenance.HasWorkingProfile && overlay?.ShowTripleTriad != false;
+            if (!tripleTriadEnabled)
+                ImGui.BeginDisabled();
+            if (ImGui.BeginMenu("Triple Triad"))
+            {
+                if (ImGui.Selectable("Register Cards"))
+                    maintenance.Start(NexusMaintenanceOperation.RegisterTripleTriadCards, out message);
+                if (ImGui.Selectable("Sell Cards"))
+                {
+                    ImGui.CloseCurrentPopup();
+                    message = Plugin.CommandManager.ProcessCommand("/ad ttsell")
+                        ? "AutoDuty is selling duplicate Triple Triad cards."
+                        : "AutoDuty is not ready to sell Triple Triad cards.";
+                }
+                ImGui.EndMenu();
+            }
+            if (!tripleTriadEnabled)
+                ImGui.EndDisabled();
             ImGui.EndPopup();
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("×###CloseNexusOperations"))
+        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
         {
-            plugin.Configuration.ShowOperationsOverlay = false;
-            plugin.Save();
+            if (ImGui.Button($"{FontAwesomeIcon.Cog.ToIconString()}###NexusOperationsSettings"))
+                Open("Settings");
+            ImGui.SameLine();
+            if (ImGui.Button($"{FontAwesomeIcon.WindowClose.ToIconString()}###CloseNexusOperations"))
+            {
+                plugin.Configuration.ShowOperationsOverlay = false;
+                plugin.Save();
+            }
         }
+
+        if (sellReviewRequested)
+        {
+            sellReviewRequested = false;
+            sellPreview = maintenance.PreviewProtectedSelling();
+            message = sellPreview.Summary;
+            ImGui.OpenPopup("Sell Inventory###NexusOverlaySell");
+        }
+        DrawSellInventoryPopup();
 
         if (!plugin.Configuration.ShowOperationsStatus)
             return;
@@ -287,10 +308,69 @@ internal sealed class NexusOperationsOverlay : Window
         openPage(page);
     }
 
-    private static void CategoryButton(string label, string popup)
+    private static void CategoryButton(string label, string popup, bool enabled)
     {
+        if (!enabled)
+            ImGui.BeginDisabled();
         if (ImGui.Button(label))
             ImGui.OpenPopup(popup);
+        if (!enabled)
+            ImGui.EndDisabled();
+    }
+
+    private static bool Selectable(string label, bool enabled)
+    {
+        if (!enabled)
+            ImGui.BeginDisabled();
+        bool selected = ImGui.Selectable(label);
+        if (!enabled)
+            ImGui.EndDisabled();
+        return selected && enabled;
+    }
+
+    private void DrawSellInventoryPopup()
+    {
+        const string popup = "Sell Inventory###NexusOverlaySell";
+        if (!ImGui.IsPopupOpen(popup))
+            return;
+        ImGui.SetNextWindowSize(new Vector2(560, 0), ImGuiCond.Appearing);
+        if (!ImGui.BeginPopupModal(popup, ImGuiWindowFlags.AlwaysAutoResize))
+            return;
+
+        NexusItemTransactionPreview? preview = sellPreview;
+        if (preview is null)
+        {
+            ImGui.TextWrapped("Inventory information is unavailable.");
+        }
+        else
+        {
+            ImGui.TextWrapped(preview.Summary);
+            foreach (NexusInventoryItemSnapshot item in preview.Items.Take(20))
+                ImGui.BulletText($"{item.Name} ×{item.Quantity} — {item.VendorPrice:N0} gil each");
+            if (preview.Items.Count > 20)
+                ImGui.TextDisabled($"…and {preview.Items.Count - 20} more exact slot(s).");
+            ImGui.Spacing();
+            ImGui.TextWrapped("Open a normal NPC shop, then approve this exact list. Nexus protects equipped and gearset items, EXP-bonus equipment, collectables, and anything that changes after review.");
+            ImGui.Spacing();
+            bool canSell = preview.Items.Count > 0;
+            if (!canSell)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Sell Approved Items"))
+            {
+                maintenance.StartApprovedSelling(preview.Signature, out message);
+                sellPreview = null;
+                ImGui.CloseCurrentPopup();
+            }
+            if (!canSell)
+                ImGui.EndDisabled();
+            ImGui.SameLine();
+        }
+        if (ImGui.Button("Cancel"))
+        {
+            sellPreview = null;
+            ImGui.CloseCurrentPopup();
+        }
+        ImGui.EndPopup();
     }
 
     private void StartLifestream(string command, string destination)
