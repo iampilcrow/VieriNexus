@@ -383,13 +383,17 @@ internal sealed class NexusWindow : Window
         {
             ImGui.TableNextColumn();
             BeginAutoPanel(status.Definition.DisplayName.ToUpperInvariant());
-            var color = status.Health switch
+            var color = status.CleanupRestartRequired || status.HasPackageConflict
+                ? NexusTheme.Red
+                : status.Health switch
             {
                 DependencyHealth.Healthy => NexusTheme.Green,
                 DependencyHealth.Disabled => NexusTheme.Amber,
                 _ => NexusTheme.Red,
             };
-            var state = status.Health switch
+            var state = status.CleanupRestartRequired
+                ? "Restart required"
+                : status.Health switch
             {
                 DependencyHealth.Healthy => "Ready",
                 DependencyHealth.Disabled => "Installed but disabled",
@@ -404,19 +408,29 @@ internal sealed class NexusWindow : Window
             if (status.HasPackageConflict)
             {
                 TextWrapped(NexusTheme.Red,
-                    "VieriAutoDuty is still installed and shares AutoDuty's package identity. Uninstall it after its settings are prepared, or Dalamud can remove stock AutoDuty on the next restart.");
+                    "VieriAutoDuty is still installed and shares AutoDuty's package identity. After its settings are prepared, uninstall it and restart FFXIV before installing stock AutoDuty.");
                 if (ImGui.Button($"Open VieriAutoDuty to uninstall##dependency-conflict-{status.Definition.Id}", new Vector2(-1, 0)))
                     dependencies.OpenConflictingPackage(status);
             }
-            bool working = dependencies.IsWorking(status.Definition.Id);
-            var action = working ? "Working..." : status.Health switch
+            else if (status.CleanupRestartRequired)
             {
-                DependencyHealth.Missing when status.HasPackageConflict => "Remove VieriAutoDuty first",
-                DependencyHealth.Missing => "Install and enable",
-                DependencyHealth.Disabled => "Enable now",
-                _ => "Manage in Dalamud",
-            };
-            if (working)
+                TextWrapped(NexusTheme.Red,
+                    "VieriAutoDuty has been uninstalled, but Dalamud still has its files queued for startup cleanup. Restart FFXIV before installing stock AutoDuty; installing it during this session would be deleted as the older shared package.");
+            }
+            bool working = dependencies.IsWorking(status.Definition.Id);
+            var action = working
+                ? "Working..."
+                : status.CleanupRestartRequired && !status.HasPackageConflict
+                    ? "Restart FFXIV to finish removal"
+                    : status.Health switch
+                    {
+                        DependencyHealth.Missing when status.HasPackageConflict => "Remove VieriAutoDuty first",
+                        DependencyHealth.Missing => "Install and enable",
+                        DependencyHealth.Disabled => "Enable now",
+                        _ => "Manage in Dalamud",
+                    };
+            bool actionDisabled = working || (status.CleanupRestartRequired && !status.HasPackageConflict);
+            if (actionDisabled)
                 ImGui.BeginDisabled();
             if (ImGui.Button($"{action}##dependency-{status.Definition.Id}", new Vector2(-1, 0)))
             {
@@ -425,9 +439,9 @@ internal sealed class NexusWindow : Window
                 else
                     dependencies.InstallOrEnable(status);
             }
-            if (working)
+            if (actionDisabled)
                 ImGui.EndDisabled();
-            if (status.Health != DependencyHealth.Healthy)
+            if (status.Health != DependencyHealth.Healthy && !status.CleanupRestartRequired)
             {
                 if (ImGui.Button($"Open in Dalamud##dependency-manual-{status.Definition.Id}", new Vector2(-1, 0)))
                     dependencies.OpenInstaller(status);

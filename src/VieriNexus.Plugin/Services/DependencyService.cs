@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Reflection;
+using System.Text.Json;
 using Dalamud.Interface;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
@@ -18,9 +19,10 @@ internal sealed record DependencyStatus(
     DependencyDescriptor Definition,
     DependencyHealth Health,
     string? Version,
-    string? ConflictingPackage = null)
+    string? ConflictingPackage = null,
+    bool CleanupRestartRequired = false)
 {
-    internal bool IsReady => Health == DependencyHealth.Healthy;
+    internal bool IsReady => Health == DependencyHealth.Healthy && !HasPackageConflict && !CleanupRestartRequired;
     internal bool HasPackageConflict => !string.IsNullOrWhiteSpace(ConflictingPackage);
 }
 
@@ -35,6 +37,7 @@ internal sealed class DependencyService(
     IPluginLog log)
 {
     private readonly object actionLock = new();
+    private readonly string? installedPluginRoot = ResolveInstalledPluginRoot(pluginInterface);
     private string? activeActionId;
 
     internal string? ActionMessage { get; private set; }
@@ -57,10 +60,16 @@ internal sealed class DependencyService(
                 ? installed.FirstOrDefault(candidate =>
                     DependencyPackageIdentityPolicy.IsBlockingLegacyCollision(definition, candidate.Name))?.Name
                 : null;
+            bool cleanupRestartRequired = definition.Id == "autoduty" && HasPendingVieriAutoDutyCleanup();
             var health = plugin is null
                 ? DependencyHealth.Missing
                 : plugin.IsLoaded ? DependencyHealth.Healthy : DependencyHealth.Disabled;
-            return new DependencyStatus(definition, health, plugin?.Version?.ToString(), conflictingPackage);
+            return new DependencyStatus(
+                definition,
+                health,
+                plugin?.Version?.ToString(),
+                conflictingPackage,
+                cleanupRestartRequired);
         }).ToArray();
     }
 
@@ -153,6 +162,14 @@ internal sealed class DependencyService(
 
     internal void InstallOrEnable(DependencyStatus dependency)
     {
+        if (dependency.CleanupRestartRequired && !dependency.HasPackageConflict)
+        {
+            ActionSucceeded = false;
+            ActionMessage =
+                "Restart FFXIV before installing stock AutoDuty. Dalamud still has the removed VieriAutoDuty files queued for startup cleanup and would delete a stock installation made during this session.";
+            return;
+        }
+
         if (dependency.HasPackageConflict && dependency.Health == DependencyHealth.Missing)
         {
             ActionSucceeded = false;
@@ -230,6 +247,50 @@ internal sealed class DependencyService(
             await task;
         else
             throw new InvalidOperationException("Dalamud did not return an installation task.");
+    }
+
+    private bool HasPendingVieriAutoDutyCleanup()
+    {
+        if (installedPluginRoot is null)
+            return false;
+
+        string autoDutyRoot = Path.Combine(installedPluginRoot, "AutoDuty");
+        if (!Directory.Exists(autoDutyRoot))
+            return false;
+
+        try
+        {
+            foreach (string versionDirectory in Directory.EnumerateDirectories(autoDutyRoot))
+            {
+                string manifestPath = Path.Combine(versionDirectory, "AutoDuty.json");
+                if (!File.Exists(manifestPath))
+                    continue;
+                using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                if (manifest.RootElement.TryGetProperty("Name", out JsonElement name) &&
+                    name.ValueKind == JsonValueKind.String &&
+                    string.Equals(name.GetString(), "VieriAutoDuty", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Verbose(ex, "Could not inspect the pending AutoDuty cleanup folder");
+        }
+
+        return false;
+    }
+
+    private static string? ResolveInstalledPluginRoot(IDalamudPluginInterface pluginInterface)
+    {
+        string? assemblyDirectory = pluginInterface.AssemblyLocation.DirectoryName;
+        if (string.IsNullOrWhiteSpace(assemblyDirectory))
+            return null;
+        DirectoryInfo? pluginDirectory = Directory.GetParent(assemblyDirectory);
+        DirectoryInfo? installedRoot = pluginDirectory?.Parent;
+        return installedRoot is not null &&
+               string.Equals(installedRoot.Name, "installedPlugins", StringComparison.OrdinalIgnoreCase)
+            ? installedRoot.FullName
+            : null;
     }
 
     private async Task EnableAsync(DependencyDescriptor definition)
