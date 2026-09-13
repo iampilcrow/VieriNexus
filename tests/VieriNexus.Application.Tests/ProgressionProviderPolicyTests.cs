@@ -49,6 +49,26 @@ public sealed class ProgressionProviderPolicyTests
     }
 
     [Fact]
+    public void ReloadRequiredPreservesTheSpecificRecoveryInstruction()
+    {
+        ProgressionProviderCandidate candidate = Candidate(
+            "autoduty",
+            ProgressionProviderFlavor.Stock,
+            ProgressionProviderReadiness.ReloadRequired) with
+        {
+            Role = ProgressionProviderRole.Duties,
+            Detail = "Restart FFXIV once with VieriAutoDuty disabled.",
+        };
+
+        ProgressionProviderSelection result = ProgressionProviderPolicy.Select(
+            ProgressionProviderRole.Duties,
+            [candidate]);
+
+        Assert.Equal(ProgressionProviderReadiness.ReloadRequired, result.Readiness);
+        Assert.Contains("Restart FFXIV", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExplicitDuplicateIdentityConflictWinsEvenWhenIpcRegistrationIsIncomplete()
     {
         ProgressionProviderCandidate conflict = Candidate(

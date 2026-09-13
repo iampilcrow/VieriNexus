@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-13 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.68`
+Current product version: `0.1.0.69`
 Current published source: `0.1.0.68`, source `b54d2a9c1b3246bba42c8319916153237e4ac42c`, website release `940389428ea848b49c0edf9838fede87af25c3c3`, verification documentation `bec526545cc7c3de0d83c0a4061028461f21c258`. Release deployment `dpl_3MYccs3vF5xnKfS9T81mugkWcxee` and final documentation deployment `dpl_6YuYh1HLoVPJvk3HYj5woLVC7AoB` are Ready on both canonical aliases; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `0058D5A3EC48B4154804E36CD802C7843DF13FC68E05924E11A0021833D560A3` / `A872C796DC6C00F1BBBE9749A803AE68CC75306B5738E1E074B0C262107E8800`; Discord workflow `34762642242` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.68 makes Combat one coherent Nexus page with only On-Screen Ability Suggestions, Wrath Combo, and Manual On-Screen Switch. It removes module/predecessor/integration/keybind clutter and restores the full configured suggestion strip through a no-replacement shadow timeline while stock Wrath remains the sole rotation/action-replacement provider. Version 0.1.0.67 remains the single duty-presentation release.
+Current workstream: version 0.1.0.69 simplifies Nexus's product-facing names and Home presentation, gives the long Custom Route Editor label enough navigation width at scaled UI sizes, and diagnoses the one-time stock AutoDuty connection loss caused when VieriAutoDuty unloads after stock AutoDuty starts. The safe recovery is one FFXIV restart with VieriAutoDuty disabled; Nexus continues to fail closed until the stock duty connection is visible. Version 0.1.0.68 remains the complete multi-icon combat-forecast release.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -49,6 +49,7 @@ The intended architectural style is a **modular monolith**: one installed `Vieri
 - One polished, expandable control-center UI rather than ordinary plugin-style utility windows.
 - Dark near-black panels with restrained red highlights, gold headings, clear green/amber/red status, compact navigation, and strong visual hierarchy.
 - The supplied `VieriNexusLogo.png` is part of the permanent Home page. It must not return as a separate transient splash popup, and the removed redundant header/logo/tagline strip must not return.
+- Home presents only the centered transparent logo, `An Automation Suite`, and `created by Valentine Vieri`; dependency status and feature cards belong on their dedicated pages.
 - Dependencies have a dedicated setup page. Required providers gate entry; recommended integrations are visibly separate and do not block setup.
 - Automation remains understandable and interruptible: pause, stop, safe checkpointing, manual override, recovery, and clear status are first-class.
 - Each user/character keeps its own configuration. One user's or friend's data must never inherit another user's settings, progression, secrets, or identifiers.
@@ -214,7 +215,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 9 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety, Progression draft and complete multi-job queue state, one-time verified queue promotion, per-source migration state, and independent embedded-module enablement.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.68`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.69`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -737,7 +738,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.68`. Dalamud API 15. Version 0.1.0.68 is the currently published production feed entry; every prior version remains an immutable historical archive.
+- Plugin project version: `0.1.0.69`. Dalamud API 15. Version 0.1.0.69 is the pending production feed entry; every prior version remains an immutable historical archive.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.

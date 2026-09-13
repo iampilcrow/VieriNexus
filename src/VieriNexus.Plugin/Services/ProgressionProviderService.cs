@@ -1036,6 +1036,9 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         bool canResetLeveling = autoDutySetLevelingMode.HasAction || autoDutySetConfig.HasAction;
         bool stockContractReady = autoDutyContentHasPath.HasFunction && autoDutyIsStopped.HasFunction &&
                                   autoDutyRun.HasAction && autoDutyStop.HasAction && canResetLeveling;
+        bool noStockContractVisible = !autoDutyContentHasPath.HasFunction && !autoDutyIsStopped.HasFunction &&
+                                      !autoDutyRun.HasAction && !autoDutyStop.HasAction &&
+                                      !autoDutySetLevelingMode.HasAction && !autoDutySetConfig.HasAction;
         List<string> missing = [];
         if (!autoDutyContentHasPath.HasFunction)
             missing.Add("ContentHasPath");
@@ -1067,6 +1070,21 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                     ProgressionProviderReadiness.Conflict,
                     active?.Version,
                     "VieriAutoDuty is a settings-migration source only. Disable it and enable stock AutoDuty for duty execution."),
+            ];
+        }
+        if (active is not null && !activeIsVieri && noStockContractVisible &&
+            family.Any(candidate => !candidate.IsLoaded && IsVieriName(candidate.DisplayName)))
+        {
+            return
+            [
+                new ProgressionProviderCandidate(
+                    AutoDutyStockProviderId,
+                    "AutoDuty",
+                    ProgressionProviderRole.Duties,
+                    ProgressionProviderFlavor.Stock,
+                    ProgressionProviderReadiness.ReloadRequired,
+                    active.Version,
+                    "Stock AutoDuty was enabled before VieriAutoDuty finished unloading, so the shared duty connection was released afterward. Restart FFXIV once with VieriAutoDuty disabled; Nexus will then connect to stock AutoDuty normally."),
             ];
         }
         ProgressionProviderCandidate stock = Candidate(

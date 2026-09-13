@@ -719,7 +719,7 @@ public sealed class Plugin : IDalamudPlugin
         owner.ProgressionQueue = ProgressionQueuePolicy.Import(snapshot);
         Configuration.PendingCodexQueuePromotion = false;
         Save();
-        ChatGui.Print($"[VieriNexus] Promoted {snapshot.SavedQueueSteps} verified VieriCodex queue step(s) into the Nexus Job Queue.");
+        ChatGui.Print($"[VieriNexus] Promoted {snapshot.SavedQueueSteps} verified VieriCodex queue step(s) into the Nexus Multi-Job Automation Queue.");
     }
 
     private static void PrintControl(VieriNexus.Contracts.NexusCommandResultDto result)

@@ -1,6 +1,6 @@
 # VieriNexus implementation status
 
-Version 0.1.0.68 turns Combat into one clean product surface with exactly three sections: On-Screen Ability Suggestions, Wrath Combo, and Manual On-Screen Switch. It removes embedded-module status, predecessor wording, integration jargon, legacy settings hotkeys, and duplicated switch configuration from the page. Stock Wrath Combo remains the only rotation/action-replacement provider; Nexus now runs its no-replacement, no-command shadow timeline alongside the live Wrath lead action so every configured future suggestion icon is restored. Version 0.1.0.67 remains the single duty-presentation release.
+Version 0.1.0.69 gives Nexus its simplified product-facing navigation and Home presentation: Current Job Automation, Multi-Job Automation Queue, Combat/Rotation, Custom Route Editor, and Market Helper. Home is now only the centered transparent Vieri Nexus logo, `An Automation Suite`, and `created by Valentine Vieri`. It also distinguishes the one-time AutoDuty/VieriAutoDuty shared-identity unload condition from a genuinely incompatible stock provider and gives the exact restart recovery instruction. Version 0.1.0.68 remains the complete multi-icon combat-forecast release.
 
 ## Foundation implemented
 
@@ -85,7 +85,7 @@ Version 0.1.0.68 turns Combat into one clean product surface with exactly three 
 
 ## Current release gate
 
-Version 0.1.0.68 needs one normal-use glance after publication: update through Dalamud, open **Combat**, and confirm the page shows the three named sections without predecessor/module language. With **Abilities shown** set above one, the on-screen bar should show the current Wrath action plus the available forward actions instead of stopping at one icon. No separate VieriRotationHelper settings window is expected.
+Version 0.1.0.69 needs one normal-use glance after publication: update through Dalamud and confirm the renamed navigation entries and centered Home presentation. On the current computer, restart FFXIV once with VieriAutoDuty disabled so stock AutoDuty can republish its shared connection; the Duties provider card should then turn green and report the stock runtime active.
 
 Version 0.1.0.59 completes the VieriCodex runtime-retirement gate. Nexus imports every saved multi-job queue step and behavior setting, automatically promotes previously verified imports, persists ordered step state per character, switches through Fast Job Switcher's documented slash commands, confirms the requested job, settles the equipment change, and starts only a fresh bounded Nexus level goal. The existing Queue navigation page is the compact one-scrollbar editor/runtime surface. Stock Questionable is the sole quest runtime candidate; VieriCodex remains only as a guarded local settings source. Version 0.1.0.60 normalizes every player-facing class/job name to title case and every abbreviation to uppercase while preserving the required hidden lowercase Fast Job Switcher command. Version 0.1.0.61 completes the remaining custom-runtime handoff while retaining stock AutoDuty as the ordinary bounded duty mechanics provider.
 

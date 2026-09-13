@@ -18,6 +18,7 @@ public enum ProgressionProviderReadiness
 {
     Missing,
     Disabled,
+    ReloadRequired,
     Incompatible,
     Ready,
     Conflict,
@@ -88,13 +89,19 @@ public static class ProgressionProviderPolicy
         }
 
         ProgressionProviderReadiness readiness = relevant.Any(candidate =>
-            candidate.Readiness == ProgressionProviderReadiness.Incompatible)
+            candidate.Readiness == ProgressionProviderReadiness.ReloadRequired)
+                ? ProgressionProviderReadiness.ReloadRequired
+            : relevant.Any(candidate => candidate.Readiness == ProgressionProviderReadiness.Incompatible)
                 ? ProgressionProviderReadiness.Incompatible
                 : relevant.Any(candidate => candidate.Readiness == ProgressionProviderReadiness.Disabled)
                     ? ProgressionProviderReadiness.Disabled
                     : ProgressionProviderReadiness.Missing;
         string detail = readiness switch
         {
+            ProgressionProviderReadiness.ReloadRequired => string.Join(" ", relevant
+                .Where(candidate => candidate.Readiness == ProgressionProviderReadiness.ReloadRequired)
+                .Select(candidate => candidate.Detail)
+                .Distinct()),
             ProgressionProviderReadiness.Incompatible =>
                 $"An installed {RoleName(role)} provider does not satisfy the required IPC contract.",
             ProgressionProviderReadiness.Disabled =>

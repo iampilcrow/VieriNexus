@@ -53,7 +53,7 @@ internal sealed class EmbeddedModuleManager : IDisposable
             "avarice.zip", "VieriAvarice.dll", "Avarice.Avarice", "Avarice.Configuration.Config", "VieriAvarice"),
         new("delvui", "Custom UI", "Nexus HUD", "The complete customized VieriDelvUI HUD, profiles, highlighting, markers, party roles, and ready checks.",
             "delvui.zip", "VieriDelvUI.dll", "DelvUI.Plugin", null, "VieriDelvUI"),
-        new("automarket", "Market", "Nexus Market", "VieriAutoMarket owned-retainer matching, guarded repricing, pacing, confirmation, and verification.",
+        new("automarket", "Market", "Market Helper", "VieriAutoMarket owned-retainer matching, guarded repricing, pacing, confirmation, and verification.",
             "automarket.zip", "VieriAutoMarket.dll", "VieriAutoMarket.Plugin", "VieriAutoMarket.Configuration", "VieriAutoMarket"),
         new("link", "Communications", "Nexus Link", "The encrypted Discord status, notification, recovery, and authorized Nexus command gateway.",
             "link.zip", "VieriLink.dll", "VieriLink.Plugin", "VieriLink.Configuration", "VieriLink", true),

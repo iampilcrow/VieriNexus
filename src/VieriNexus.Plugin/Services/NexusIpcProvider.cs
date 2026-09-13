@@ -308,9 +308,9 @@ internal sealed class NexusIpcProvider : IDisposable
             "leave" => new NexusCommandResultDto(Guid.NewGuid(), false, "leave-review-required",
                 "Nexus stopped automatic leave commands during migration; use Stop, then leave the duty normally when safe."),
             "loops" => new NexusCommandResultDto(Guid.NewGuid(), false, "queue-owned",
-                "Duty repetition is owned by the Nexus Job Queue; update the queue in Nexus."),
+                "Duty repetition is owned by the Nexus Multi-Job Automation Queue; update the queue in Nexus."),
             "inn" => new NexusCommandResultDto(Guid.NewGuid(), false, "route-review-required",
-                "Choose the saved inn route on the Nexus Routes page so the destination is explicit."),
+                "Choose the saved inn route in the Nexus Custom Route Editor so the destination is explicit."),
             _ => new NexusCommandResultDto(Guid.NewGuid(), false, "unsupported-link-command",
                 $"Nexus does not expose the '{normalized}' remote command."),
         };

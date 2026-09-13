@@ -90,7 +90,7 @@ internal sealed unsafe class NexusControlService
         string? module = gearActive ? "Gear & Inventory" :
             maintenanceActive ? "Maintenance" :
             atlasActive ? "Progress Atlas" :
-            dummyActive || navigationActive ? "Routes & Navigation" :
+            dummyActive || navigationActive ? "Custom Route Editor" :
             progressionActive ? "Progression" : null;
         string? activity = gearActive ? "Gear transaction" :
             maintenanceActive ? maintenance.Status.Operation?.ToString() :

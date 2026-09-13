@@ -17,10 +17,10 @@ internal sealed class NexusWindow : Window
         ("OVERVIEW", "Automation", "Automation"),
         ("OVERVIEW", "Progress Atlas", "Atlas"),
         ("OVERVIEW", "Plugins", "Plugins"),
-        ("MODULES", "Combat", "Combat"),
+        ("MODULES", "Combat", "Combat/Rotation"),
         ("MODULES", "Gear & Inventory", "Gear"),
-        ("MODULES", "Routes & Navigation", "Routes"),
-        ("MODULES", "Market", "Market"),
+        ("MODULES", "Routes & Navigation", "Custom Route Editor"),
+        ("MODULES", "Market", "Market Helper"),
         ("MODULES", "Custom UI", "Custom UI"),
         ("MODULES", "Communications", "Communications"),
         ("SETUP", "Dependencies", "Dependencies"),
@@ -165,7 +165,9 @@ internal sealed class NexusWindow : Window
     public override void Draw()
     {
         ImGui.SetWindowFontScale(plugin.Configuration.UiScale);
-        var navWidth = plugin.Configuration.CompactNavigation ? 72f : 205f;
+        var navWidth = plugin.Configuration.CompactNavigation
+            ? 72f
+            : Math.Max(225f, ImGui.CalcTextSize("Custom Route Editor").X + 34f);
         if (ImGui.BeginChild("###NexusNavigation", new Vector2(navWidth, 0), true,
                 ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
             DrawNavigation(navWidth);
@@ -243,47 +245,35 @@ internal sealed class NexusWindow : Window
     private void DrawHome()
     {
         var available = ImGui.GetContentRegionAvail();
-        var heroHeight = Math.Min(470f, Math.Max(360f, available.Y * .64f));
-        if (ImGui.BeginChild("###NexusHomeHero", new Vector2(0, heroHeight), true,
-                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        var start = ImGui.GetCursorPos();
+        var wrap = logo.GetWrapOrEmpty();
+        var aspect = wrap.Height > 0 ? (float)wrap.Width / wrap.Height : 1.5f;
+        var imageWidth = Math.Min(620f, available.X * .72f);
+        var imageHeight = imageWidth / aspect;
+        var lineHeight = ImGui.GetTextLineHeight();
+        var groupHeight = imageHeight + 24f + lineHeight * 2f + ImGui.GetStyle().ItemSpacing.Y;
+        var maximumImageHeight = Math.Max(100f,
+            available.Y - 24f - lineHeight * 2f - ImGui.GetStyle().ItemSpacing.Y);
+        if (imageHeight > maximumImageHeight)
         {
-            var draw = ImGui.GetWindowDrawList();
-            var position = ImGui.GetWindowPos();
-            var size = ImGui.GetWindowSize();
-            draw.AddRectFilledMultiColor(position, position + size,
-                0xFF08090C, 0xFF100A0D, 0xFF19070A, 0xFF08090C);
-            draw.AddRect(position, position + size, ImGui.GetColorU32(NexusTheme.Red), 8f,
-                ImDrawFlags.None, 1.5f);
-
-            var wrap = logo.GetWrapOrEmpty();
-            var imageWidth = Math.Clamp(size.X * .56f, 390f, 620f);
-            var imageSize = new Vector2(imageWidth, imageWidth / 1.5f);
-            ImGui.SetCursorPosX((size.X - imageSize.X) * .5f);
-            ImGui.SetCursorPosY(Math.Max(18f, (size.Y - imageSize.Y - 54f) * .42f));
-            ImGui.Image(wrap.Handle, imageSize);
-
-            var state = dependencies.RequiredReady
-                ? "All required services are ready"
-                : "Dependency setup requires attention";
-            ImGui.SetCursorPosX((size.X - ImGui.CalcTextSize(state).X) * .5f);
-            NexusTheme.StatusDot(dependencies.RequiredReady ? NexusTheme.Green : NexusTheme.Amber, state);
-            var subtitle = "One home for the complete Vieri experience";
-            ImGui.SetCursorPosX((size.X - ImGui.CalcTextSize(subtitle).X) * .5f);
-            ImGui.TextColored(NexusTheme.Gold, subtitle);
+            imageHeight = maximumImageHeight;
+            imageWidth = imageHeight * aspect;
+            groupHeight = imageHeight + 24f + lineHeight * 2f + ImGui.GetStyle().ItemSpacing.Y;
         }
-        ImGui.EndChild();
 
-        ImGui.Spacing();
-        if (ImGui.BeginTable("###HomeStatus", 3, ImGuiTableFlags.SizingStretchSame))
-        {
-            ImGui.TableNextColumn();
-            StatusCard("ROUTES", "Live", "Author, travel, play, and stop", NexusTheme.Green);
-            ImGui.TableNextColumn();
-            StatusCard("GEAR", "Approval live", "Preview exact upgrades before shopping", NexusTheme.Green);
-            ImGui.TableNextColumn();
-            StatusCard("PROGRESSION", "Duty lane live", "One verified run at a time", NexusTheme.Green);
-            ImGui.EndTable();
-        }
+        ImGui.SetCursorPos(new Vector2(
+            start.X + Math.Max(0f, (available.X - imageWidth) * .5f),
+            start.Y + Math.Max(0f, (available.Y - groupHeight) * .5f)));
+        ImGui.Image(wrap.Handle, new Vector2(imageWidth, imageHeight));
+        ImGui.Dummy(new Vector2(0, 16f));
+        CenteredHomeText("An Automation Suite", NexusTheme.Gold, start.X, available.X);
+        CenteredHomeText("created by Valentine Vieri", NexusTheme.Muted, start.X, available.X);
+    }
+
+    private static void CenteredHomeText(string text, Vector4 color, float startX, float width)
+    {
+        ImGui.SetCursorPosX(startX + Math.Max(0f, (width - ImGui.CalcTextSize(text).X) * .5f));
+        ImGui.TextColored(color, text);
     }
 
     private void DrawOverview()
@@ -1538,7 +1528,7 @@ internal sealed class NexusWindow : Window
 
     private void DrawRoutesAndNavigation()
     {
-        PageHeading("Routes & Navigation", "Create, edit, and run your saved routes.");
+        PageHeading("Custom Route Editor", "Create, edit, and run your saved routes.");
 
         NavigationLibrarySnapshot? snapshot = navigationLibrary.Current;
         if (snapshot is null)
@@ -2440,7 +2430,7 @@ internal sealed class NexusWindow : Window
         BeginPanel("ROUTES & NAVIGATION", 320f * Math.Max(1f, plugin.Configuration.UiScale));
         NexusTheme.StatusDot(status.SourceFound ? NexusTheme.Green : NexusTheme.Muted,
             status.SourceFound ? "Configuration located" : "Not found on this computer");
-        ImGui.TextColored(NexusTheme.Gold, "Destination: Routes and Navigation");
+        ImGui.TextColored(NexusTheme.Gold, "Destination: Custom Route Editor");
 
         if (status.Preview?.Snapshot is { } snapshot)
         {
@@ -2813,7 +2803,7 @@ internal sealed class NexusWindow : Window
 
     private void DrawAutomation()
     {
-        PageHeading("Automation", "Run one current-job goal or an ordered job queue from one coordinated workspace.");
+        PageHeading("Automation", "Run the current job or an ordered multi-job queue from one coordinated workspace.");
         CharacterSnapshot? character = world.Current.Character.Value;
         ProgressionGoalState? goal = progressionRuntime.State;
         ProgressionQueueConfiguration? queue = character is { Key.IsKnown: true }
@@ -2823,10 +2813,10 @@ internal sealed class NexusWindow : Window
         BeginAutoPanel("CURRENT ACTIVITY");
         if (queue?.IsRunning == true || queue?.IsPaused == true)
             NexusTheme.StatusDot(queue.IsRunning ? NexusTheme.Green : NexusTheme.Amber,
-                $"Job Queue • {queue.StatusDetail}");
+                $"Multi-Job Automation Queue • {queue.StatusDetail}");
         else if (goal is not null && goal.Goal.Status is not (GoalStatus.Cancelled or GoalStatus.Satisfied))
             NexusTheme.StatusDot(goal.Goal.Status == GoalStatus.Active ? NexusTheme.Green : NexusTheme.Amber,
-                $"Current Job Goal • {goal.Goal.StatusDetail}");
+                $"Current Job Automation • {goal.Goal.StatusDetail}");
         else
             NexusTheme.StatusDot(NexusTheme.Muted, "No automation is running");
         TextWrapped(NexusTheme.Muted,
@@ -2835,12 +2825,12 @@ internal sealed class NexusWindow : Window
 
         if (!ImGui.BeginTabBar("###NexusAutomationModes"))
             return;
-        if (ImGui.BeginTabItem("Current Job Goal"))
+        if (ImGui.BeginTabItem("Current Job Automation"))
         {
             DrawProgression(showHeading: false);
             ImGui.EndTabItem();
         }
-        if (ImGui.BeginTabItem("Job Queue"))
+        if (ImGui.BeginTabItem("Multi-Job Automation Queue"))
         {
             DrawProgressionQueue(showHeading: false);
             ImGui.EndTabItem();
@@ -2977,7 +2967,7 @@ internal sealed class NexusWindow : Window
     private void DrawProgressionQueue(bool showHeading = true)
     {
         if (showHeading)
-            PageHeading("Job Queue", "Build an ordered multi-job leveling queue. Nexus owns the targets and verification; stock providers perform bounded work.");
+            PageHeading("Multi-Job Automation Queue", "Build an ordered multi-job leveling queue. Nexus owns the targets and verification; stock providers perform bounded work.");
 
         CharacterSnapshot? character = world.Current.Character.Value;
         if (character is null || !character.Key.IsKnown)
@@ -3767,7 +3757,7 @@ internal sealed class NexusWindow : Window
     {
         NexusTheme.SectionTitle("Providers");
         TextWrapped(NexusTheme.Muted,
-            "Stock Questionable is the only quest runtime. VieriCodex remains only as a one-time settings source. AutoDuty is still the bounded duty provider during its final migration.");
+            "Stock Questionable handles quests, and stock AutoDuty handles one Nexus-selected duty at a time.");
         if (!ImGui.BeginTable("###ProgressionProviders", 2, ImGuiTableFlags.SizingStretchSame))
             return;
 
@@ -3791,6 +3781,7 @@ internal sealed class NexusWindow : Window
         {
             ProgressionProviderReadiness.Ready => NexusTheme.Green,
             ProgressionProviderReadiness.Disabled => NexusTheme.Amber,
+            ProgressionProviderReadiness.ReloadRequired => NexusTheme.Amber,
             ProgressionProviderReadiness.Missing => NexusTheme.Muted,
             _ => NexusTheme.Red,
         };
@@ -3798,26 +3789,33 @@ internal sealed class NexusWindow : Window
             ? selection.Selected!.Flavor == ProgressionProviderFlavor.Stock
                 ? $"Runtime provider active: {selection.Selected.DisplayName}"
                 : $"Current migration provider: {selection.Selected.DisplayName}"
-            : selection.Readiness.ToString());
+            : ProviderReadinessLabel(selection.Readiness));
         foreach (ProgressionProviderCandidate candidate in selection.Candidates)
         {
             Vector4 candidateColor = candidate.Readiness switch
             {
                 ProgressionProviderReadiness.Ready => NexusTheme.Green,
                 ProgressionProviderReadiness.Disabled => NexusTheme.Amber,
+                ProgressionProviderReadiness.ReloadRequired => NexusTheme.Amber,
                 ProgressionProviderReadiness.Missing => NexusTheme.Muted,
                 _ => NexusTheme.Red,
             };
             string version = string.IsNullOrWhiteSpace(candidate.Version) ? string.Empty : $" • {candidate.Version}";
-            string flavor = candidate.Flavor == ProgressionProviderFlavor.Stock ? "target" : "migration";
+            string source = candidate.Flavor == ProgressionProviderFlavor.Stock ? string.Empty : " • settings source";
             TextWrapped(candidateColor,
-                $"• {candidate.DisplayName}: {candidate.Readiness} • {flavor}{version}");
-            if (candidate.Readiness == ProgressionProviderReadiness.Incompatible)
+                $"• {candidate.DisplayName}: {ProviderReadinessLabel(candidate.Readiness)}{source}{version}");
+            if (candidate.Readiness is ProgressionProviderReadiness.Incompatible or ProgressionProviderReadiness.ReloadRequired)
                 TextWrapped(NexusTheme.Muted, $"  {candidate.Detail}");
         }
         TextWrapped(NexusTheme.Muted, selection.Detail);
         EndAutoPanel();
     }
+
+    private static string ProviderReadinessLabel(ProgressionProviderReadiness readiness) => readiness switch
+    {
+        ProgressionProviderReadiness.ReloadRequired => "Restart required",
+        _ => readiness.ToString(),
+    };
 
     private void DrawProgressionPlan(ReachJobLevelPlan plan)
     {
@@ -3960,14 +3958,15 @@ internal sealed class NexusWindow : Window
             return;
         }
 
-        PageHeading(page, "Your proven Vieri behavior now runs inside Nexus with its own isolated settings and runtime.");
+        PageHeading(page.Equals("Market", StringComparison.Ordinal) ? "Market Helper" : page,
+            "Your proven Vieri behavior now runs inside Nexus with its own isolated settings and runtime.");
         foreach (EmbeddedModuleStatus module in pageModules)
             DrawEmbeddedModuleCard(module, migration: false);
     }
 
     private void DrawCombatPage()
     {
-        PageHeading("Combat", "Configure what appears on screen while Wrath Combo handles your rotation.");
+        PageHeading("Combat/Rotation", "Configure what appears on screen while Wrath Combo handles your rotation.");
         EmbeddedModuleStatus? rotation = embeddedModules.Statuses.FirstOrDefault(item =>
             item.Id.Equals("rotation", StringComparison.OrdinalIgnoreCase));
         if (rotation is null)
