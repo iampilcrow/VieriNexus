@@ -17,6 +17,7 @@ public sealed class DependencyCatalogTests
         [
             "allagan-market",
             "bossmod",
+            "fast-job-switcher",
             "lifestream",
             "marketbuddy",
             "textadvance",
@@ -34,7 +35,7 @@ public sealed class DependencyCatalogTests
 
         string[] expected =
         [
-            "anti-afk", "artisan", "auto-retainer", "autohook", "cbt", "fast-job-switcher",
+            "anti-afk", "artisan", "auto-retainer", "autohook", "cbt",
             "gearsetter", "glamour-log", "mogmail", "notification-master", "pandora", "quest-map",
             "select-string", "skippy", "stylist", "yes-already",
         ];

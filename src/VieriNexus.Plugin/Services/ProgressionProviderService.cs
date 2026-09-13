@@ -11,16 +11,15 @@ using VieriNexus.Domain;
 namespace VieriNexus.Services;
 
 /// <summary>
-/// Capability-checked adapters for the temporary Vieri providers and their intended stock replacements.
+/// Capability-checked adapters for stock runtime providers.
 /// Merely having the expected plugin name is not enough: every required IPC member must be present.
 /// Nexus selects exact Class / Job / Role or general side quests and delegates one bounded quest or duty at a time.
-/// Vieri compatibility remains available only while the same contract is proven against stock plugins.
+/// VieriCodex is intentionally not a runtime candidate; it remains available only to the migration importer.
 /// </summary>
 internal sealed class ProgressionProviderService : IProgressionDutyProvider, IProgressionQuestProvider,
     IProgressionGearProvider,
     IManualGearShoppingProvider
 {
-    private static readonly ProviderId CodexProviderId = new("vieri.provider.codex-compat/v1");
     private static readonly ProviderId QuestionableProviderId = new("vieri.provider.questionable-stock/v1");
     private static readonly ProviderId AutoDutyCompatibilityProviderId = new("vieri.provider.autoduty-compat/v1");
     private static readonly ProviderId AutoDutyStockProviderId = new("vieri.provider.autoduty-stock/v1");
@@ -30,14 +29,6 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly IDataManager dataManager;
     private readonly IClientState clientState;
     private readonly HashSet<uint> aetherCurrentQuestIds;
-    private readonly ICallGateSubscriber<bool> codexIsRunning;
-    private readonly ICallGateSubscriber<string?> codexCurrentQuest;
-    private readonly ICallGateSubscriber<string, bool> codexStartSingleQuest;
-    private readonly ICallGateSubscriber<string, bool> codexIsQuestLocked;
-    private readonly ICallGateSubscriber<string, bool> codexIsQuestComplete;
-    private readonly ICallGateSubscriber<string, bool> codexIsReadyToAcceptQuest;
-    private readonly ICallGateSubscriber<string, bool> codexIsQuestAccepted;
-    private readonly ICallGateSubscriber<string, bool> codexStop;
     private readonly ICallGateSubscriber<bool> questionableIsRunning;
     private readonly QuestionableCompatibilityService questionableCompatibility;
     private readonly ICallGateSubscriber<string?> questionableCurrentQuest;
@@ -97,14 +88,6 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             .Where(current => current.RowId > 0 && current.Value.Quest.RowId > 0)
             .Select(current => current.Value.Quest.RowId & 0xFFFF)
             .ToHashSet();
-        codexIsRunning = pluginInterface.GetIpcSubscriber<bool>("VieriCodex.IsRunning");
-        codexCurrentQuest = pluginInterface.GetIpcSubscriber<string?>("VieriCodex.GetCurrentQuestId");
-        codexStartSingleQuest = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.StartSingleQuest");
-        codexIsQuestLocked = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsQuestLocked");
-        codexIsQuestComplete = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsQuestComplete");
-        codexIsReadyToAcceptQuest = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsReadyToAcceptQuest");
-        codexIsQuestAccepted = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.IsQuestAccepted");
-        codexStop = pluginInterface.GetIpcSubscriber<string, bool>("VieriCodex.Stop");
         this.questionableCompatibility = questionableCompatibility;
         questionableIsRunning = pluginInterface.GetIpcSubscriber<bool>("Questionable.IsRunning");
         questionableCurrentQuest = pluginInterface.GetIpcSubscriber<string?>("Questionable.GetCurrentQuestId");
@@ -286,12 +269,11 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 continue;
             try
             {
-                if (InvokeQuestBool(selection, codexIsQuestComplete, questionableIsQuestComplete, questId))
+                if (questionableIsQuestComplete.InvokeFunc(questId))
                     continue;
-                bool accepted = InvokeQuestBool(selection, codexIsQuestAccepted, questionableIsQuestAccepted, questId);
-                bool ready = InvokeQuestBool(selection, codexIsReadyToAcceptQuest,
-                    questionableIsReadyToAcceptQuest, questId);
-                bool locked = InvokeQuestBool(selection, codexIsQuestLocked, questionableIsQuestLocked, questId);
+                bool accepted = questionableIsQuestAccepted.InvokeFunc(questId);
+                bool ready = questionableIsReadyToAcceptQuest.InvokeFunc(questId);
+                bool locked = questionableIsQuestLocked.InvokeFunc(questId);
                 if (!accepted && (!ready || locked))
                     continue;
 
@@ -354,12 +336,11 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 continue;
             try
             {
-                if (InvokeQuestBool(selection, codexIsQuestComplete, questionableIsQuestComplete, questId))
+                if (questionableIsQuestComplete.InvokeFunc(questId))
                     continue;
-                bool accepted = InvokeQuestBool(selection, codexIsQuestAccepted, questionableIsQuestAccepted, questId);
-                bool ready = InvokeQuestBool(selection, codexIsReadyToAcceptQuest,
-                    questionableIsReadyToAcceptQuest, questId);
-                bool locked = InvokeQuestBool(selection, codexIsQuestLocked, questionableIsQuestLocked, questId);
+                bool accepted = questionableIsQuestAccepted.InvokeFunc(questId);
+                bool ready = questionableIsReadyToAcceptQuest.InvokeFunc(questId);
+                bool locked = questionableIsQuestLocked.InvokeFunc(questId);
                 if (!accepted && (!ready || locked))
                     continue;
 
@@ -490,9 +471,9 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
         try
         {
-            bool running = InvokeQuestBool(selection, codexIsRunning, questionableIsRunning);
-            string? current = InvokeQuestValue(selection, codexCurrentQuest, questionableCurrentQuest);
-            bool complete = InvokeQuestBool(selection, codexIsQuestComplete, questionableIsQuestComplete, questId);
+            bool running = questionableIsRunning.InvokeFunc();
+            string? current = questionableCurrentQuest.InvokeFunc();
+            bool complete = questionableIsQuestComplete.InvokeFunc(questId);
             if (complete)
             {
                 eligibleQuestCacheExpiresAt = 0;
@@ -519,7 +500,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
         try
         {
-            if (InvokeQuestBool(selection, codexIsRunning, questionableIsRunning))
+            if (questionableIsRunning.InvokeFunc())
                 return new(false, false,
                     $"{selection.Selected!.DisplayName} is already running work Nexus does not own. Stop it before starting this goal.");
 
@@ -527,9 +508,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 return new(false, false,
                     $"Nexus is still preparing the protected Questionable route for {quest.Name}. It will retry after the compatibility pack is active.");
 
-            bool accepted = selection.Selected.Id == CodexProviderId
-                ? codexStartSingleQuest.InvokeFunc(quest.QuestId)
-                : questionableStartSingleQuest.InvokeFunc(quest.QuestId);
+            bool accepted = questionableStartSingleQuest.InvokeFunc(quest.QuestId);
             string kind = quest.Kind switch
             {
                 ProgressionQuestKind.GeneralSideQuest => "general side quest",
@@ -566,12 +545,11 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
         try
         {
-            bool stopped = selection.Selected!.Id == CodexProviderId
-                ? codexStop.InvokeFunc("Nexus Stop")
-                : questionableStop.InvokeFunc("Nexus Stop");
+            string displayName = selection.Selected!.DisplayName;
+            bool stopped = questionableStop.InvokeFunc("Nexus Stop");
             message = stopped
-                ? $"Nexus asked {selection.Selected.DisplayName} to stop the selected quest."
-                : $"{selection.Selected.DisplayName} rejected the Stop request.";
+                ? $"Nexus asked {displayName} to stop the selected quest."
+                : $"{displayName} rejected the Stop request.";
             return stopped;
         }
         catch (Exception ex)
@@ -930,47 +908,24 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         return manager is null ? 0 : checked((int)Math.Min(manager->GetGil(), int.MaxValue));
     }
 
-    private static bool InvokeQuestBool(
-        ProgressionProviderSelection selection,
-        ICallGateSubscriber<bool> codex,
-        ICallGateSubscriber<bool> questionable) =>
-        selection.Selected!.Id == CodexProviderId ? codex.InvokeFunc() : questionable.InvokeFunc();
-
-    private static bool InvokeQuestBool(
-        ProgressionProviderSelection selection,
-        ICallGateSubscriber<string, bool> codex,
-        ICallGateSubscriber<string, bool> questionable,
-        string questId) =>
-        selection.Selected!.Id == CodexProviderId
-            ? codex.InvokeFunc(questId)
-            : questionable.InvokeFunc(questId);
-
-    private static string? InvokeQuestValue(
-        ProgressionProviderSelection selection,
-        ICallGateSubscriber<string?> codex,
-        ICallGateSubscriber<string?> questionable) =>
-        selection.Selected!.Id == CodexProviderId ? codex.InvokeFunc() : questionable.InvokeFunc();
-
     private ProgressionProviderCandidate[] QuestCandidates()
     {
-        PluginPresence vieri = dependencies.FindPlugin("VieriCodex");
+        PluginPresence migrationSource = dependencies.FindPlugin("VieriCodex");
         PluginPresence stock = dependencies.FindPlugin("Questionable");
-        QuestionableProviderIdentityAssessment identity = QuestionableProviderIdentityPolicy.Assess(
-            new QuestionableProviderInstance(vieri.IsInstalled, vieri.IsLoaded, "VieriCodex", vieri.Version),
-            new QuestionableProviderInstance(stock.IsInstalled, stock.IsLoaded, "Questionable", stock.Version));
-        if (identity.Identity == QuestionableProviderIdentity.Conflict)
+        if (migrationSource.IsLoaded)
         {
             return
             [
-                QuestConflictCandidate(CodexProviderId, "VieriCodex", ProgressionProviderFlavor.VieriCompatibility, vieri, identity.Detail),
-                QuestConflictCandidate(QuestionableProviderId, "Questionable", ProgressionProviderFlavor.Stock, stock, identity.Detail),
+                new ProgressionProviderCandidate(
+                    QuestionableProviderId,
+                    "Questionable",
+                    ProgressionProviderRole.Questing,
+                    ProgressionProviderFlavor.Stock,
+                    ProgressionProviderReadiness.Conflict,
+                    stock.Version,
+                    "VieriCodex is still loaded. It is a migration source only; disable it before Nexus can delegate quest work to stock Questionable."),
             ];
         }
-
-        bool codexContractReady = codexIsRunning.HasFunction && codexCurrentQuest.HasFunction &&
-                                  codexStartSingleQuest.HasFunction && codexIsQuestLocked.HasFunction &&
-                                  codexIsQuestComplete.HasFunction && codexIsReadyToAcceptQuest.HasFunction &&
-                                  codexIsQuestAccepted.HasFunction && codexStop.HasFunction;
         bool questionableContractReady = questionableIsRunning.HasFunction && questionableCurrentQuest.HasFunction &&
                                          questionableStartSingleQuest.HasFunction && questionableIsQuestLocked.HasFunction &&
                                          questionableIsQuestComplete.HasFunction && questionableIsReadyToAcceptQuest.HasFunction &&
@@ -979,37 +934,15 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         return
         [
             Candidate(
-                CodexProviderId,
-                "VieriCodex",
-                ProgressionProviderRole.Questing,
-                ProgressionProviderFlavor.VieriCompatibility,
-                vieri,
-                identity.Identity == QuestionableProviderIdentity.VieriCompatibility && codexContractReady,
-                contract),
-            Candidate(
                 QuestionableProviderId,
                 "Questionable",
                 ProgressionProviderRole.Questing,
                 ProgressionProviderFlavor.Stock,
                 stock,
-                identity.Identity == QuestionableProviderIdentity.Stock && questionableContractReady,
+                questionableContractReady,
                 contract),
         ];
     }
-
-    private static ProgressionProviderCandidate QuestConflictCandidate(
-        ProviderId providerId,
-        string displayName,
-        ProgressionProviderFlavor flavor,
-        PluginPresence presence,
-        string detail) => new(
-            providerId,
-            displayName,
-            ProgressionProviderRole.Questing,
-            flavor,
-            ProgressionProviderReadiness.Conflict,
-            presence.Version,
-            detail);
 
     private ProgressionProviderCandidate[] DutyCandidates()
     {

@@ -52,7 +52,7 @@ public sealed class CodexMigrationImporterTests
         Assert.Equal(3, snapshot.QueueSteps[0].Method);
         Assert.False(snapshot.QueueSettings.ResumeAfterRestart);
         Assert.False(snapshot.QueueSettings.AutomaticUsesSideQuests);
-        Assert.Contains(preview.Issues, issue => issue.Severity == MigrationIssueSeverity.Warning);
+        Assert.Contains(preview.Issues, issue => issue.Message.Contains("Nexus-owned queue", StringComparison.Ordinal));
     }
 
     [Fact]

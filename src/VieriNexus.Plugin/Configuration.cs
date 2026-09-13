@@ -1,12 +1,13 @@
 using Dalamud.Configuration;
 using Dalamud.Plugin;
+using VieriNexus.Application;
 
 namespace VieriNexus;
 
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 7;
+    public int Version { get; set; } = 8;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
@@ -17,6 +18,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool OperationsOverlayTransparent { get; set; }
     public bool ShowOperationsStatus { get; set; } = true;
     public bool ManageQuestionableRouteCorrections { get; set; } = true;
+    public bool PendingCodexQueuePromotion { get; set; }
     public Guid? AppliedOperationsReceiptId { get; set; }
     public ulong AppliedOperationsCharacterId { get; set; }
     public Dictionary<string, CharacterConfiguration> Characters { get; set; } = new(StringComparer.Ordinal);
@@ -27,16 +29,21 @@ public sealed class Configuration : IPluginConfiguration
 
     public void Initialize(IDalamudPluginInterface value)
     {
+        int storedVersion = Version;
         pluginInterface = value;
         UiScale = Math.Clamp(UiScale, .8f, 1.5f);
         Characters = new Dictionary<string, CharacterConfiguration>(Characters ?? [], StringComparer.Ordinal);
         LegacyImports = new Dictionary<string, LegacyImportState>(LegacyImports ?? [], StringComparer.OrdinalIgnoreCase);
+        if (storedVersion < 8 && LegacyImports.TryGetValue("codex", out LegacyImportState? codex) && codex.Activated)
+            PendingCodexQueuePromotion = true;
         foreach (CharacterConfiguration character in Characters.Values)
         {
             character.Progression ??= new ProgressionDraftConfiguration();
+            character.ProgressionQueue ??= new ProgressionQueueConfiguration();
+            ProgressionQueuePolicy.Normalize(character.ProgressionQueue);
             character.Atlas ??= new AtlasAutomationConfiguration();
         }
-        Version = 7;
+        Version = 8;
     }
 
     public CharacterConfiguration ForCharacter(string key)
@@ -71,6 +78,7 @@ public sealed class CharacterConfiguration
     public bool PauseOnManualTarget { get; set; } = true;
     public int ManualControlQuietPeriodMs { get; set; } = 1500;
     public ProgressionDraftConfiguration Progression { get; set; } = new();
+    public ProgressionQueueConfiguration ProgressionQueue { get; set; } = new();
     public AtlasAutomationConfiguration Atlas { get; set; } = new();
 }
 
@@ -109,5 +117,6 @@ public sealed class LegacyImportState
     public bool Activated { get; set; }
     public string AppliedCharacterKey { get; set; } = string.Empty;
     public ProgressionDraftConfiguration? PreviousProgression { get; set; }
+    public ProgressionQueueConfiguration? PreviousProgressionQueue { get; set; }
     public AtlasAutomationConfiguration? PreviousAtlas { get; set; }
 }

@@ -16,6 +16,7 @@ The 2026-09-12 final AutoDuty recovery audit confirms that released stock 0.0.0.
 | TextAdvance | Codex | Quest acceptance, turn-in, dialogue, and cutscene progression |
 | Marketbuddy | AutoMarket | Configured retainer price application |
 | Allagan Market | AutoMarket | Market ownership, price state, and undercut intelligence |
+| Fast Job Switcher | Codex, Nexus | Verified unattended Progression Queue job changes through documented slash commands |
 
 ## Recommended integrations
 
@@ -27,7 +28,6 @@ The 2026-09-12 final AutoDuty recovery audit confirms that released stock 0.0.0.
 | Pandora's Box | AutoDuty, Codex | Active Time Maneuvers, chests, tank stance, and instance interactions |
 | Gearsetter | AutoDuty | Recommended gear across Armoury Chest and inventory |
 | Stylist | AutoDuty, Codex | Gearset organization and recommended equipment |
-| Fast Job Switcher | Codex | Unattended Progression Queue job changes |
 | CBT | Codex | Automated quest sniper sequences |
 | Artisan | Codex | Quest crafting |
 | AutoHook | Codex | Quest fishing |
@@ -42,14 +42,14 @@ The 2026-09-12 final AutoDuty recovery audit confirms that released stock 0.0.0.
 
 | Provider | Nexus module | Transition rule |
 | --- | --- | --- |
-| Stock Questionable | Progression / Questing | The 0.1.0.26 read-only adapter verifies `IsRunning`, `StartSingleQuest`, and `Stop` without invoking them. VieriCodex remains authoritative until Nexus owns its custom planners, policies, route overlay, safety, and UI and the stock capability contract passes parity. |
+| Stock Questionable | Progression / Questing | The sole quest runtime as of 0.1.0.59. Nexus owns selection, queue, Atlas, safety, compatibility corrections, and verification; Questionable executes one exact supported quest through the narrow public contract. |
 | Stock AutoDuty | Duties | The 0.1.0.26 read-only adapter verifies `ContentHasPath`, `Run`, `IsStopped`, and `Stop` without invoking them. VieriAutoDuty remains authoritative until Nexus owns its custom route/travel, gear/inventory, maintenance, progression-loop, Last Run, telemetry, command, and UI behavior and the stock duty contract passes parity. See `AUTODUTY_PROVIDER_MIGRATION_AUDIT.md`. |
 
 These providers are required only when their owning module is enabled. They must not become global first-run blockers.
 
 ## Intentionally not permanent external dependencies
 
-- During migration, Questionable is incorporated through VieriCodex's maintained quest engine and route library and must not be installed beside VieriCodex. The approved end-state moves Vieri-specific behavior into Nexus, retires the full fork only after parity, and then uses stock Questionable as a capability-versioned provider for ordinary supported quests.
+- VieriCodex is a local settings-migration source only as of 0.1.0.59. A loaded copy blocks quest delegation but is never selected or called; stock Questionable is the sole capability-versioned provider for ordinary supported quests.
 - Questionable 15.756.2.5 is incorporated through VieriCodex 1.12.2.82 at source commit `173d6ad599d2c057e0f88cea76ed302a7746bf32` (upstream tag commit `e21fec6934db687829b9530394a709a5c1eb1d52`). It adds current Beastmaster/Chocobo paths, route metadata, inactive Stop editing, and long-comment scrolling while retaining the Vieri live-gearset guard, Progress Atlas, Progression Queue, named routes, and solo-duty safeguards. Nexus 0.1.0.52 owns the stock-Questionable solo-duty Wrath/Boss Mod handoff. Nexus 0.1.0.58 manages the five remaining semantic route corrections as an atomic, reversible compatibility layer over official data version `1789230462`; all other route data and execution remain stock-owned. See `QUESTIONABLE_PROVIDER_MIGRATION_AUDIT.md`.
 - The eight Vieri forks/products are temporary migration sources, not final third-party dependencies. This does not exclude their stock upstreams from becoming module-scoped providers after parity.
 - Wrath Combo and VieriWrathSwitch are already incorporated into VieriRotationHelper and migrate as Nexus's embedded combat engine.

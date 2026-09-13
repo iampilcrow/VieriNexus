@@ -27,7 +27,7 @@ public static class NexusDependencyCatalog
         new("pandora", "Pandora's Box", "Duties and Questing", "Adds automatic Active Time Maneuvers, chest handling, tank stance, and supported instance interactions.", false, ["PandorasBox"], "https://love.puni.sh/ment.json", "Pandora's Box"),
         new("gearsetter", "Gearsetter", "Equipment", "Finds and equips recommended upgrades across the Armoury Chest and inventory.", false, ["Gearsetter"], "https://puni.sh/api/repository/vera"),
         new("stylist", "Stylist", "Equipment", "Keeps job gearsets organized and equips recommended items across inventory sources.", false, ["Stylist"], "https://raw.githubusercontent.com/NightmareXIV/MyDalamudPlugins/main/pluginmaster.json"),
-        new("fast-job-switcher", "Fast Job Switcher", "Progression Queue", "Enables unattended switching between configured classes and jobs.", false, ["FastJobSwitcher"], null, "Fast Job Switcher"),
+        new("fast-job-switcher", "Fast Job Switcher", "Progression Queue", "Provides the verified class/job slash-command switching used by Nexus progression queues.", true, ["FastJobSwitcher"], null, "Fast Job Switcher"),
         new("cbt", "CBT", "Questing", "Its Sniper No Sniping tweak completes supported aiming sequences that otherwise need manual input.", false, ["Automaton"], "https://puni.sh/api/repository/croizat", "CBT"),
         new("artisan", "Artisan", "Crafting", "Completes crafting steps required by supported quests and future crafting goals.", false, ["Artisan"], "https://love.puni.sh/ment.json"),
         new("autohook", "AutoHook", "Fishing", "Completes fishing steps required by supported quests and future fishing goals.", false, ["AutoHook"], "https://love.puni.sh/ment.json"),

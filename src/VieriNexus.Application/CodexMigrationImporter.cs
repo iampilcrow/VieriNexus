@@ -50,8 +50,8 @@ public sealed class CodexMigrationImporter
                     "Main Scenario, Class/Job/Role, logs, currents, travel-node, exploration, side-quest, achievement, duty, and level-stop preferences were mapped."),
             ];
             if (queueSteps.Length > 0)
-                issues.Add(new(MigrationIssueSeverity.Warning,
-                    "Saved VieriCodex queue steps were preserved in staging for reference; Nexus will not resume a predecessor instruction pointer."));
+                issues.Add(new(MigrationIssueSeverity.Information,
+                    "Saved VieriCodex queue steps and settings are ready to become a Nexus-owned queue; no predecessor instruction pointer will be resumed."));
             return new(snapshot, issues);
         }
         catch (JsonException)
@@ -97,7 +97,7 @@ public sealed class CodexMigrationImporter
                 (uint)Math.Clamp(Number(step, "ClassJob", 0), 0, 43),
                 Math.Clamp(Number(step, "TargetLevel", 1), 1, 100),
                 Math.Clamp(Number(step, "Method", 0), 0, 3),
-                Math.Clamp(Number(step, "FallbackPolicy", 0), 0, 6)))
+                Math.Clamp(Number(step, "FallbackPolicy", 0), 0, 5)))
             .ToArray();
     }
 
@@ -109,7 +109,7 @@ public sealed class CodexMigrationImporter
         Boolean(settings, "AutomaticUsesHuntingLog", true),
         Boolean(settings, "AutomaticUsesSideQuests", true),
         Boolean(settings, "AutomaticUsesDungeonGrind", true),
-        Math.Clamp(Number(settings, "OnStepFailure", 0), 0, 6));
+        Math.Clamp(Number(settings, "OnStepFailure", 0), 0, 5));
 
     private static Guid GuidValue(JsonElement parent, string name) =>
         parent.ValueKind == JsonValueKind.Object &&

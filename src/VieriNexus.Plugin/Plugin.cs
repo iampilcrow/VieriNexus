@@ -59,6 +59,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly QuestionableCompatibilityService questionableCompatibility;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
+    private readonly FastJobSwitchService fastJobSwitch;
+    private readonly ProgressionQueueRuntimeService progressionQueue;
     private readonly SoloDutyRotationRuntimeService soloDutyRotation;
     private readonly ProgressAtlasService progressAtlas;
     private readonly ProgressAtlasActionService progressAtlasActions;
@@ -249,6 +251,15 @@ public sealed class Plugin : IDalamudPlugin
             huntingLog,
             DutyState,
             Log);
+        fastJobSwitch = new FastJobSwitchService(PluginInterface, CommandManager, DataManager);
+        progressionQueue = new ProgressionQueueRuntimeService(
+            Configuration,
+            progressionRuntime,
+            fastJobSwitch,
+            ClientState,
+            ObjectTable,
+            Condition,
+            Save);
         soloDutyRotation = new SoloDutyRotationRuntimeService(
             PluginInterface,
             progressionProviders,
@@ -277,7 +288,7 @@ public sealed class Plugin : IDalamudPlugin
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
             codexMigration, commandCenterMigration, commandCenterCatalog, questionableCompatibility,
             navigationLibrary, navigationActivation, navigationDiagnostics,
-            navigationRuntime, progressionProviders, progressionRuntime, soloDutyRotation,
+            navigationRuntime, progressionProviders, progressionRuntime, progressionQueue, soloDutyRotation,
             progressAtlas, progressAtlasActions,
             gearShoppingRuntime, maintenanceRuntime,
             moduleRegistry, worldStore, logo);
@@ -328,7 +339,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Pages: plugins, routes, progression, atlas, migration. Controls: status, start, resume, last, stop, maintenance, repair, extract, register, coffers, desynth, gcturnin, storage, sell, play <route>, preview <route>.",
+            HelpMessage = "Open VieriNexus. Pages: plugins, routes, progression, queue, atlas, migration. Controls: status, start, resume, last, stop, maintenance, repair, extract, register, coffers, desynth, gcturnin, storage, sell, play <route>, preview <route>.",
         });
         CommandManager.AddHandler(ShortCommand, new CommandInfo(OnCommand)
         {
@@ -395,6 +406,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         var now = Environment.TickCount64;
         worldObserver.Update(now);
+        ApplyPendingCodexQueuePromotion();
         navigationExecutionSafety.Update(DateTimeOffset.UtcNow);
         manualMovementSafety.Update(now);
         navigationAuthority.Update();
@@ -415,6 +427,7 @@ public sealed class Plugin : IDalamudPlugin
         progressionRuntime.Update(
             worldStore.Current.Character.Value,
             isInDuty);
+        progressionQueue.Update(worldStore.Current.Character.Value);
         soloDutyRotation.Update(DateTimeOffset.UtcNow, isInDuty);
 
         if (!ClientState.IsLoggedIn)
@@ -577,6 +590,10 @@ public sealed class Plugin : IDalamudPlugin
                 Configuration.SelectedPage = "Progression";
                 mainWindow.IsOpen = true;
                 break;
+            case "queue":
+                Configuration.SelectedPage = "Queue";
+                mainWindow.IsOpen = true;
+                break;
             case "atlas":
                 Configuration.SelectedPage = "Progress Atlas";
                 mainWindow.IsOpen = true;
@@ -634,6 +651,22 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.AppliedOperationsReceiptId = receipt.Id;
         Configuration.AppliedOperationsCharacterId = PlayerState.ContentId;
         Save();
+    }
+
+    private void ApplyPendingCodexQueuePromotion()
+    {
+        if (!Configuration.PendingCodexQueuePromotion ||
+            worldStore.Current.Character.Value is not { Key.IsKnown: true } character ||
+            codexMigration.Status().StagedSnapshot is not { } snapshot)
+            return;
+
+        CharacterConfiguration owner = Configuration.ForCharacter(character.Key.ToString());
+        LegacyImportState state = Configuration.ForLegacyImport("codex");
+        state.PreviousProgressionQueue ??= new ProgressionQueueConfiguration();
+        owner.ProgressionQueue = ProgressionQueuePolicy.Import(snapshot);
+        Configuration.PendingCodexQueuePromotion = false;
+        Save();
+        ChatGui.Print($"[VieriNexus] Promoted {snapshot.SavedQueueSteps} verified VieriCodex queue step(s) into the Nexus Job Queue.");
     }
 
     private static void PrintControl(VieriNexus.Contracts.NexusCommandResultDto result)

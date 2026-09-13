@@ -46,6 +46,7 @@ internal sealed class NexusWindow : Window
     private readonly NavigationRouteRuntimeService navigationRuntime;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
+    private readonly ProgressionQueueRuntimeService progressionQueue;
     private readonly SoloDutyRotationRuntimeService soloDutyRotation;
     private readonly ProgressAtlasService progressAtlas;
     private readonly ProgressAtlasActionService progressAtlasActions;
@@ -79,6 +80,8 @@ internal sealed class NexusWindow : Window
     private string commandCenterMessage = string.Empty;
     private string questionableCompatibilityMessage = string.Empty;
     private bool confirmQuestionableCompatibilityRollback;
+    private Guid? pendingDeleteQueueStepId;
+    private bool confirmClearProgressionQueue;
 
     internal NexusWindow(
         Plugin plugin,
@@ -96,6 +99,7 @@ internal sealed class NexusWindow : Window
         NavigationRouteRuntimeService navigationRuntime,
         ProgressionProviderService progressionProviders,
         ProgressionRuntimeService progressionRuntime,
+        ProgressionQueueRuntimeService progressionQueue,
         SoloDutyRotationRuntimeService soloDutyRotation,
         ProgressAtlasService progressAtlas,
         ProgressAtlasActionService progressAtlasActions,
@@ -121,6 +125,7 @@ internal sealed class NexusWindow : Window
         this.navigationRuntime = navigationRuntime;
         this.progressionProviders = progressionProviders;
         this.progressionRuntime = progressionRuntime;
+        this.progressionQueue = progressionQueue;
         this.soloDutyRotation = soloDutyRotation;
         this.progressAtlas = progressAtlas;
         this.progressAtlasActions = progressAtlasActions;
@@ -214,6 +219,7 @@ internal sealed class NexusWindow : Window
             case "Home": DrawHome(); break;
             case "Overview": DrawOverview(); break;
             case "Progression": DrawProgression(); break;
+            case "Queue": DrawProgressionQueue(); break;
             case "Progress Atlas": DrawProgressAtlas(); break;
             case "Gear & Inventory": DrawGearAndInventory(); break;
             case "Routes & Navigation": DrawRoutesAndNavigation(); break;
@@ -760,7 +766,7 @@ internal sealed class NexusWindow : Window
             }.Count(value => value);
             ImGui.TextUnformatted($"{enabled} enabled activity group(s) • {preview.SavedQueueSteps} saved queue step(s)");
             TextWrapped(NexusTheme.Muted,
-                "MSQ, Class/Job/Role, logs, currents, travel nodes, exploration, side quests, achievements, duties, and the level stop are mapped together. Old queue instruction pointers are never resumed.");
+                "MSQ, Class/Job/Role, logs, currents, travel nodes, exploration, side quests, achievements, duties, the level stop, and the full Nexus-owned job queue are mapped together. Old provider instruction pointers are never resumed.");
             foreach (MigrationIssue issue in status.Preview.Issues.Take(2))
             {
                 Vector4 color = issue.Severity == MigrationIssueSeverity.Error ? NexusTheme.Red :
@@ -815,6 +821,7 @@ internal sealed class NexusWindow : Window
                     state.ImportedItemCount = 0;
                     state.AppliedCharacterKey = string.Empty;
                     state.PreviousProgression = null;
+                    state.PreviousProgressionQueue = null;
                     state.PreviousAtlas = null;
                     plugin.Save();
                 }
@@ -847,6 +854,7 @@ internal sealed class NexusWindow : Window
         if (!state.Activated || !string.Equals(state.AppliedCharacterKey, characterKey, StringComparison.Ordinal))
         {
             state.PreviousProgression = Clone(configuration.Progression);
+            state.PreviousProgressionQueue = Clone(configuration.ProgressionQueue);
             state.PreviousAtlas = Clone(configuration.Atlas);
         }
 
@@ -857,6 +865,7 @@ internal sealed class NexusWindow : Window
         configuration.Progression.AllowDuties = snapshot.RequiredMsqDungeons;
         if (snapshot.LevelStopEnabled)
             configuration.Progression.TargetLevel = snapshot.TargetLevel;
+        configuration.ProgressionQueue = ProgressionQueuePolicy.Import(snapshot);
         CodexQueueStepSnapshot? matchingQueueStep = snapshot.QueueSteps.FirstOrDefault(step =>
             step.Enabled && step.ClassJobId == character.ClassJobId);
         if (matchingQueueStep is not null)
@@ -891,9 +900,9 @@ internal sealed class NexusWindow : Window
         state.Activated = state.ReadyForActivation = true;
         state.AppliedCharacterKey = characterKey;
         plugin.Save();
-        message = matchingQueueStep is null
-            ? $"Applied the verified VieriCodex preferences to {character.Name}; saved steps for other jobs remain preserved in staging."
-            : $"Applied the verified VieriCodex preferences and matching level-{matchingQueueStep.TargetLevel} queue goal to {character.Name}.";
+        message = snapshot.QueueSteps.Count == 0
+            ? $"Applied the verified VieriCodex preferences to {character.Name}."
+            : $"Applied the verified VieriCodex preferences and all {snapshot.QueueSteps.Count} Nexus-owned queue step(s) to {character.Name}.";
         return true;
     }
 
@@ -903,6 +912,8 @@ internal sealed class NexusWindow : Window
             return;
         CharacterConfiguration configuration = plugin.Configuration.ForCharacter(state.AppliedCharacterKey);
         configuration.Progression = Clone(state.PreviousProgression);
+        if (state.PreviousProgressionQueue is not null)
+            configuration.ProgressionQueue = Clone(state.PreviousProgressionQueue);
         configuration.Atlas = Clone(state.PreviousAtlas);
     }
 
@@ -915,6 +926,40 @@ internal sealed class NexusWindow : Window
         AllowSideQuests = value.AllowSideQuests,
         AllowDuties = value.AllowDuties,
         MinimumGilReserve = value.MinimumGilReserve,
+    };
+
+    private static ProgressionQueueConfiguration Clone(ProgressionQueueConfiguration value) => new()
+    {
+        Steps = value.Steps.Select(step => new ProgressionQueueStepConfiguration
+        {
+            Id = step.Id,
+            Enabled = step.Enabled,
+            ClassJobId = step.ClassJobId,
+            TargetLevel = step.TargetLevel,
+            Method = step.Method,
+            FallbackPolicy = step.FallbackPolicy,
+            Status = step.Status,
+            StatusDetail = step.StatusDetail,
+        }).ToList(),
+        Settings = new ProgressionQueueSettingsConfiguration
+        {
+            SkipTargetsAlreadyReached = value.Settings.SkipTargetsAlreadyReached,
+            AutomaticallySwitchJobs = value.Settings.AutomaticallySwitchJobs,
+            AutomaticallyAdvance = value.Settings.AutomaticallyAdvance,
+            ResumeAfterRestart = value.Settings.ResumeAfterRestart,
+            AutomaticUsesHuntingLog = value.Settings.AutomaticUsesHuntingLog,
+            AutomaticUsesSideQuests = value.Settings.AutomaticUsesSideQuests,
+            AutomaticUsesDuties = value.Settings.AutomaticUsesDuties,
+            OnStepFailure = value.Settings.OnStepFailure,
+        },
+        CurrentIndex = value.CurrentIndex,
+        IsRunning = value.IsRunning,
+        IsPaused = value.IsPaused,
+        State = value.State,
+        ActiveGoalId = value.ActiveGoalId,
+        EffectiveMethod = value.EffectiveMethod,
+        StatusDetail = value.StatusDetail,
+        UpdatedAtUtc = value.UpdatedAtUtc,
     };
 
     private static AtlasAutomationConfiguration Clone(AtlasAutomationConfiguration value) => new()
@@ -2730,6 +2775,18 @@ internal sealed class NexusWindow : Window
 
         CharacterConfiguration characterConfiguration = plugin.Configuration.ForCharacter(character.Key.ToString());
         ProgressionDraftConfiguration draftConfiguration = characterConfiguration.Progression;
+        ProgressionQueueConfiguration queue = characterConfiguration.ProgressionQueue;
+        BeginAutoPanel("JOB QUEUE");
+        NexusTheme.StatusDot(queue.IsRunning ? NexusTheme.Green : queue.IsPaused ? NexusTheme.Amber : NexusTheme.Muted,
+            queue.IsRunning ? $"Running step {queue.CurrentIndex + 1} of {queue.Steps.Count}" :
+            queue.IsPaused ? "Paused" : $"{queue.Steps.Count} configured step(s)");
+        TextWrapped(NexusTheme.Muted, queue.StatusDetail);
+        if (ImGui.Button("Open Job Queue", new Vector2(-1, 0)))
+        {
+            plugin.Configuration.SelectedPage = "Queue";
+            plugin.Save();
+        }
+        EndAutoPanel();
         if (draftConfiguration.TargetLevel == 0)
         {
             draftConfiguration.TargetLevel = Math.Min(
@@ -2835,6 +2892,341 @@ internal sealed class NexusWindow : Window
         if (ImGui.CollapsingHeader("Plan details###ProgressionPlan"))
             DrawProgressionPlan(plan);
     }
+
+    private void DrawProgressionQueue()
+    {
+        PageHeading("Job Queue", "Build an ordered multi-job leveling queue. Nexus owns the targets and verification; stock providers perform bounded work.");
+
+        CharacterSnapshot? character = world.Current.Character.Value;
+        if (character is null || !character.Key.IsKnown)
+        {
+            BeginAutoPanel("JOB QUEUE");
+            NexusTheme.StatusDot(NexusTheme.Muted, "Waiting for the current character");
+            TextWrapped(NexusTheme.Muted, "Log in to load this character's Nexus-owned queue.");
+            EndAutoPanel();
+            return;
+        }
+
+        CharacterConfiguration owner = plugin.Configuration.ForCharacter(character.Key.ToString());
+        ProgressionQueueConfiguration queue = owner.ProgressionQueue;
+        ProgressionQueuePolicy.Normalize(queue);
+        ProgressionQueueStepConfiguration? current = queue.CurrentIndex >= 0 && queue.CurrentIndex < queue.Steps.Count
+            ? queue.Steps[queue.CurrentIndex]
+            : null;
+
+        BeginAutoPanel("QUEUE STATUS");
+        Vector4 queueColor = queue.IsRunning ? NexusTheme.Green : queue.IsPaused ? NexusTheme.Amber :
+            queue.State == ProgressionQueueRuntimeState.Completed ? NexusTheme.Green : NexusTheme.Muted;
+        string status = queue.IsRunning ? "Running" : queue.IsPaused ? "Paused" :
+            queue.State == ProgressionQueueRuntimeState.Completed ? "Complete" : "Stopped";
+        NexusTheme.StatusDot(queueColor, current is null
+            ? $"{status} • {queue.Steps.Count} configured step(s)"
+            : $"{status} • Step {queue.CurrentIndex + 1}/{queue.Steps.Count} • {progressionQueue.JobLabel(current.ClassJobId)}");
+        TextWrapped(queueColor, queue.StatusDetail);
+        if (current is not null)
+            ImGui.TextUnformatted($"Level {progressionQueue.Level(current.ClassJobId)} → {current.TargetLevel} • {QueueMethodName(queue.EffectiveMethod ?? current.Method)}");
+
+        if (!queue.IsRunning && !queue.IsPaused)
+        {
+            bool canStart = queue.Steps.Any(step => step.Enabled) && progressionQueue.IsFastJobSwitcherLoaded;
+            if (!canStart)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Start Queue"))
+                progressionMessage = progressionQueue.Start(character).Message;
+            if (!canStart)
+                ImGui.EndDisabled();
+            ImGui.SameLine();
+            if (ImGui.Button("Reset Progress"))
+                progressionQueue.Reset(character);
+        }
+        else if (queue.IsPaused)
+        {
+            if (ImGui.Button("Resume Queue"))
+                progressionMessage = progressionQueue.Resume(character).Message;
+            ImGui.SameLine();
+            if (ImGui.Button("Stop Queue"))
+                progressionMessage = progressionQueue.Stop(character).Message;
+        }
+        else if (ImGui.Button("Stop Queue"))
+            progressionMessage = progressionQueue.Stop(character).Message;
+        if (!string.IsNullOrWhiteSpace(progressionMessage))
+            TextWrapped(NexusTheme.Cyan, progressionMessage);
+        EndAutoPanel();
+
+        BeginAutoPanel("FAST JOB SWITCHER");
+        NexusTheme.StatusDot(progressionQueue.IsFastJobSwitcherLoaded ? NexusTheme.Green : NexusTheme.Red,
+            progressionQueue.IsFastJobSwitcherLoaded
+                ? "Ready • Nexus verifies every requested job before advancing"
+                : progressionQueue.IsFastJobSwitcherInstalled
+                    ? "Installed but disabled"
+                    : "Required dependency is missing");
+        TextWrapped(NexusTheme.Muted,
+            "Nexus uses the same lower-case class/job slash commands proven in VieriCodex, then waits for the game to confirm the equipped job.");
+        if (!progressionQueue.IsFastJobSwitcherLoaded)
+        {
+            DependencyStatus dependency = dependencies.Snapshot().First(item => item.Definition.Id == "fast-job-switcher");
+            if (ImGui.Button(dependency.Health == DependencyHealth.Missing ? "Install Fast Job Switcher" : "Open Installed Plugins"))
+                dependencies.OpenInstaller(dependency);
+        }
+        EndAutoPanel();
+
+        if (ImGui.CollapsingHeader("Queue settings###ProgressionQueueSettings"))
+        {
+            BeginAutoPanel("AUTOMATION");
+            ProgressionQueueSettingsConfiguration settings = queue.Settings;
+            bool changed = QueueCheckbox("Skip targets already reached", settings.SkipTargetsAlreadyReached,
+                value => settings.SkipTargetsAlreadyReached = value);
+            changed |= QueueCheckbox("Automatically switch jobs", settings.AutomaticallySwitchJobs,
+                value => settings.AutomaticallySwitchJobs = value);
+            changed |= QueueCheckbox("Automatically advance", settings.AutomaticallyAdvance,
+                value => settings.AutomaticallyAdvance = value);
+            changed |= QueueCheckbox("Resume safely after reload", settings.ResumeAfterRestart,
+                value => settings.ResumeAfterRestart = value);
+            ImGui.Spacing();
+            ImGui.TextColored(NexusTheme.Gold, "AUTOMATIC / SMART MAY USE");
+            changed |= QueueCheckbox("Hunting Log", settings.AutomaticUsesHuntingLog,
+                value => settings.AutomaticUsesHuntingLog = value);
+            changed |= QueueCheckbox("Side Quests", settings.AutomaticUsesSideQuests,
+                value => settings.AutomaticUsesSideQuests = value);
+            changed |= QueueCheckbox("Duties", settings.AutomaticUsesDuties,
+                value => settings.AutomaticUsesDuties = value);
+            ImGui.SetNextItemWidth(180f);
+            string failureName = QueueFallbackName(settings.OnStepFailure);
+            if (ImGui.BeginCombo("On step failure", failureName))
+            {
+                foreach (ProgressionQueueFallbackPolicy policy in new[]
+                         {
+                             ProgressionQueueFallbackPolicy.PauseQueue,
+                             ProgressionQueueFallbackPolicy.StopQueue,
+                             ProgressionQueueFallbackPolicy.SkipStep,
+                         })
+                {
+                    if (ImGui.Selectable(QueueFallbackName(policy), settings.OnStepFailure == policy))
+                    {
+                        settings.OnStepFailure = policy;
+                        changed = true;
+                    }
+                }
+                ImGui.EndCombo();
+            }
+            if (changed)
+                plugin.Save();
+            EndAutoPanel();
+        }
+
+        NexusTheme.SectionTitle("Queue steps");
+        TextWrapped(NexusTheme.Muted,
+            "Steps run top to bottom. Each target is verified from the game's permanent job level before Nexus advances.");
+        for (int index = 0; index < queue.Steps.Count; index++)
+            DrawProgressionQueueStep(character, queue, index);
+
+        if (ImGui.Button("Add Current Job"))
+        {
+            queue.Steps.Add(new ProgressionQueueStepConfiguration
+            {
+                ClassJobId = character.ClassJobId,
+                TargetLevel = Math.Min(ReachJobLevelPlanner.MaximumSupportedLevel, Math.Max(character.Level + 1, 2)),
+            });
+            plugin.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Add Job"))
+        {
+            NexusClassJob defaultJob = progressionQueue.CombatJobs.FirstOrDefault(job => job.Level > 0)
+                ?? new NexusClassJob(character.ClassJobId, character.ClassJobName, character.ClassJobAbbreviation, character.Level);
+            queue.Steps.Add(new ProgressionQueueStepConfiguration
+            {
+                ClassJobId = defaultJob.Id,
+                TargetLevel = Math.Min(ReachJobLevelPlanner.MaximumSupportedLevel, Math.Max(defaultJob.Level + 1, 2)),
+            });
+            plugin.Save();
+        }
+        ImGui.SameLine();
+        if (!confirmClearProgressionQueue)
+        {
+            if (ImGui.Button("Clear Queue..."))
+                confirmClearProgressionQueue = true;
+        }
+        else
+        {
+            ImGui.TextColored(NexusTheme.Red, "Clear every queue step?");
+            ImGui.SameLine();
+            if (ImGui.Button("Clear"))
+            {
+                progressionQueue.Stop(character);
+                queue.Steps.Clear();
+                queue.CurrentIndex = -1;
+                queue.State = ProgressionQueueRuntimeState.Stopped;
+                queue.StatusDetail = "Queue cleared.";
+                confirmClearProgressionQueue = false;
+                plugin.Save();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel###CancelClearProgressionQueue"))
+                confirmClearProgressionQueue = false;
+        }
+    }
+
+    private void DrawProgressionQueueStep(
+        CharacterSnapshot character,
+        ProgressionQueueConfiguration queue,
+        int index)
+    {
+        ProgressionQueueStepConfiguration step = queue.Steps[index];
+        bool active = queue.IsRunning && queue.CurrentIndex == index;
+        bool ownsCurrent = queue.CurrentIndex == index && (queue.IsRunning || queue.IsPaused);
+        BeginAutoPanel($"STEP {index + 1} • {progressionQueue.JobLabel(step.ClassJobId).ToUpperInvariant()}");
+        NexusTheme.StatusDot(active ? NexusTheme.Green :
+                step.Status is ProgressionQueueStepStatus.Completed or ProgressionQueueStepStatus.AlreadySatisfied
+                    ? NexusTheme.Green
+                    : step.Status == ProgressionQueueStepStatus.Blocked ? NexusTheme.Red : NexusTheme.Muted,
+            $"{step.Status} • Level {progressionQueue.Level(step.ClassJobId)} → {step.TargetLevel}");
+        bool changed = false;
+        bool enabled = step.Enabled;
+        if (ownsCurrent)
+            ImGui.BeginDisabled();
+        if (ImGui.Checkbox("Enabled", ref enabled))
+        {
+            step.Enabled = enabled;
+            step.Status = enabled ? ProgressionQueueStepStatus.Waiting : ProgressionQueueStepStatus.Disabled;
+            changed = true;
+        }
+
+        ImGui.SetNextItemWidth(Math.Max(220f, ImGui.GetContentRegionAvail().X * .42f));
+        if (ImGui.BeginCombo("Class / Job", progressionQueue.JobLabel(step.ClassJobId)))
+        {
+            foreach (NexusClassJob job in progressionQueue.CombatJobs)
+            {
+                if (job.Level == 0)
+                    continue;
+                if (ImGui.Selectable($"{job.Name} ({job.Abbreviation}) • Level {job.Level}", step.ClassJobId == job.Id))
+                {
+                    step.ClassJobId = job.Id;
+                    step.TargetLevel = Math.Max(step.TargetLevel, Math.Min(100, job.Level + 1));
+                    step.Status = ProgressionQueueStepStatus.Waiting;
+                    changed = true;
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        int target = step.TargetLevel;
+        ImGui.SetNextItemWidth(160f);
+        if (ImGui.SliderInt("Target level", ref target, 1, ReachJobLevelPlanner.MaximumSupportedLevel))
+        {
+            step.TargetLevel = target;
+            changed = true;
+        }
+
+        ImGui.SetNextItemWidth(220f);
+        if (ImGui.BeginCombo("Leveling method", QueueMethodName(step.Method)))
+        {
+            foreach (ProgressionQueueMethod method in Enum.GetValues<ProgressionQueueMethod>())
+            {
+                if (ImGui.Selectable(QueueMethodName(method), step.Method == method))
+                {
+                    step.Method = method;
+                    changed = true;
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.SetNextItemWidth(220f);
+        if (ImGui.BeginCombo("If this method cannot run", QueueFallbackName(step.FallbackPolicy)))
+        {
+            foreach (ProgressionQueueFallbackPolicy policy in Enum.GetValues<ProgressionQueueFallbackPolicy>())
+            {
+                if (policy == ProgressionQueueFallbackPolicy.Duties && step.TargetLevel < 15)
+                    continue;
+                if (ImGui.Selectable(QueueFallbackName(policy), step.FallbackPolicy == policy))
+                {
+                    step.FallbackPolicy = policy;
+                    changed = true;
+                }
+            }
+            ImGui.EndCombo();
+        }
+        if (ownsCurrent)
+            ImGui.EndDisabled();
+
+        if (!string.IsNullOrWhiteSpace(step.StatusDetail))
+            TextWrapped(NexusTheme.Muted, step.StatusDetail);
+
+        if (ImGui.Button("Move Up") && index > 0)
+        {
+            queue.Steps.RemoveAt(index);
+            queue.Steps.Insert(index - 1, step);
+            if (queue.CurrentIndex == index) queue.CurrentIndex--;
+            else if (queue.CurrentIndex == index - 1) queue.CurrentIndex++;
+            changed = true;
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Move Down") && index < queue.Steps.Count - 1)
+        {
+            queue.Steps.RemoveAt(index);
+            queue.Steps.Insert(index + 1, step);
+            if (queue.CurrentIndex == index) queue.CurrentIndex++;
+            else if (queue.CurrentIndex == index + 1) queue.CurrentIndex--;
+            changed = true;
+        }
+        ImGui.SameLine();
+        if (!queue.IsRunning && !queue.IsPaused && ImGui.Button("Run From Here"))
+            progressionMessage = progressionQueue.Start(character, index).Message;
+        ImGui.SameLine();
+        if (pendingDeleteQueueStepId != step.Id)
+        {
+            if (!ownsCurrent && ImGui.Button("Remove..."))
+                pendingDeleteQueueStepId = step.Id;
+        }
+        else
+        {
+            ImGui.TextColored(NexusTheme.Red, "Remove this step?");
+            ImGui.SameLine();
+            if (ImGui.Button("Remove###ConfirmRemoveQueueStep"))
+            {
+                queue.Steps.RemoveAt(index);
+                if (queue.CurrentIndex > index) queue.CurrentIndex--;
+                pendingDeleteQueueStepId = null;
+                changed = true;
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel###CancelRemoveQueueStep"))
+                pendingDeleteQueueStepId = null;
+        }
+        if (changed)
+            plugin.Save();
+        EndAutoPanel();
+    }
+
+    private static bool QueueCheckbox(string label, bool current, Action<bool> set)
+    {
+        bool value = current;
+        if (!ImGui.Checkbox(label, ref value))
+            return false;
+        set(value);
+        return true;
+    }
+
+    private static string QueueMethodName(ProgressionQueueMethod method) => method switch
+    {
+        ProgressionQueueMethod.Automatic => "Automatic / Smart",
+        ProgressionQueueMethod.HuntingLog => "Hunting Log",
+        ProgressionQueueMethod.SideQuests => "Side Quests",
+        ProgressionQueueMethod.Duties => "Duties",
+        _ => method.ToString(),
+    };
+
+    private static string QueueFallbackName(ProgressionQueueFallbackPolicy policy) => policy switch
+    {
+        ProgressionQueueFallbackPolicy.PauseQueue => "Pause Queue",
+        ProgressionQueueFallbackPolicy.StopQueue => "Stop Queue",
+        ProgressionQueueFallbackPolicy.SkipStep => "Skip Step",
+        ProgressionQueueFallbackPolicy.Automatic => "Fall back to Automatic",
+        ProgressionQueueFallbackPolicy.SideQuests => "Fall back to Side Quests",
+        ProgressionQueueFallbackPolicy.Duties => "Fall back to Duties",
+        _ => policy.ToString(),
+    };
 
     private void DrawProgressAtlas()
     {
@@ -3031,7 +3423,9 @@ internal sealed class NexusWindow : Window
             TextWrapped(NexusTheme.Muted,
                 "Nexus—not the provider—owns the level target, exact quest or duty selection, task history, Stop-after, verification, and replanning.");
             bool canStart = plan.IsValid && !plan.IsSatisfied && hasExecutableStart &&
-                plugin.Configuration.ForCharacter(character.Key.ToString()).AllowAutomation;
+                plugin.Configuration.ForCharacter(character.Key.ToString()).AllowAutomation &&
+                !plugin.Configuration.ForCharacter(character.Key.ToString()).ProgressionQueue.IsRunning &&
+                !plugin.Configuration.ForCharacter(character.Key.ToString()).ProgressionQueue.IsPaused;
             if (!canStart)
                 ImGui.BeginDisabled();
             if (ImGui.Button("Start level goal", new Vector2(-1, 0)))
@@ -3115,7 +3509,7 @@ internal sealed class NexusWindow : Window
     {
         NexusTheme.SectionTitle("Providers");
         TextWrapped(NexusTheme.Muted,
-            "Vieri entries are temporary migration providers. Stock Questionable and AutoDuty are the long-term targets.");
+            "Stock Questionable is the only quest runtime. VieriCodex remains only as a one-time settings source. AutoDuty is still the bounded duty provider during its final migration.");
         if (!ImGui.BeginTable("###ProgressionProviders", 2, ImGuiTableFlags.SizingStretchSame))
             return;
 
@@ -3144,7 +3538,7 @@ internal sealed class NexusWindow : Window
         };
         NexusTheme.StatusDot(selectionColor, selection.IsReady
             ? selection.Selected!.Flavor == ProgressionProviderFlavor.Stock
-                ? $"Target provider active: {selection.Selected.DisplayName}"
+                ? $"Runtime provider active: {selection.Selected.DisplayName}"
                 : $"Current migration provider: {selection.Selected.DisplayName}"
             : selection.Readiness.ToString());
         foreach (ProgressionProviderCandidate candidate in selection.Candidates)

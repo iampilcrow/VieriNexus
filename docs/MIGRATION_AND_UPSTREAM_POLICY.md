@@ -54,7 +54,7 @@ For every upstream update:
 
 Questionable quest/path data should remain isolated from the Nexus orchestration core so routine upstream data updates do not destabilize combat, communications, the HUD, or market modules.
 
-Stock Questionable, stock AutoDuty, Boss Mod, vnavmesh, Lifestream, and comparable providers should be consumed only through narrow capability/version adapters. Compatible provider updates must require no Nexus source change. VieriCodex remains authoritative until Nexus owns its planners, policies, safety fixes, custom-route overlay, and UI; only then may stock Questionable become the ordinary quest executor. VieriAutoDuty remains authoritative until Nexus owns its custom route/travel, progression-loop, gear/inventory, maintenance, telemetry, command, and UI behavior and the stock duty provider passes parity; only then may the fork retire. Missing or changed capabilities fail closed and never trigger an automatic fallback that could duplicate active work.
+Stock Questionable, stock AutoDuty, Boss Mod, vnavmesh, Lifestream, and comparable providers should be consumed only through narrow capability/version adapters. Compatible provider updates must require no Nexus source change. Nexus 0.1.0.59 owns the former VieriCodex planners, policies, queue, safety fixes, custom-route overlay, Atlas, and UI; stock Questionable is therefore the sole ordinary quest executor and VieriCodex is only a local settings source. VieriAutoDuty remains authoritative only for the still-open duty-engine boundary until Nexus owns its remaining recovery/leave-resume behavior and the stock duty provider passes parity. Missing or changed capabilities fail closed and never trigger an automatic fallback that could duplicate active work.
 
 ## Rollback
 
