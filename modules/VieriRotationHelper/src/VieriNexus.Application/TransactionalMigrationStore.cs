@@ -1,0 +1,305 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+
+namespace VieriNexus.Application;
+
+public sealed class TransactionalMigrationStore
+{
+    private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
+
+    public static string ReceiptPath(string receiptRoot, Guid receiptId) =>
+        Path.Combine(receiptRoot, $"{receiptId:N}.json");
+
+    public StagedNavigationReadResult ReadStagedNavigationState(
+        string receiptPath,
+        string expectedSourceId,
+        string expectedNexusTargetPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(receiptPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedSourceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedNexusTargetPath);
+
+        if (!File.Exists(receiptPath))
+            return new(false, "The saved migration receipt could not be found. Import again to create a new verified receipt.");
+
+        try
+        {
+            MigrationReceipt? receipt = JsonSerializer.Deserialize<MigrationReceipt>(File.ReadAllText(receiptPath), Options);
+            if (receipt is null || receipt.SchemaVersion != 1)
+                return new(false, "The saved migration receipt could not be read.");
+            if (!string.Equals(receipt.SourceId, expectedSourceId, StringComparison.OrdinalIgnoreCase) ||
+                !PathsEqual(receipt.NexusTargetPath, expectedNexusTargetPath))
+                return new(false, "The saved migration receipt does not belong to this staged route library.");
+            if (!File.Exists(expectedNexusTargetPath))
+                return new(false, "The staged Nexus route library no longer exists. Import again to recreate it safely.");
+            if (!string.Equals(HashFile(expectedNexusTargetPath), receipt.NexusTargetSha256, StringComparison.OrdinalIgnoreCase))
+                return new(false, "The staged Nexus route library changed after import, so its saved receipt was not trusted.");
+
+            NavigationLibrarySnapshot? snapshot = JsonSerializer.Deserialize<NavigationLibrarySnapshot>(
+                File.ReadAllText(expectedNexusTargetPath), Options);
+            if (snapshot is null || snapshot.SchemaVersion != 1)
+                return new(false, "The staged Nexus route library could not be read.");
+
+            return new(true, ImportSuccessMessage(snapshot.Routes.Count), receipt, snapshot);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
+        {
+            return new(false, "The staged migration state is temporarily unavailable; no source file was changed.");
+        }
+    }
+
+    public StagedAutoDutyReadResult ReadStagedAutoDutyState(
+        string receiptPath,
+        string expectedSourceId,
+        string expectedNexusTargetPath)
+    {
+        StagedJsonReadResult<AutoDutyMigrationSnapshot> result = ReadStagedJsonState<AutoDutyMigrationSnapshot>(
+            receiptPath,
+            expectedSourceId,
+            expectedNexusTargetPath,
+            snapshot => snapshot.SchemaVersion == 1,
+            snapshot => AutoDutySuccessMessage(snapshot.Profiles.Count));
+        return new(result.Success, result.Message, result.Receipt, result.Snapshot);
+    }
+
+    public StagedCommandCenterReadResult ReadStagedCommandCenterState(
+        string receiptPath,
+        string expectedSourceId,
+        string expectedNexusTargetPath)
+    {
+        StagedJsonReadResult<CommandCenterSnapshot> result = ReadStagedJsonState<CommandCenterSnapshot>(
+            receiptPath,
+            expectedSourceId,
+            expectedNexusTargetPath,
+            CommandCenterWorkingStore.IsValid,
+            snapshot => CommandCenterSuccessMessage(snapshot.Favorites.Count, snapshot.CustomCommands.Count));
+        return new(result.Success, result.Message, result.Receipt, result.Snapshot);
+    }
+
+    public StagedCodexReadResult ReadStagedCodexState(
+        string receiptPath,
+        string expectedSourceId,
+        string expectedNexusTargetPath)
+    {
+        StagedJsonReadResult<CodexMigrationSnapshot> result = ReadStagedJsonState<CodexMigrationSnapshot>(
+            receiptPath,
+            expectedSourceId,
+            expectedNexusTargetPath,
+            snapshot => snapshot.SchemaVersion == 1 && snapshot.TargetLevel is >= 1 and <= 100 &&
+                        snapshot.QueueSteps.Count <= 100 && snapshot.QueueSteps.All(step =>
+                            step.ClassJobId <= 43 && step.TargetLevel is >= 1 and <= 100 &&
+                            step.Method is >= 0 and <= 3 && step.FallbackPolicy is >= 0 and <= 6),
+            CodexSuccessMessage);
+        return new(result.Success, result.Message, result.Receipt, result.Snapshot);
+    }
+
+    public MigrationWriteResult Apply(
+        string sourceId,
+        string sourcePath,
+        string nexusTargetPath,
+        string backupRoot,
+        string receiptRoot,
+        NavigationLibrarySnapshot snapshot) =>
+        ApplyJson(sourceId, sourcePath, nexusTargetPath, backupRoot, receiptRoot, snapshot,
+            ImportSuccessMessage(snapshot.Routes.Count));
+
+    public MigrationWriteResult ApplyAutoDuty(
+        string sourceId,
+        string sourcePath,
+        string nexusTargetPath,
+        string backupRoot,
+        string receiptRoot,
+        AutoDutyMigrationSnapshot snapshot) =>
+        ApplyJson(sourceId, sourcePath, nexusTargetPath, backupRoot, receiptRoot, snapshot,
+            AutoDutySuccessMessage(snapshot.Profiles.Count));
+
+    public MigrationWriteResult ApplyCommandCenter(
+        string sourceId,
+        string sourcePath,
+        string nexusTargetPath,
+        string backupRoot,
+        string receiptRoot,
+        CommandCenterSnapshot snapshot) =>
+        ApplyJson(sourceId, sourcePath, nexusTargetPath, backupRoot, receiptRoot, snapshot,
+            CommandCenterSuccessMessage(snapshot.Favorites.Count, snapshot.CustomCommands.Count));
+
+    public MigrationWriteResult ApplyCodex(
+        string sourceId,
+        string sourcePath,
+        string nexusTargetPath,
+        string backupRoot,
+        string receiptRoot,
+        CodexMigrationSnapshot snapshot) =>
+        ApplyJson(sourceId, sourcePath, nexusTargetPath, backupRoot, receiptRoot, snapshot,
+            CodexSuccessMessage(snapshot));
+
+    public MigrationWriteResult Rollback(string receiptPath)
+    {
+        if (!File.Exists(receiptPath))
+            return new(false, "The migration receipt could not be found.");
+
+        try
+        {
+            MigrationReceipt? receipt = JsonSerializer.Deserialize<MigrationReceipt>(File.ReadAllText(receiptPath), Options);
+            if (receipt is null)
+                return new(false, "The migration receipt could not be read.");
+            if (!File.Exists(receipt.NexusTargetPath))
+                return new(false, "The staged Nexus data no longer exists; nothing was changed.");
+            if (!string.Equals(HashFile(receipt.NexusTargetPath), receipt.NexusTargetSha256, StringComparison.OrdinalIgnoreCase))
+                return new(false, "Rollback stopped because the staged Nexus data changed after this import.");
+
+            TryRestoreTarget(receipt.NexusTargetPath, receipt.PreviousNexusTargetExisted, receipt.PreviousNexusTargetBackupPath);
+            return new(true, "The prior staged Nexus state was restored.", receipt);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return new(false, "Rollback could not be completed; no legacy source file was changed.");
+        }
+    }
+
+    private static void AtomicWrite(string targetPath, byte[] payload)
+    {
+        string temporaryPath = targetPath + $".{Guid.NewGuid():N}.tmp";
+        try
+        {
+            using (FileStream stream = new(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(payload);
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporaryPath, targetPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
+    }
+
+    private StagedJsonReadResult<T> ReadStagedJsonState<T>(
+        string receiptPath,
+        string expectedSourceId,
+        string expectedNexusTargetPath,
+        Func<T, bool> validate,
+        Func<T, string> successMessage)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(receiptPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedSourceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedNexusTargetPath);
+
+        if (!File.Exists(receiptPath))
+            return new(false, "The saved migration receipt could not be found. Import again to create a new verified receipt.");
+        try
+        {
+            MigrationReceipt? receipt = JsonSerializer.Deserialize<MigrationReceipt>(File.ReadAllText(receiptPath), Options);
+            if (receipt is null || receipt.SchemaVersion != 1)
+                return new(false, "The saved migration receipt could not be read.");
+            if (!string.Equals(receipt.SourceId, expectedSourceId, StringComparison.OrdinalIgnoreCase) ||
+                !PathsEqual(receipt.NexusTargetPath, expectedNexusTargetPath))
+                return new(false, "The saved migration receipt does not belong to this staged Nexus state.");
+            if (!File.Exists(expectedNexusTargetPath))
+                return new(false, "The staged Nexus state no longer exists. Import again to recreate it safely.");
+            if (!string.Equals(HashFile(expectedNexusTargetPath), receipt.NexusTargetSha256, StringComparison.OrdinalIgnoreCase))
+                return new(false, "The staged Nexus state changed after import, so its saved receipt was not trusted.");
+
+            T? snapshot = JsonSerializer.Deserialize<T>(File.ReadAllText(expectedNexusTargetPath), Options);
+            if (snapshot is null || !validate(snapshot))
+                return new(false, "The staged Nexus state could not be read.");
+            return new(true, successMessage(snapshot), receipt, snapshot);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
+        {
+            return new(false, "The staged migration state is temporarily unavailable; no source file was changed.");
+        }
+    }
+
+    private MigrationWriteResult ApplyJson<T>(
+        string sourceId,
+        string sourcePath,
+        string nexusTargetPath,
+        string backupRoot,
+        string receiptRoot,
+        T snapshot,
+        string successMessage)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(nexusTargetPath);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (!File.Exists(sourcePath))
+            return new(false, "The source configuration no longer exists.");
+
+        Guid id = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        string operationDirectory = Path.Combine(backupRoot, $"{now:yyyyMMdd-HHmmssfff}-{id:N}");
+        string sourceBackupPath = Path.Combine(operationDirectory, "legacy-source.json");
+        string? previousTargetBackupPath = null;
+        string receiptPath = ReceiptPath(receiptRoot, id);
+        bool targetExisted = File.Exists(nexusTargetPath);
+        try
+        {
+            Directory.CreateDirectory(operationDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(nexusTargetPath)!);
+            Directory.CreateDirectory(receiptRoot);
+            File.Copy(sourcePath, sourceBackupPath, overwrite: false);
+            if (targetExisted)
+            {
+                previousTargetBackupPath = Path.Combine(operationDirectory, "previous-nexus-state.json");
+                File.Copy(nexusTargetPath, previousTargetBackupPath, overwrite: false);
+            }
+
+            AtomicWrite(nexusTargetPath, JsonSerializer.SerializeToUtf8Bytes(snapshot, Options));
+            MigrationReceipt receipt = new(
+                1, id, sourceId, now,
+                Path.GetFullPath(sourcePath), Path.GetFullPath(sourceBackupPath), Path.GetFullPath(nexusTargetPath),
+                targetExisted,
+                previousTargetBackupPath is null ? null : Path.GetFullPath(previousTargetBackupPath),
+                HashFile(sourcePath), HashFile(nexusTargetPath));
+            AtomicWrite(receiptPath, JsonSerializer.SerializeToUtf8Bytes(receipt, Options));
+            return new(true, successMessage, receipt);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        {
+            TryRestoreTarget(nexusTargetPath, targetExisted, previousTargetBackupPath);
+            return new(false, "The import could not be committed; the prior Nexus state was restored.");
+        }
+    }
+
+    private static string HashFile(string path)
+    {
+        using FileStream stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static string ImportSuccessMessage(int routeCount)
+    {
+        string routeSummary = routeCount == 1 ? "1 personal route" : $"{routeCount} personal routes";
+        return $"Imported settings and {routeSummary} into staged Nexus storage.";
+    }
+
+    private static string AutoDutySuccessMessage(int profileCount) =>
+        $"Imported {profileCount} VieriAutoDuty profile{(profileCount == 1 ? string.Empty : "s")} into staged Nexus operations storage.";
+
+    private static string CommandCenterSuccessMessage(int favoriteCount, int customGroupCount) =>
+        $"Imported VieriDeck settings with {favoriteCount} favorite{(favoriteCount == 1 ? string.Empty : "s")} and {customGroupCount} custom command group{(customGroupCount == 1 ? string.Empty : "s")}.";
+
+    private static string CodexSuccessMessage(CodexMigrationSnapshot snapshot) =>
+        $"Imported VieriCodex progression and Atlas preferences with {snapshot.SavedQueueSteps} saved queue step{(snapshot.SavedQueueSteps == 1 ? string.Empty : "s")}.";
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+
+    private static void TryRestoreTarget(string targetPath, bool targetExisted, string? previousTargetBackupPath)
+    {
+        if (targetExisted && previousTargetBackupPath is not null && File.Exists(previousTargetBackupPath))
+            AtomicWrite(targetPath, File.ReadAllBytes(previousTargetBackupPath));
+        else if (!targetExisted && File.Exists(targetPath))
+            File.Delete(targetPath);
+    }
+}
+
+internal sealed record StagedJsonReadResult<T>(
+    bool Success,
+    string Message,
+    MigrationReceipt? Receipt = null,
+    T? Snapshot = default);

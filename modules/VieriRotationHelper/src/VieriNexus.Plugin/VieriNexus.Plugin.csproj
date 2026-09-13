@@ -1,0 +1,20 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>0.1.0.60</Version>
+    <AssemblyName>VieriNexus</AssemblyName>
+    <RootNamespace>VieriNexus</RootNamespace>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\VieriNexus.Domain\VieriNexus.Domain.csproj" />
+    <ProjectReference Include="..\VieriNexus.Contracts\VieriNexus.Contracts.csproj" />
+    <ProjectReference Include="..\VieriNexus.Application\VieriNexus.Application.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\VieriNexusLogo.png" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Data\hunting_log_targets.json" />
+    <EmbeddedResource Include="Data\BossModPreset_Overworld.json" />
+    <EmbeddedResource Include="Data\field_aether_currents.json" />
+  </ItemGroup>
+</Project>

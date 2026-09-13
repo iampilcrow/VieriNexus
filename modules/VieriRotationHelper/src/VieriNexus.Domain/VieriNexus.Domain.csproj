@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>VieriNexus.Domain</AssemblyName>
+    <RootNamespace>VieriNexus.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>
