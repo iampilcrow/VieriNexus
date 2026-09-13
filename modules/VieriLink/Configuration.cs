@@ -8,7 +8,7 @@ public sealed class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 4;
     public bool Enabled { get; set; }
-    public string StatusTitle { get; set; } = "VieriAutoDuty";
+    public string StatusTitle { get; set; } = "Vieri Nexus";
     public string EncryptedBotToken { get; set; } = string.Empty;
     // Retained only to migrate installations from the original single-channel layout.
     public string ChannelId { get; set; } = string.Empty;

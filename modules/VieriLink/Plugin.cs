@@ -161,7 +161,7 @@ public sealed class Plugin : IDalamudPlugin
         if (Config.NotifyDutyChanged && !string.Equals(current.Duty, previous.Duty, StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(current.Duty))
             await Notify($"🗺️ **Current duty:** {current.Duty}");
         if (Config.NotifyStopped && current.IsStopped && !previous.IsStopped)
-            await Notify($"🔴 **VieriAutoDuty stopped.** Last state: {current.Action}");
+            await Notify($"🔴 **Vieri Nexus stopped.** Last state: {current.Action}");
         float currentInventoryPercent = current.InventoryTotal <= 0 ? 0 : current.InventoryUsed * 100f / current.InventoryTotal;
         float previousInventoryPercent = previous.InventoryTotal <= 0 ? 0 : previous.InventoryUsed * 100f / previous.InventoryTotal;
         if (Config.NotifyHighInventory && currentInventoryPercent >= Config.InventoryAlertPercent && previousInventoryPercent < Config.InventoryAlertPercent)
@@ -241,7 +241,7 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     private static string CommandHelp() =>
-        "Commands: `status`, `start`, `stop`, `pause`, `resume`, `leave`, `loops 10`, `loops +5`, `sell`, `repair`, `inn`, `job 3`, `get SettingName`, and—when enabled—`set SettingName value`. `leave` stops automation and exits the duty after combat ends.";
+        "Commands: `status`, `start`, `stop`, `pause`, `resume`, `sell`, `repair`, and `job MCH`. Nexus safely explains requests that require in-game review.";
 
     private async Task Notify(string text) =>
         _ = await discord.SendAsync(Config.CommandChannelId, new { content = text, allowed_mentions = new { parse = Array.Empty<string>() } }, shutdown.Token);

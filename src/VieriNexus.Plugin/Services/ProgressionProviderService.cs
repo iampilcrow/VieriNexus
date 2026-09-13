@@ -45,6 +45,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly ICallGateSubscriber<int, object> autoDutySetLevelingMode;
     private readonly ICallGateSubscriber<string, object, object> autoDutySetConfig;
     private readonly ICallGateSubscriber<int, string> vieriAutoDutyProgression;
+    private readonly VnavmeshNavigationStopProvider navigationStop;
     private readonly NexusGearCatalogService gearCatalog;
     private readonly NexusGearExecutionService gearExecution;
     private long eligibleDutyCacheExpiresAt;
@@ -77,11 +78,13 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         ICondition condition,
         IGameGui gameGui,
         NavigationLibraryService navigationLibrary,
-        NexusRouteTravelProvider routeTravel)
+        NexusRouteTravelProvider routeTravel,
+        VnavmeshNavigationStopProvider navigationStop)
     {
         this.dependencies = dependencies;
         this.dataManager = dataManager;
         this.clientState = clientState;
+        this.navigationStop = navigationStop;
         aetherCurrentQuestIds = dataManager.GetExcelSheet<AetherCurrentCompFlgSet>()
             .Where(row => row.RowId > 0)
             .SelectMany(row => row.AetherCurrents)
@@ -697,6 +700,12 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 message = "The selected duty has no provider path.";
                 return false;
             }
+
+            // A previous path can survive a provider stop or zone transition. Clear it before
+            // handing a fresh bounded duty to stock AutoDuty so it never inherits movement intent
+            // from a Nexus route, a city transfer, or a prior instance.
+            if (navigationStop.IsAvailable)
+                navigationStop.RequestStop();
 
             // Nexus selects one exact bounded duty. Disable AutoDuty's own leveling scheduler so
             // AutoDuty.Run cannot substitute a different duty or continue an internal loop.

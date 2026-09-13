@@ -7,18 +7,12 @@ namespace VieriLink;
 internal sealed class AutoDutyBridge
 {
     private readonly ICallGateSubscriber<string> getStatus;
-    private readonly ICallGateSubscriber<string, string> getConfig;
-    private readonly ICallGateSubscriber<string, string, object> setConfig;
-    private readonly ICallGateSubscriber<object> stop;
-    private readonly ICallGateSubscriber<string, string, string> executeVieriCommand;
+    private readonly ICallGateSubscriber<string, string, string> executeNexusCommand;
 
     public AutoDutyBridge(IDalamudPluginInterface pi)
     {
-        getStatus = pi.GetIpcSubscriber<string>("AutoDuty.GetVieriStatus");
-        getConfig = pi.GetIpcSubscriber<string, string>("AutoDuty.GetConfig");
-        setConfig = pi.GetIpcSubscriber<string, string, object>("AutoDuty.SetConfig");
-        stop = pi.GetIpcSubscriber<object>("AutoDuty.Stop");
-        executeVieriCommand = pi.GetIpcSubscriber<string, string, string>("AutoDuty.ExecuteVieriCommand");
+        getStatus = pi.GetIpcSubscriber<string>("VieriNexus.Link.V1.GetStatus");
+        executeNexusCommand = pi.GetIpcSubscriber<string, string, string>("VieriNexus.Link.V1.Execute");
     }
 
     public AutoDutyStatus? ReadStatus()
@@ -29,30 +23,28 @@ internal sealed class AutoDutyBridge
 
     public bool SetConfig(string name, string value)
     {
-        try { setConfig.InvokeAction(name, value); return true; }
-        catch { return false; }
+        return false;
     }
 
     public string? GetConfig(string name)
     {
-        try { return getConfig.InvokeFunc(name); }
-        catch { return null; }
+        return null;
     }
 
     public bool Stop()
     {
-        try { stop.InvokeAction(); return true; }
+        try { _ = executeNexusCommand.InvokeFunc("stop", string.Empty); return true; }
         catch { return false; }
     }
 
     public string Execute(string command, string argument = "")
     {
-        try { return executeVieriCommand.InvokeFunc(command, argument); }
+        try { return executeNexusCommand.InvokeFunc(command, argument); }
         catch (Exception ex)
         {
             while (ex.InnerException != null)
                 ex = ex.InnerException;
-            return $"VieriAutoDuty did not accept the command: {ex.Message}";
+            return $"VieriNexus did not accept the command: {ex.Message}";
         }
     }
 }

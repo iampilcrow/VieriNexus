@@ -56,6 +56,7 @@ public static class NexusCommandPolicy
         "maintenance.gc",
         "maintenance.storage",
         "maintenance.sell-review",
+        "job.switch",
         "route.play",
         "route.preview",
         "ui.open",

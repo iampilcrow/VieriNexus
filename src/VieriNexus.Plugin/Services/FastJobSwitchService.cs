@@ -98,4 +98,19 @@ internal sealed class FastJobSwitchService(
         message = $"Asked Fast Job Switcher to equip {Label(classJobId)}; waiting for game confirmation.";
         return true;
     }
+
+    internal bool TryRequestSwitch(string job, out string message)
+    {
+        string requested = job.Trim();
+        NexusClassJob? match = CombatJobs().FirstOrDefault(candidate =>
+            candidate.Id.ToString().Equals(requested, StringComparison.OrdinalIgnoreCase) ||
+            candidate.Name.Equals(requested, StringComparison.OrdinalIgnoreCase) ||
+            candidate.Abbreviation.Equals(requested, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            message = $"Nexus could not resolve '{requested}' to an unlocked class or job.";
+            return false;
+        }
+        return TryRequestSwitch(match.Id, out message);
+    }
 }

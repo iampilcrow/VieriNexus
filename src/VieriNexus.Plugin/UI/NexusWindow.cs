@@ -53,6 +53,7 @@ internal sealed class NexusWindow : Window
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
     private readonly ModuleRegistry modules;
+    private readonly EmbeddedModuleManager embeddedModules;
     private readonly WorldStateStore world;
     private readonly ISharedImmediateTexture logo;
     private string routeSearch = string.Empty;
@@ -106,6 +107,7 @@ internal sealed class NexusWindow : Window
         GearShoppingRuntimeService gearShoppingRuntime,
         NexusMaintenanceRuntimeService maintenanceRuntime,
         ModuleRegistry modules,
+        EmbeddedModuleManager embeddedModules,
         WorldStateStore world,
         ISharedImmediateTexture logo)
         : base("Vieri Nexus###VieriNexusMain", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
@@ -132,6 +134,7 @@ internal sealed class NexusWindow : Window
         this.gearShoppingRuntime = gearShoppingRuntime;
         this.maintenanceRuntime = maintenanceRuntime;
         this.modules = modules;
+        this.embeddedModules = embeddedModules;
         this.world = world;
         this.logo = logo;
         Size = new Vector2(1220, 760);
@@ -300,7 +303,7 @@ internal sealed class NexusWindow : Window
         }
 
         ImGui.Spacing();
-        NexusTheme.SectionTitle("Modules", "Nine current products, migrating behind one control plane");
+        NexusTheme.SectionTitle("Modules", "One Nexus install, stock providers, and isolated custom engines");
         DrawModuleGrid();
 
         ImGui.Spacing();
@@ -404,7 +407,7 @@ internal sealed class NexusWindow : Window
     private void DrawMigration()
     {
         PageHeading("Migration", "Protect every setting while each product moves into Nexus.");
-        ImGui.TextWrapped("Discovery is read-only. A supported import first creates a timestamped source backup, validates into staging, then commits Nexus-owned data atomically. Existing plugins remain installed and authoritative.");
+        ImGui.TextWrapped("Nexus protects this computer's existing settings before taking over. Keep each old Vieri plugin enabled until its card says the settings are ready, then disable it; Nexus starts the replacement automatically.");
         ImGui.Spacing();
 
         DrawMigrationQuickStart();
@@ -432,6 +435,13 @@ internal sealed class NexusWindow : Window
                 DrawCommandCenterMigration();
                 continue;
             }
+            EmbeddedModuleStatus? embedded = embeddedModules.Statuses.FirstOrDefault(item =>
+                item.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase));
+            if (embedded is not null)
+            {
+                DrawEmbeddedModuleCard(embedded, migration: true);
+                continue;
+            }
             BeginPanel(source.DisplayName.ToUpperInvariant());
             NexusTheme.StatusDot(source.Found ? NexusTheme.Green : NexusTheme.Muted,
                 source.Found ? "Configuration located" : "Not found on this computer");
@@ -446,8 +456,8 @@ internal sealed class NexusWindow : Window
 
         ImGui.Spacing();
         BeginPanel("CREDENTIAL SAFETY");
-        ImGui.TextColored(NexusTheme.Green, "Discord credentials and channel identifiers have not been touched.");
-        ImGui.TextWrapped("The Communications migration will copy encrypted values transactionally on the same computer, verify them, and retain the original VieriLink configuration as rollback data. Each user imports only their own local configuration.");
+        ImGui.TextColored(NexusTheme.Green, "Discord secrets stay encrypted and local to this Windows account.");
+        ImGui.TextWrapped("Nexus copies Communications settings only after the protected token passes a same-account encryption check. It never displays or logs the token, and the original VieriLink configuration remains unchanged.");
         EndPanel();
     }
 
@@ -3678,15 +3688,69 @@ internal sealed class NexusWindow : Window
 
     private void DrawModulePage(string page)
     {
-        PageHeading(page, "This module is registered in the Nexus shell and awaiting its parity migration.");
-        BeginPanel("MIGRATION STATUS");
-        NexusTheme.StatusDot(NexusTheme.Amber, "Staged — existing plugin remains authoritative");
-        ImGui.TextWrapped("Nexus will not enable this module until its settings importer, compatibility endpoints, resource ownership, recovery behavior, and regression suite pass validation.");
-        EndPanel();
-        ImGui.Spacing();
-        BeginPanel("WHY THIS IS SAFE");
-        ImGui.TextWrapped("Explicit Routes, approved gear shopping, and bounded Progression duty tasks are live. Other automation, retainers, market work, HUD changes, and Discord actions remain inactive.");
-        EndPanel();
+        IReadOnlyList<EmbeddedModuleStatus> pageModules = embeddedModules.Statuses
+            .Where(item => item.Page.Equals(page, StringComparison.Ordinal))
+            .ToArray();
+        if (pageModules.Count == 0)
+        {
+            PageHeading(page, "Nexus-owned controls and provider-backed execution.");
+            DrawModuleGrid();
+            return;
+        }
+
+        PageHeading(page, "Your proven Vieri behavior now runs inside Nexus with its own isolated settings and runtime.");
+        foreach (EmbeddedModuleStatus module in pageModules)
+            DrawEmbeddedModuleCard(module, migration: false);
+    }
+
+    private void DrawEmbeddedModuleCard(EmbeddedModuleStatus module, bool migration)
+    {
+        Vector4 color = module.Health switch
+        {
+            EmbeddedModuleHealth.Running => NexusTheme.Green,
+            EmbeddedModuleHealth.Failed => NexusTheme.Red,
+            EmbeddedModuleHealth.Preparing => NexusTheme.Cyan,
+            EmbeddedModuleHealth.WaitingForPredecessor => NexusTheme.Amber,
+            _ => NexusTheme.Muted,
+        };
+        string state = module.Health switch
+        {
+            EmbeddedModuleHealth.Running => "Running inside Nexus",
+            EmbeddedModuleHealth.WaitingForPredecessor => "Ready after the separate plugin is disabled",
+            EmbeddedModuleHealth.Preparing => "Preparing Nexus-owned runtime",
+            EmbeddedModuleHealth.Failed => "Stopped safely",
+            _ => "Disabled",
+        };
+
+        BeginAutoPanel(module.DisplayName.ToUpperInvariant());
+        NexusTheme.StatusDot(color, state);
+        TextWrapped(NexusTheme.Muted, module.Description);
+        TextWrapped(color, module.Message);
+        if (migration)
+        {
+            TextWrapped(NexusTheme.Muted, module.HasLegacySettings
+                ? module.ContainsProtectedSettings
+                    ? "The local encrypted configuration was copied byte-for-byte only after a same-Windows-account cryptographic round-trip. Secrets are never displayed or logged."
+                    : "The local source was backed up and copied into isolated Nexus storage. The source remains unchanged for rollback."
+                : "No predecessor settings were found; Nexus will use safe defaults on this computer.");
+        }
+
+        bool enabled = plugin.Configuration.IsEmbeddedModuleEnabled(module.Id);
+        if (ImGui.Checkbox($"Enable inside Nexus##embedded-{module.Id}", ref enabled))
+            embeddedModules.SetEnabled(module.Id, enabled);
+        if (module.CanOpenSettings)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button($"Open settings##embedded-open-{module.Id}"))
+                embeddedModules.OpenSettings(module.Id);
+        }
+        if (module.Health == EmbeddedModuleHealth.Failed)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button($"Retry##embedded-retry-{module.Id}"))
+                embeddedModules.Retry(module.Id);
+        }
+        EndAutoPanel();
     }
 
     private void DrawModuleGrid()
@@ -3697,12 +3761,19 @@ internal sealed class NexusWindow : Window
         {
             ImGui.TableNextColumn();
             BeginPanel(module.Descriptor.DisplayName.ToUpperInvariant());
-            (Vector4 color, string status) = module.Descriptor.Id switch
+            EmbeddedModuleStatus[] embedded = embeddedModules.Statuses.Where(item =>
+                item.Page.Equals(module.Descriptor.DisplayName, StringComparison.Ordinal)).ToArray();
+            (Vector4 color, string status) = embedded.Length > 0
+                ? EmbeddedSummary(embedded)
+                : module.Descriptor.Id switch
             {
                 "navigation" => (NexusTheme.Green, "Live"),
                 "progression" => (NexusTheme.Green, "Bounded duty execution"),
+                "duties" => (progressionProviders.IsDutyProviderReady ? NexusTheme.Green : NexusTheme.Amber,
+                    progressionProviders.IsDutyProviderReady ? "Stock-compatible provider ready" : "Enable stock AutoDuty"),
                 "gear" => (NexusTheme.Green, "Gear transactions and safe maintenance live"),
-                _ => (NexusTheme.Amber, "Migration staged"),
+                "command-center" => (NexusTheme.Green, "Live"),
+                _ => (NexusTheme.Amber, "Provider setup needed"),
             };
             NexusTheme.StatusDot(color, status);
             ImGui.TextWrapped(module.Descriptor.Description);
@@ -3710,6 +3781,19 @@ internal sealed class NexusWindow : Window
             EndPanel();
         }
         ImGui.EndTable();
+    }
+
+    private static (Vector4 Color, string Status) EmbeddedSummary(IReadOnlyList<EmbeddedModuleStatus> statuses)
+    {
+        if (statuses.All(item => item.Health == EmbeddedModuleHealth.Running))
+            return (NexusTheme.Green, statuses.Count == 1 ? "Running inside Nexus" : $"{statuses.Count} engines running inside Nexus");
+        if (statuses.Any(item => item.Health == EmbeddedModuleHealth.Failed))
+            return (NexusTheme.Red, "An internal engine stopped safely");
+        if (statuses.Any(item => item.Health == EmbeddedModuleHealth.WaitingForPredecessor))
+            return (NexusTheme.Amber, "Settings ready; disable the separate plugin");
+        if (statuses.All(item => item.Health == EmbeddedModuleHealth.Disabled))
+            return (NexusTheme.Muted, "Disabled in Nexus");
+        return (NexusTheme.Cyan, "Preparing internal engine");
     }
 
     private static void PageHeading(string title, string subtitle)

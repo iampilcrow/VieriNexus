@@ -35,6 +35,14 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDutyState DutyState { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
     [PluginService] internal static IKeyState KeyState { get; private set; } = null!;
+    [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static IToastGui ToastGui { get; private set; } = null!;
+    [PluginService] internal static IBuddyList BuddyList { get; private set; } = null!;
+    [PluginService] internal static IJobGauges JobGauges { get; private set; } = null!;
+    [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
+    [PluginService] internal static ISigScanner SigScanner { get; private set; } = null!;
+    [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
+    [PluginService] internal static ISeStringEvaluator SeStringEvaluator { get; private set; } = null!;
 
     internal Configuration Configuration { get; }
 
@@ -70,6 +78,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly StrikingDummyTravelService strikingDummyTravel;
     private readonly NexusControlService controlService;
     private readonly NexusIpcProvider ipc;
+    private readonly EmbeddedModuleManager embeddedModules;
     private readonly HashSet<VirtualKey> commandCenterCaptureInitiallyDown = [];
     private bool sessionInitialized;
     private bool commandCenterHotkeyWasDown;
@@ -99,6 +108,37 @@ public sealed class Plugin : IDalamudPlugin
 
         dependencyService = new DependencyService(PluginInterface);
         var legacyInventory = new LegacyConfigurationInventory(PluginInterface);
+        embeddedModules = new EmbeddedModuleManager(
+            PluginInterface,
+            Log,
+            legacyInventory,
+            Configuration,
+            new Dictionary<Type, object>
+            {
+                [typeof(ICommandManager)] = CommandManager,
+                [typeof(IClientState)] = ClientState,
+                [typeof(IPlayerState)] = PlayerState,
+                [typeof(IObjectTable)] = ObjectTable,
+                [typeof(ITargetManager)] = TargetManager,
+                [typeof(ICondition)] = Condition,
+                [typeof(ITextureProvider)] = TextureProvider,
+                [typeof(IChatGui)] = ChatGui,
+                [typeof(IPluginLog)] = Log,
+                [typeof(IGameGui)] = GameGui,
+                [typeof(IDataManager)] = DataManager,
+                [typeof(IAetheryteList)] = AetheryteList,
+                [typeof(IDutyState)] = DutyState,
+                [typeof(IGameInteropProvider)] = GameInteropProvider,
+                [typeof(IKeyState)] = KeyState,
+                [typeof(IFramework)] = Framework,
+                [typeof(IToastGui)] = ToastGui,
+                [typeof(IBuddyList)] = BuddyList,
+                [typeof(IJobGauges)] = JobGauges,
+                [typeof(IPartyList)] = PartyList,
+                [typeof(ISigScanner)] = SigScanner,
+                [typeof(IAddonLifecycle)] = AddonLifecycle,
+                [typeof(ISeStringEvaluator)] = SeStringEvaluator,
+            });
         LegacyImportState autoDutyImport = Configuration.ForLegacyImport("autoduty");
         autoDutyMigration = new AutoDutyMigrationService(
             legacyInventory,
@@ -221,7 +261,7 @@ public sealed class Plugin : IDalamudPlugin
         progressAtlas = new ProgressAtlasService(DataManager, ClientState, PlayerState);
         progressionProviders = new ProgressionProviderService(
             PluginInterface, questionableCompatibility, dependencyService, DataManager, PlayerState, ObjectTable,
-            ClientState, Condition, GameGui, navigationLibrary, suiteTravelProvider);
+            ClientState, Condition, GameGui, navigationLibrary, suiteTravelProvider, navigationStopProvider);
         progressAtlasActions = new ProgressAtlasActionService(
             progressAtlas,
             progressionProviders,
@@ -291,7 +331,7 @@ public sealed class Plugin : IDalamudPlugin
             navigationRuntime, progressionProviders, progressionRuntime, progressionQueue, soloDutyRotation,
             progressAtlas, progressAtlasActions,
             gearShoppingRuntime, maintenanceRuntime,
-            moduleRegistry, worldStore, logo);
+            moduleRegistry, embeddedModules, worldStore, logo);
         windows.AddWindow(mainWindow);
         controlService = new NexusControlService(
             Configuration,
@@ -305,6 +345,7 @@ public sealed class Plugin : IDalamudPlugin
             gearShoppingRuntime,
             maintenanceRuntime,
             strikingDummyTravel,
+            fastJobSwitch,
             page =>
             {
                 Configuration.SelectedPage = page;
@@ -334,8 +375,10 @@ public sealed class Plugin : IDalamudPlugin
             navigationLibrary,
             navigationActivation,
             progressionRuntime,
+            progressionProviders,
             worldStore,
-            controlService);
+            controlService,
+            Condition);
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
@@ -352,6 +395,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        embeddedModules.Dispose();
         soloDutyRotation.Dispose();
         progressAtlasActions.Shutdown();
         huntingLog.Shutdown();
@@ -429,6 +473,8 @@ public sealed class Plugin : IDalamudPlugin
             isInDuty);
         progressionQueue.Update(worldStore.Current.Character.Value);
         soloDutyRotation.Update(DateTimeOffset.UtcNow, isInDuty);
+        ipc.UpdateLinkTelemetry();
+        embeddedModules.Update(now);
 
         if (!ClientState.IsLoggedIn)
         {

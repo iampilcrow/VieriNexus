@@ -32,6 +32,7 @@ internal sealed unsafe class NexusControlService
     private readonly GearShoppingRuntimeService gear;
     private readonly NexusMaintenanceRuntimeService maintenance;
     private readonly StrikingDummyTravelService strikingDummies;
+    private readonly FastJobSwitchService fastJobSwitch;
     private readonly Action<string> openPage;
     private readonly System.Action save;
     private readonly Dictionary<Guid, CachedCommand> completed = [];
@@ -49,6 +50,7 @@ internal sealed unsafe class NexusControlService
         GearShoppingRuntimeService gear,
         NexusMaintenanceRuntimeService maintenance,
         StrikingDummyTravelService strikingDummies,
+        FastJobSwitchService fastJobSwitch,
         Action<string> openPage,
         System.Action save)
     {
@@ -63,6 +65,7 @@ internal sealed unsafe class NexusControlService
         this.gear = gear;
         this.maintenance = maintenance;
         this.strikingDummies = strikingDummies;
+        this.fastJobSwitch = fastJobSwitch;
         this.openPage = openPage;
         this.save = save;
     }
@@ -243,6 +246,9 @@ internal sealed unsafe class NexusControlService
                 openPage("Gear & Inventory");
                 return Result(id, false, "review-required",
                     "Protected selling requires an exact in-game item review. The Gear & Inventory page is open.");
+            case "job.switch":
+                success = fastJobSwitch.TryRequestSwitch(PayloadValue(payload, "job"), out message);
+                return Result(id, success, success ? "job-switch-requested" : "job-switch-rejected", message);
             case "route.play":
             case "route.preview":
                 return RunRoute(id, command == "route.preview", PayloadValue(payload, "name"));

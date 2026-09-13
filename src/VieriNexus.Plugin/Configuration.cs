@@ -7,7 +7,7 @@ namespace VieriNexus;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 8;
+    public int Version { get; set; } = 9;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
@@ -23,6 +23,7 @@ public sealed class Configuration : IPluginConfiguration
     public ulong AppliedOperationsCharacterId { get; set; }
     public Dictionary<string, CharacterConfiguration> Characters { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, LegacyImportState> LegacyImports { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, bool> EmbeddedModules { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
@@ -34,6 +35,7 @@ public sealed class Configuration : IPluginConfiguration
         UiScale = Math.Clamp(UiScale, .8f, 1.5f);
         Characters = new Dictionary<string, CharacterConfiguration>(Characters ?? [], StringComparer.Ordinal);
         LegacyImports = new Dictionary<string, LegacyImportState>(LegacyImports ?? [], StringComparer.OrdinalIgnoreCase);
+        EmbeddedModules = new Dictionary<string, bool>(EmbeddedModules ?? [], StringComparer.OrdinalIgnoreCase);
         if (storedVersion < 8 && LegacyImports.TryGetValue("codex", out LegacyImportState? codex) && codex.Activated)
             PendingCodexQueuePromotion = true;
         foreach (CharacterConfiguration character in Characters.Values)
@@ -43,7 +45,7 @@ public sealed class Configuration : IPluginConfiguration
             ProgressionQueuePolicy.Normalize(character.ProgressionQueue);
             character.Atlas ??= new AtlasAutomationConfiguration();
         }
-        Version = 8;
+        Version = 9;
     }
 
     public CharacterConfiguration ForCharacter(string key)
@@ -65,6 +67,11 @@ public sealed class Configuration : IPluginConfiguration
         }
         return value;
     }
+
+    public bool IsEmbeddedModuleEnabled(string moduleId) =>
+        !EmbeddedModules.TryGetValue(moduleId, out bool enabled) || enabled;
+
+    public void SetEmbeddedModuleEnabled(string moduleId, bool enabled) => EmbeddedModules[moduleId] = enabled;
 
     public void Save() => pluginInterface?.SavePluginConfig(this);
 }

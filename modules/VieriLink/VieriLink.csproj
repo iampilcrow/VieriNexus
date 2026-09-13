@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.5.3.1</Version>
+    <Version>0.5.3.2</Version>
     <AssemblyName>VieriLink</AssemblyName>
     <RootNamespace>VieriLink</RootNamespace>
     <TargetFramework>net10.0-windows8.0</TargetFramework>

@@ -81,12 +81,10 @@ internal sealed class SettingsWindow(Plugin plugin) : Window("VieriLink Settings
         if (ImGui.InputInt("%##InventoryAlert", ref inventory)) c.InventoryAlertPercent = Math.Clamp(inventory, 1, 100);
 
         Section("Remote command permissions");
-        Check("Start, stop, pause, resume, and safely leave duties", c.AllowRunStop, v => c.AllowRunStop = v);
-        Check("Change configured loops", c.AllowLoopChanges, v => c.AllowLoopChanges = v);
-        Check("Sell, repair, and go to the inn", c.AllowMaintenance, v => c.AllowMaintenance = v);
-        Check("Change jobs through saved gearsets", c.AllowJobChanges, v => c.AllowJobChanges = v);
-        Check("Change arbitrary VieriAutoDuty settings (advanced)", c.AllowConfigChanges, v => c.AllowConfigChanges = v);
-        ImGui.TextWrapped("Commands use `!vieri`. Examples: `!vieri status`, `!vieri start`, `!vieri stop`, `!vieri leave`, `!vieri loops 10`, `!vieri sell`, `!vieri repair`, `!vieri inn`, `!vieri job 3`, and `!vieri get LoopTimes`. Leave stops automation immediately, waits for combat to end, then exits the duty.");
+        Check("Start, stop, pause, and resume Nexus", c.AllowRunStop, v => c.AllowRunStop = v);
+        Check("Open protected selling review or run repair", c.AllowMaintenance, v => c.AllowMaintenance = v);
+        Check("Change jobs through Fast Job Switcher", c.AllowJobChanges, v => c.AllowJobChanges = v);
+        ImGui.TextWrapped("Commands use `!vieri`. Examples: `!vieri status`, `!vieri start`, `!vieri stop`, `!vieri resume`, `!vieri sell`, `!vieri repair`, and `!vieri job MCH`. Commands that need an exact in-game choice open or direct you to the matching Nexus review instead of guessing.");
 
         Section("Audit");
         ImGui.TextWrapped($"Last command: {plugin.LastCommand}");

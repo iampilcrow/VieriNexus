@@ -42,4 +42,7 @@ internal sealed class LegacyConfigurationInventory
         return new LegacySource(source.Id, source.Name, source.Destination, paths.Length > 0, paths,
             source.Id.Equals("link", StringComparison.OrdinalIgnoreCase));
     }).ToArray();
+
+    internal LegacySource Find(string sourceId) => Scan().First(source =>
+        source.Id.Equals(sourceId, StringComparison.OrdinalIgnoreCase));
 }

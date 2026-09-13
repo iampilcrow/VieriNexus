@@ -1,6 +1,6 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.1.0.60</Version>
+    <Version>0.1.0.61</Version>
     <AssemblyName>VieriNexus</AssemblyName>
     <RootNamespace>VieriNexus</RootNamespace>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -12,9 +12,37 @@
     <ProjectReference Include="..\VieriNexus.Application\VieriNexus.Application.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(DalamudLibPath)Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="Assets\VieriNexusLogo.png" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Data\hunting_log_targets.json" />
     <EmbeddedResource Include="Data\BossModPreset_Overworld.json" />
     <EmbeddedResource Include="Data\field_aether_currents.json" />
+    <Content Include="..\..\modules\VieriRotationHelper\bin\$(Configuration)\VieriRotationHelper\latest.zip"
+             Link="EmbeddedModules\rotation.zip" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\modules\VieriAvarice\Avarice\bin\$(Configuration)\VieriAvarice\latest.zip"
+             Link="EmbeddedModules\avarice.zip" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\modules\VieriDelvUI\DelvUI\bin\$(Configuration)\VieriDelvUI\latest.zip"
+             Link="EmbeddedModules\delvui.zip" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\modules\VieriAutoMarket\bin\$(Configuration)\VieriAutoMarket\latest.zip"
+             Link="EmbeddedModules\automarket.zip" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\modules\VieriLink\bin\$(Configuration)\VieriLink\latest.zip"
+             Link="EmbeddedModules\link.zip" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedModuleProject Include="..\..\modules\VieriRotationHelper\VieriRotationHelper.csproj" />
+    <EmbeddedModuleProject Include="..\..\modules\VieriAvarice\Avarice\Avarice.csproj" />
+    <EmbeddedModuleProject Include="..\..\modules\VieriDelvUI\DelvUI\DelvUI.csproj" />
+    <EmbeddedModuleProject Include="..\..\modules\VieriAutoMarket\VieriAutoMarket.csproj" />
+    <EmbeddedModuleProject Include="..\..\modules\VieriLink\VieriLink.csproj" />
+  </ItemGroup>
+  <Target Name="BuildEmbeddedModules" BeforeTargets="PrepareForBuild">
+    <MSBuild Projects="@(EmbeddedModuleProject)" Targets="Build"
+             Properties="Configuration=$(Configuration)" BuildInParallel="true" />
+  </Target>
 </Project>

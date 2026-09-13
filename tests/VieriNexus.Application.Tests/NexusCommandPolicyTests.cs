@@ -63,6 +63,16 @@ public sealed class NexusCommandPolicyTests
         Assert.Equal("payload-too-large", result.Code);
     }
 
+    [Fact]
+    public void AllowsCharacterScopedFastJobSwitchRequest()
+    {
+        NexusCommandValidation result = NexusCommandPolicy.Validate(
+            new NexusCommandRequest(1, Guid.NewGuid(), "job.switch", "{\"job\":\"MCH\"}", 42), 42);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("job.switch", result.Command);
+    }
+
     [Theory]
     [InlineData("stop", "character-unavailable")]
     [InlineData("maintenance.run", "character-unavailable")]

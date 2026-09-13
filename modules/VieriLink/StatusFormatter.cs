@@ -5,20 +5,20 @@ internal static class StatusFormatter
     public static object Build(Configuration c, AutoDutyStatus? s)
     {
         if (s is null || !s.Available)
-            return Embed(c.StatusTitle, "⚫ Offline", 0x747f8d, [("Connection", "FFXIV or VieriAutoDuty is unavailable")]);
+            return Embed(c.StatusTitle, "⚫ Offline", 0x747f8d, [("Connection", "FFXIV or VieriNexus is unavailable")]);
 
         string indicator = s.IsPaused ? "🟡 Paused" : s.IsStopped ? "🔴 Stopped" : "🟢 Running";
         List<(string, string)> fields = [];
         if (c.ShowCharacter) fields.Add(("Character", s.Character));
         if (c.ShowLocation) fields.Add(("Location", Empty(s.Location, "Location unavailable")));
-        if (c.ShowJob) fields.Add(("Job", $"{FriendlyJob(s.Job)} — Level {s.Level} ({s.LevelProgressPercent:0.0}%)"));
+        if (c.ShowJob) fields.Add(("Job", $"{FriendlyJob(s.Job)} — Level {s.Level}"));
         if (c.ShowItemLevel) fields.Add(("Item Level", s.ItemLevel.ToString()));
         if (c.ShowDuty) fields.Add(("Current Duty", Empty(s.Duty, "Not in a configured duty")));
         if (c.ShowState) fields.Add(("State", DescribeState(s)));
-        if (c.ShowRuns) fields.Add(("Runs", $"{s.CurrentLoop} completed / {s.ConfiguredLoops} configured"));
+        if (c.ShowRuns) fields.Add(("Duties", $"{s.DutiesCompleted} completed this Nexus session"));
         if (c.ShowInventory) fields.Add(("Inventory", $"{s.InventoryUsed} / {s.InventoryTotal}"));
         if (c.ShowDurability) fields.Add(("Durability", $"{s.DurabilityPercent:0}%"));
-        if (c.ShowRuntime) fields.Add(("Runtime", FormatDuration(s.RuntimeSeconds)));
+        if (c.ShowRuntime && s.RuntimeSeconds > 0) fields.Add(("Runtime", FormatDuration(s.RuntimeSeconds)));
         return Embed(c.StatusTitle, indicator, s.IsPaused ? 0xfee75c : s.IsStopped ? 0xed4245 : 0x57f287, fields);
     }
 
