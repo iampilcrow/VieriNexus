@@ -26,4 +26,15 @@ public sealed class PluginPagePolicyTests
         Assert.Equal(new(true, "Questionable"), switched);
         Assert.Equal(new(false, "lifestream"), closed);
     }
+
+    [Fact]
+    public void DuplicateRepositoryIdentitiesAppearOnlyOnce()
+    {
+        PluginPageGroups groups = PluginPagePolicy.Group(
+            ["AutoDuty", "autoduty", "Questionable"],
+            ["AUTODUTY"]);
+
+        Assert.Equal(["AutoDuty"], groups.Favorites);
+        Assert.Equal(["Questionable"], groups.AllOtherPlugins);
+    }
 }

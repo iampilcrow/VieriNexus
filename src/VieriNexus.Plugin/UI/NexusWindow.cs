@@ -1151,7 +1151,14 @@ internal sealed class NexusWindow : Window
             .ToArray();
 
         PluginPageGroups groups = PluginPagePolicy.Group(visible.Select(entry => entry.Id).ToArray(), settings.Favorites);
-        Dictionary<string, CommandCenterEntry> byId = visible.ToDictionary(entry => entry.Id, StringComparer.OrdinalIgnoreCase);
+        // Keep drawing fail-safe if Dalamud briefly exposes duplicate repository identities
+        // during a plugin install/update. The catalog normally resolves these before this point.
+        Dictionary<string, CommandCenterEntry> byId = visible
+            .GroupBy(entry => entry.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(entry => entry.IsLoaded).First(),
+                StringComparer.OrdinalIgnoreCase);
         CommandCenterEntry[] favoriteEntries = groups.Favorites.Select(id => byId[id]).ToArray();
         BeginAutoPanel("★ FAVORITES");
         ImGui.TextDisabled($"{favoriteEntries.Length} plugin{(favoriteEntries.Length == 1 ? string.Empty : "s")}");

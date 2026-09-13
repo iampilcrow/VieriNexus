@@ -32,8 +32,12 @@ internal sealed class DependencyService(IDalamudPluginInterface pluginInterface)
         var installed = pluginInterface.InstalledPlugins;
         return NexusDependencyCatalog.All.Select(definition =>
         {
-            var plugin = installed.FirstOrDefault(candidate => definition.InternalNames.Any(name =>
-                string.Equals(candidate.InternalName, name, StringComparison.OrdinalIgnoreCase)));
+            var plugin = installed
+                .Where(candidate => definition.InternalNames.Any(name =>
+                    string.Equals(candidate.InternalName, name, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(candidate => candidate.IsLoaded)
+                .ThenByDescending(candidate => candidate.Version)
+                .FirstOrDefault();
             var health = plugin is null
                 ? DependencyHealth.Missing
                 : plugin.IsLoaded ? DependencyHealth.Healthy : DependencyHealth.Disabled;
@@ -45,7 +49,10 @@ internal sealed class DependencyService(IDalamudPluginInterface pluginInterface)
 
     internal PluginPresence FindPlugin(string internalName)
     {
-        return FindPlugins(internalName).FirstOrDefault()
+        return FindPlugins(internalName)
+                   .OrderByDescending(plugin => plugin.IsLoaded)
+                   .ThenByDescending(plugin => plugin.Version)
+                   .FirstOrDefault()
             ?? new PluginPresence(false, false, null);
     }
 

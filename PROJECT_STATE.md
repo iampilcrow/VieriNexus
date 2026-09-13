@@ -1,10 +1,10 @@
 # PROJECT STATE
 
-Working snapshot: 2026-09-12 (America/New_York)
+Working snapshot: 2026-09-13 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.61`
+Current product version: `0.1.0.62`
 Current published source: `0.1.0.61`, source `045ddf52cc7b2909be3aeb4eaf513119ca6e5cc6`, website release `929b1e128a3e9b1e72982963b7cd2268c30c2f6d`, verification documentation `d6fa76f5f772fb372a61c0c54efd437683b97f68`. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.61 packages the remaining custom Combat, Custom UI, Market, and Communications engines inside VieriNexus in five isolated runtime archives. Nexus transactionally prepares local settings while VieriRotationHelper, VieriAvarice, VieriDelvUI, VieriAutoMarket, and VieriLink remain loaded, then automatically starts the matching internal runtime after its standalone predecessor is disabled. VieriLink secrets require a same-current-user protected-data round-trip before copy. VieriDeck, VieriCodex, VieriNavPlotter, and VieriAutoDuty custom responsibilities are Nexus-owned; stock Questionable and stock AutoDuty remain the ordinary quest/duty mechanics providers. A fresh duty dispatch clears stale vnavmesh movement first. Fast Job Switcher remains the required job-switch provider, including the new Nexus `job.switch` control contract. Link now consumes Nexus status/commands directly and gear completion telemetry comes only from verified transaction completion. Full-name job typography remains title case and abbreviations uppercase.
+Current workstream: version 0.1.0.62 hardens the completed one-package transition. Dalamud entries that share an internal identity are collapsed deterministically, with the loaded/highest-version entry preferred; this prevents disabled VieriAutoDuty from masking loaded stock AutoDuty and prevents the Plugins page from throwing on the duplicate `AutoDuty` key. The Nexus operations overlay restores the approved VieriAutoDuty category coverage: routes, Inn, Grand Company destinations, flag marker, housing, market board, summoning bells, Triple Triad, striking dummies, gear and inventory maintenance, duty controls, and collectible registration. Lifestream and Nexus route travel remain interruptible through the same Stop surface. Historical paused-duty reconciliation remains available on Progression but no longer appears as an unrelated message on an idle overlay. Version 0.1.0.61 remains the embedded-runtime consolidation foundation.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -24,7 +24,7 @@ The repository is authoritative for what exists today. The recovered conversatio
 
 `VieriNexus` is the permanent product and Dalamud internal name for the planned unified Vieri FFXIV suite. It is intended to replace the separately installed Vieri plugins with one coherent, modular Dalamud package. It is not intended to be a launcher for separate plugins, a collection of embedded predecessor windows, or one giant controller.
 
-The current production line is the unified Vieri runtime. Versions 0.1.0.4 through 0.1.0.60 established transactional migration, Nexus-owned routes, progression and multi-job queueing, native gear and maintenance transactions, Progress Atlas, stock Questionable compatibility, the favorites-first Plugins page, the compact operations overlay, Fast Job Switcher integration, and correct player-facing job names. Version 0.1.0.61 packages the remaining custom Rotation, Positional, HUD, Market, and Link engines inside Nexus with isolated dependencies and settings. It also redirects Link to Nexus commands/status and clears stale navigation before a fresh stock AutoDuty run. VieriDeck and VieriCodex are retired runtime products; after per-computer preparation, the remaining standalone Vieri plugins can be disabled while stock Questionable and stock AutoDuty provide ordinary quest/duty mechanics.
+The current production line is the unified Vieri runtime. Versions 0.1.0.4 through 0.1.0.60 established transactional migration, Nexus-owned routes, progression and multi-job queueing, native gear and maintenance transactions, Progress Atlas, stock Questionable compatibility, the favorites-first Plugins page, the compact operations overlay, Fast Job Switcher integration, and correct player-facing job names. Version 0.1.0.61 packages the remaining custom Rotation, Positional, HUD, Market, and Link engines inside Nexus with isolated dependencies and settings. Version 0.1.0.62 makes stock AutoDuty coexistence deterministic when its disabled predecessor shares the same Dalamud identity and restores the full approved operations-overlay category surface. VieriDeck and VieriCodex are retired runtime products; after per-computer preparation, the remaining standalone Vieri plugins can be disabled while stock Questionable and stock AutoDuty provide ordinary quest/duty mechanics.
 
 Version 0.1.0.61 completes the one-package runtime consolidation by embedding the five remaining custom engines under isolated load/configuration contexts and redirecting VieriLink to Nexus's own status and command gateway. VieriDeck, VieriCodex, VieriNavPlotter, VieriRotationHelper, VieriAvarice, VieriDelvUI, VieriAutoMarket, VieriLink, and the custom responsibilities formerly carried by VieriAutoDuty can all transition out of the runtime. Stock Questionable and stock AutoDuty remain external mechanics providers; Boss Mod, vnavmesh, Lifestream, and Fast Job Switcher remain narrow external dependencies. The complete isolation, settings-handoff, secret, and provider boundaries are recorded in `docs/EMBEDDED_MODULE_ARCHITECTURE.md`.
 
@@ -214,7 +214,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 9 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety, Progression draft and complete multi-job queue state, one-time verified queue promotion, per-source migration state, and independent embedded-module enablement.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.61`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.62`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -250,7 +250,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 - `Services/EmbeddedModuleManager.cs`, `EmbeddedModuleLoadContext.cs`, and `EmbeddedModuleProxies.cs` — one-predecessor-at-a-time settings preparation, timestamped backup, isolated runtime extraction/loading, module-scoped configuration/UI callbacks, protected VieriLink token validation, independent failure containment, and automatic takeover after the standalone predecessor is disabled.
 - `Services/WorldSnapshotObserver.cs` — throttled Dalamud client/player/object/condition observation plus the current read-only provider-health snapshot.
 - `UI/NexusWindow.cs` — entire current shell and pages, including the one-scrollbar Plugins launcher with top-level Dalamud actions, favorites-first grouping, remaining-plugin list, inline command expansion, preferred/custom actions, hidden restoration, filters, and behavior/hotkey controls.
-- `UI/NexusOperationsOverlay.cs` — optional compact Goto/Gear/Inventory/Duty/Extras surface over the shared Nexus gateway with configured level-goal Start/Resume/Last Run, current operation status, and unified Stop.
+- `UI/NexusOperationsOverlay.cs` — optional compact Goto/Gear/Inventory/Duty/Extras surface with the approved predecessor shortcuts, Nexus/Lifestream travel, current operation status, and unified Stop. Historical paused-duty detail is deliberately excluded while the overlay is idle.
 - `UI/NexusTheme.cs` — dark/red/gold ImGui theme and shared status/section helpers.
 
 ### `tests/VieriNexus.Application.Tests`
@@ -295,7 +295,7 @@ There are 324 automated Nexus tests across the application/domain policies, incl
 - `ProgressAtlasActionCatalogTests.cs`
 - `HuntingLogCandidatePolicyTests.cs`
 
-The 0.1.0.61 release candidate passes all 324 Nexus tests, all imported-engine focused suites, and the five-archive package verifier. Nexus-owned projects compile with zero warnings/errors; 24 inherited nullable warnings remain confined to imported dependency source and do not alter runtime behavior.
+The 0.1.0.62 release candidate passes all 325 Nexus tests, 12 DelvUI tests, 21 VieriLink tests, and the five-archive package verifier. The complete Nexus solution compiles with zero warnings/errors.
 
 ## 4. Major Systems and Features
 
@@ -314,7 +314,7 @@ Safeguard: no Nexus window is drawn until the gameplay-ready gate passes. On fir
 
 ### 4.2 Dependency setup gate — IMPLEMENTED
 
-`NexusDependencyCatalog.All` defines seven required and fifteen recommended integrations. Fast Job Switcher is required because native multi-job queues depend on its documented slash-command switching contract. `DependencyService.Snapshot()` matches Dalamud `InstalledPlugins` by internal name and currently reports only `Missing`, `Disabled`, or `Healthy`; its complete identity inventory separately lets provider adapters detect two loaded plugins claiming the same internal name instead of trusting colliding IPC. `OpenInstaller(...)` opens Dalamud's installer focused on the exact install/manage search.
+`NexusDependencyCatalog.All` defines seven required and fifteen recommended integrations. Fast Job Switcher is required because native multi-job queues depend on its documented slash-command switching contract. `DependencyService.Snapshot()` matches Dalamud `InstalledPlugins` by internal name, prefers a loaded candidate and then the highest available version, and reports only `Missing`, `Disabled`, or `Healthy`; its complete identity inventory separately lets provider adapters detect two loaded plugins claiming the same internal name instead of trusting colliding IPC. `OpenInstaller(...)` opens Dalamud's installer focused on the exact install/manage search.
 
 `NexusWindow.PreDraw()` locks non-setup pages when first-run setup is incomplete or any required provider is not loaded. The Dependencies page shows progress, separates Required and Recommended, and enables **Continue to Vieri Nexus** only when all seven required providers are healthy.
 
@@ -737,7 +737,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.61`. Dalamud API 15. Version 0.1.0.61 is published through the production feed; 0.1.0.60 remains available only as an immutable historical archive.
+- Plugin project version: `0.1.0.62`. Dalamud API 15. Version 0.1.0.61 remains the currently published production package until the 0.1.0.62 release workflow completes.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.

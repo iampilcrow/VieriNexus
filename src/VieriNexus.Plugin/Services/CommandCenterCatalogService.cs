@@ -63,7 +63,20 @@ internal sealed partial class CommandCenterCatalogService
                 .ToArray();
             HashSet<string> claimed = new(StringComparer.OrdinalIgnoreCase);
             List<CommandCenterEntry> catalog = [];
-            foreach (IExposedPlugin exposed in pluginInterface.InstalledPlugins.OrderBy(plugin => plugin.Name, StringComparer.OrdinalIgnoreCase))
+            // Multiple repository entries can share an InternalName while one is disabled and
+            // another is loaded (for example VieriAutoDuty and stock AutoDuty). The launcher is
+            // keyed by InternalName, so present one deterministic entry and prefer the runtime
+            // Dalamud is actually using.
+            IExposedPlugin[] installed = pluginInterface.InstalledPlugins
+                .GroupBy(plugin => plugin.InternalName, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group
+                    .OrderByDescending(plugin => plugin.IsLoaded)
+                    .ThenByDescending(plugin => plugin.HasMainUi || plugin.HasConfigUi)
+                    .ThenByDescending(plugin => plugin.Version)
+                    .First())
+                .OrderBy(plugin => plugin.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            foreach (IExposedPlugin exposed in installed)
             {
                 string[] aliases = [Normalize(exposed.InternalName), Normalize(exposed.Name)];
                 RegisteredCommand[] matching = registered.Where(command =>
