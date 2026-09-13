@@ -3,6 +3,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Lumina.Excel.Sheets;
+using VieriNexus.Application;
 
 namespace VieriNexus.Services;
 
@@ -49,8 +50,8 @@ internal sealed class FastJobSwitchService(
         .OrderBy(row => row.UIPriority)
         .Select(row => new NexusClassJob(
             row.RowId,
-            row.Name.ExtractText(),
-            row.Abbreviation.ExtractText().ToUpperInvariant(),
+            ClassJobDisplay.Name(row.Name.ExtractText()),
+            ClassJobDisplay.Abbreviation(row.Abbreviation.ExtractText()),
             Level(row.RowId)))
         .Where(job => job.Abbreviation.Length > 0)
         .ToArray();
@@ -60,9 +61,9 @@ internal sealed class FastJobSwitchService(
         ClassJob? row = dataManager.GetExcelSheet<ClassJob>().GetRowOrDefault(classJobId);
         if (row is null)
             return $"Unknown job {classJobId}";
-        string name = row.Value.Name.ExtractText();
-        string abbreviation = row.Value.Abbreviation.ExtractText().ToUpperInvariant();
-        return name.Length > 0 && abbreviation.Length > 0 ? $"{name} ({abbreviation})" : abbreviation;
+        return ClassJobDisplay.Label(
+            row.Value.Name.ExtractText(),
+            row.Value.Abbreviation.ExtractText());
     }
 
     internal bool TryRequestSwitch(uint classJobId, out string message)

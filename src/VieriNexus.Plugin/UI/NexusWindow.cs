@@ -3033,7 +3033,11 @@ internal sealed class NexusWindow : Window
         if (ImGui.Button("Add Job"))
         {
             NexusClassJob defaultJob = progressionQueue.CombatJobs.FirstOrDefault(job => job.Level > 0)
-                ?? new NexusClassJob(character.ClassJobId, character.ClassJobName, character.ClassJobAbbreviation, character.Level);
+                ?? new NexusClassJob(
+                    character.ClassJobId,
+                    ClassJobDisplay.Name(character.ClassJobName),
+                    ClassJobDisplay.Abbreviation(character.ClassJobAbbreviation),
+                    character.Level);
             queue.Steps.Add(new ProgressionQueueStepConfiguration
             {
                 ClassJobId = defaultJob.Id,
@@ -3075,7 +3079,7 @@ internal sealed class NexusWindow : Window
         ProgressionQueueStepConfiguration step = queue.Steps[index];
         bool active = queue.IsRunning && queue.CurrentIndex == index;
         bool ownsCurrent = queue.CurrentIndex == index && (queue.IsRunning || queue.IsPaused);
-        BeginAutoPanel($"STEP {index + 1} • {progressionQueue.JobLabel(step.ClassJobId).ToUpperInvariant()}");
+        BeginAutoPanel($"STEP {index + 1} • {progressionQueue.JobLabel(step.ClassJobId)}");
         NexusTheme.StatusDot(active ? NexusTheme.Green :
                 step.Status is ProgressionQueueStepStatus.Completed or ProgressionQueueStepStatus.AlreadySatisfied
                     ? NexusTheme.Green
