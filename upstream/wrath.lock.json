@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/PunishXIV/WrathCombo.git",
+  "version": "1.0.4.23",
+  "commit": "736597dee5d5ee90cd043becf27e8d973fda43e0",
+  "trackedPresetFile": "WrathCombo/Combos/CustomComboPreset.cs",
+  "trackedJobsPath": "WrathCombo/Combos/PvE",
+  "integrationSchema": 1
+}

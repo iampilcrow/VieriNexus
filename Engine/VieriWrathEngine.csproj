@@ -1,0 +1,26 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <AssemblyName>VieriWrathEngine</AssemblyName>
+    <RootNamespace>WrathCombo</RootNamespace>
+    <Version>1.0.4.23</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>preview</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <IsPackable>false</IsPackable>
+    <Use_DalamudPackager>false</Use_DalamudPackager>
+    <!-- Upstream's existing obsolete/nullability diagnostics; retained source is
+         audited without pretending these are fixes to the upstream code. -->
+    <NoWarn>$(NoWarn);CS1591;CS8618;CS0649;CS0169;CS0414;CS0618;CS8602;CS8604;CS8625;CS0219</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="*.cs;Upstream/WrathCombo/**/*.cs" Exclude="Upstream/WrathCombo/obj/**/*;Upstream/WrathCombo/bin/**/*;ReadOnlyActionReplacer.cs;DisabledIpcContracts.cs" />
+    <EmbeddedResource Include="Upstream/WrathCombo/**/*.resx">
+      <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </EmbeddedResource>
+    <ProjectReference Include="Upstream/ECommons/ECommons.csproj" />
+    <ProjectReference Include="Dependencies/Punish.csproj" />
+    <PackageReference Include="WrathCombo.API" Version="0.5.7" />
+    <PackageReference Include="System.Speech" Version="10.0.5" />
+  </ItemGroup>
+</Project>

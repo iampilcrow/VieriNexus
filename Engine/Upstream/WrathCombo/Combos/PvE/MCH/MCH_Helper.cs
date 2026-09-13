@@ -1,0 +1,901 @@
+using Dalamud.Game.ClientState.JobGauge.Types;
+using ECommons.DalamudServices;
+using FFXIVClientStructs.FFXIV.Client.Game;
+using System;
+using System.Collections.Generic;
+using WrathCombo.Combos.PvE.ALL;
+using WrathCombo.CustomComboNS;
+using WrathCombo.CustomComboNS.Functions;
+using static WrathCombo.Combos.PvE.MCH.Config;
+using static WrathCombo.CustomComboNS.Functions.CustomComboFunctions;
+namespace WrathCombo.Combos.PvE;
+
+internal partial class MCH
+{
+    static MCH()
+    {
+        OnStatusChanged += MCH_OnStatusChanged;
+    }
+
+    private static void MCH_OnStatusChanged(uint statusId, bool onPlayer)
+    {
+        if (statusId == Buffs.Reassembled && !onPlayer)
+        {
+            UseBothCharges = GetRemainingCharges(Reassemble) > 0;
+            Svc.Log.Debug($"Set UseBothCharges to {UseBothCharges}");
+        }
+    }
+
+    #region Queen
+
+    private static bool ShouldUseQueenST()
+    {
+        if (Battery is 100)
+            return true;
+
+        if (Battery > 80 &&
+            (HasStatusEffect(Buffs.ExcavatorReady) ||
+             ActionReady(Chainsaw) ||
+             ActionReady(OriginalHook(AirAnchor))))
+            return true;
+
+        return Battery > 90 && ComboAction == OriginalHook(SlugShot);
+    }
+
+    private static bool UseQueen(
+        bool onAoE = false,
+        int batteryThreshold = 100,
+        int hpThreshold = 0,
+        bool batteryOnly = false,
+        int wildfireBossOnlyOption = 1,
+        int turretUsage = 100)
+    {
+        if (onAoE)
+        {
+            if (!ActionReady(OriginalHook(RookAutoturret)))
+                return false;
+
+            return batteryOnly
+                ? Battery is 100
+                : Battery >= batteryThreshold &&
+                  GetTargetHPPercent() > hpThreshold;
+        }
+
+        if (!HasStatusEffect(Buffs.Wildfire) &&
+            ActionReady(OriginalHook(RookAutoturret)) &&
+            !IsRobotActive &&
+            GetTargetHPPercent() > hpThreshold)
+        {
+            if (ActionLearned(Wildfire))
+            {
+                if (wildfireBossOnlyOption == 0 || TargetIsBoss())
+                {
+                    if (ShouldUseQueenST())
+                        return true;
+                }
+
+                if (wildfireBossOnlyOption == 1 && !TargetIsBoss() && Battery >= turretUsage)
+                    return true;
+            }
+
+            if (!ActionLearned(Wildfire) && Battery >= turretUsage)
+                return true;
+        }
+
+        return false;
+    }
+
+    #endregion
+
+    #region Hypercharge
+
+    private static bool UseHypercharge(
+        bool onAoE,
+        bool useAirAnchor = true,
+        float toolHoldThreshold = 8f,
+        int hpThreshold = 25,
+        bool skipExcavatorHold = false,
+        bool skipHyperchargeHold = false,
+        float wildfireHyperchargeCutoff = 9f,
+        int wildfireBossOnlyOption = 1) =>
+        onAoE
+            ? UseHyperchargeAoE(useAirAnchor, toolHoldThreshold, hpThreshold)
+            : UseHyperchargeST(hpThreshold, skipExcavatorHold, skipHyperchargeHold, wildfireHyperchargeCutoff,
+                wildfireBossOnlyOption);
+
+    private static bool IsHyperchargeReady() =>
+        (ActionReady(Hypercharge) || HasStatusEffect(Buffs.Hypercharged)) && !IsOverheated;
+
+    private static bool AreHyperchargeToolsReady(
+        float toolCutoff,
+        bool skipHyperchargeHold,
+        bool skipExcavatorHold) =>
+        IsDrillCD(toolCutoff) && IsAirAnchorCD(toolCutoff) &&
+        (IsChainSawCD(toolCutoff) || skipHyperchargeHold) &&
+        (!HasStatusEffect(Buffs.ExcavatorReady) || skipExcavatorHold);
+
+    private static bool ShouldUseHyperchargeST(int wildfireBossOnlyOption) =>
+        ActionReady(Wildfire) ||
+        JustUsed(FullMetalField, GCD / 2) ||
+        wildfireBossOnlyOption == 1 && !TargetIsBoss() ||
+        GetCooldownRemainingTime(Wildfire) > GCD * 15 ||
+        Heat is 100 && GetCooldownRemainingTime(Wildfire) > 10 ||
+        !ActionLearned(Wildfire);
+
+    private static bool UseHyperchargeST(
+        int hpThreshold = 25,
+        bool skipExcavatorHold = false,
+        bool skipHyperchargeHold = false,
+        float wildfireHyperchargeCutoff = 9f,
+        int wildfireBossOnlyOption = 1)
+    {
+        if (GetTargetHPPercent() <= hpThreshold)
+            return false;
+
+        return IsHyperchargeReady() &&
+               (!IsComboExpiring(6) || skipHyperchargeHold) &&
+               AreHyperchargeToolsReady(wildfireHyperchargeCutoff, skipHyperchargeHold, skipExcavatorHold) &&
+               !HasStatusEffect(Buffs.FullMetalMachinist) &&
+               ShouldUseHyperchargeST(wildfireBossOnlyOption);
+    }
+
+    private static bool UsedBioBlaster(float time = 9f) =>
+        !ActionLearned(BioBlaster) ||
+        IsBioBlasterCD(time) ||
+        HasStatusEffect(Debuffs.Bioblaster, CurrentTarget, true);
+
+    private static bool UsedDrill(float time = 9f) =>
+        !ActionLearned(Drill) || IsDrillCD(time);
+
+    private static bool UseHyperchargeAoE(bool useAirAnchor = true, float toolHoldThreshold = 8f, int hpThreshold = 25)
+    {
+        if (GetTargetHPPercent() <= hpThreshold)
+            return false;
+
+        if (!IsHyperchargeReady())
+            return false;
+
+        if (ActionLearned(BioBlaster))
+        {
+            if (!UsedBioBlaster(toolHoldThreshold))
+                return false;
+        }
+        else if (!UsedDrill(toolHoldThreshold))
+            return false;
+
+        if (!IsChainSawCD(toolHoldThreshold) || HasStatusEffect(Buffs.ExcavatorReady))
+            return false;
+
+        return !useAirAnchor || IsAirAnchorCD(toolHoldThreshold);
+    }
+
+    private static bool IsWildfireAboutToBeUsed(int wildfireHpThreshold, int wildfireBossOnlyOption) =>
+        (wildfireBossOnlyOption == 0 && GetTargetHPPercent() > wildfireHpThreshold || TargetIsBoss()) &&
+        CanApplyStatus(CurrentTarget, Debuffs.Wildfire) &&
+        ActionReady(Wildfire);
+
+    #endregion
+
+    #region Misc
+
+    private static bool UseFullMetalField() =>
+        HasStatusEffect(Buffs.FullMetalMachinist) &&
+        !IsOverheated &&
+        (ActionReady(Wildfire) ||
+         GetCooldownRemainingTime(Wildfire) > 90 ||
+         GetCooldownRemainingTime(Wildfire) <= GCD ||
+         GetStatusEffectRemainingTime(Buffs.FullMetalMachinist) <= 6);
+
+    private static bool JustUsedOverheatGCD(float window, bool onAoE) =>
+        onAoE
+            ? JustUsed(OriginalHook(AutoCrossbow), window) ||
+              JustUsed(OriginalHook(Heatblast), window)
+            : JustUsed(OriginalHook(Heatblast), window);
+
+    private static uint OverheatGCD(bool onAoE, bool gaussRicoEnabled = true, bool alwaysAutoCrossbow = false)
+    {
+        if (!onAoE)
+            return OriginalHook(Heatblast);
+
+        if (alwaysAutoCrossbow ||
+            !ActionLearned(CheckMate) && ActionReady(AutoCrossbow) ||
+            ActionLearned(CheckMate) && ActionLearned(BlazingShot) &&
+            NumberOfEnemiesInRange(AutoCrossbow, CurrentTarget) >= 5 ||
+            !gaussRicoEnabled && ActionReady(AutoCrossbow))
+            return AutoCrossbow;
+
+        return OriginalHook(Heatblast);
+    }
+
+    private static bool UseBarrelStabilizer(
+        bool onAoE = false,
+        int hpThreshold = 0,
+        int bossOnlyOption = 1,
+        bool requireBoss = false) =>
+        ActionReady(BarrelStabilizer) && !HasStatusEffect(Buffs.FullMetalMachinist) &&
+        (onAoE
+            ? GetTargetHPPercent() > hpThreshold
+            : (requireBoss
+                  ? TargetIsBoss()
+                  : bossOnlyOption == 0 &&
+                  GetTargetHPPercent() > hpThreshold || TargetIsBoss()) &&
+              GetCooldownRemainingTime(Wildfire) <= 20);
+
+    private static bool UseWildfire(
+        int hpThreshold = 0,
+        int bossOnlyOption = 1,
+        bool requireBoss = false,
+        float? hyperchargeWindow = null) =>
+        CanApplyStatus(CurrentTarget, Debuffs.Wildfire) &&
+        ActionReady(Wildfire) &&
+        JustUsed(Hypercharge, hyperchargeWindow ?? GCD + 0.9f) &&
+        !HasStatusEffect(Buffs.Wildfire) &&
+        (requireBoss
+            ? TargetIsBoss()
+            : bossOnlyOption == 0 &&
+            GetTargetHPPercent() > hpThreshold || TargetIsBoss());
+
+    #endregion
+
+    #region Reassembled
+
+    public static bool UseBothCharges;
+
+    public static bool TwoChargesUnlocked => GetMaxCharges(Reassemble) >= 2;
+
+    public static bool ShouldReassemble() =>
+        !TwoChargesUnlocked || UseBothCharges || ActionReady(Reassemble) && GetCooldownRemainingTime(Reassemble) <= 10;
+
+    private static int ReadyTools()
+    {
+        var ready = 0;
+
+        if (ActionReady(Drill))
+            ready += (int)GetRemainingCharges(Drill);
+
+        if (ActionReady(Chainsaw))
+        {
+            ready++;
+            if (ActionLearned(Excavator))
+                ready++;
+        }
+        else if (HasStatusEffect(Buffs.ExcavatorReady))
+            ready++;
+
+        if (ActionReady(AirAnchor))
+            ready++;
+
+        if (!ActionLearned(Drill) && ComboTimer > 0 && ComboAction is SlugShot && ActionLearned(CleanShot))
+            ready++;
+
+        return ready;
+    }
+
+    private static bool HigherToolOnCooldown(uint higherTool) =>
+        !ActionLearned(higherTool) || GetCooldownRemainingTime(higherTool) > GCD * 2;
+
+    private static bool UseReassembleCharges(int chargePool, int hpThreshold)
+    {
+        if (!ActionReady(Reassemble) || HasStatusEffect(Buffs.Reassembled) ||
+            !HasBattleTarget() || GetTargetHPPercent() <= hpThreshold ||
+            !InReassembleRange() || JustUsed(Reassemble, 2f))
+            return false;
+
+        uint remainingCharges = GetRemainingCharges(Reassemble);
+        return remainingCharges > 0 && remainingCharges > chargePool;
+    }
+
+    private static bool HasReassembleToolTarget(bool onAoE)
+    {
+        if (ActionReady(Excavator) && HasStatusEffect(Buffs.ExcavatorReady))
+            return true;
+
+        if (ActionReady(Chainsaw) && !HasStatusEffect(Buffs.ExcavatorReady))
+            return true;
+
+        if (ActionReady(AirAnchor) && HigherToolOnCooldown(Chainsaw))
+            return true;
+
+        if (onAoE)
+            return UseDrill(true) && ActionReady(Drill);
+
+        return ActionReady(Drill) && HigherToolOnCooldown(AirAnchor)
+               || !ActionLearned(Drill) && ComboTimer > 0 && ComboAction is SlugShot && ActionLearned(CleanShot)
+               || !ActionLearned(CleanShot) && ActionReady(HotShot);
+    }
+
+    private static bool UseReassembleAoE(int chargePool = 0, int hpThreshold = 25)
+    {
+        if (!UseReassembleCharges(chargePool, hpThreshold))
+            return false;
+
+        if (HasReassembleToolTarget(onAoE: true))
+            return true;
+
+        if (ActionLearned(Scattergun) && ActionReady(Scattergun))
+            return true;
+
+        return ActionReady(OriginalHook(SpreadShot));
+    }
+
+    private static bool InReassembleRange() =>
+        ActionLearned(Drill) && InActionRange(Drill) ||
+        ActionLearned(AirAnchor) && InActionRange(AirAnchor) ||
+        ActionLearned(Chainsaw) && InActionRange(Chainsaw) ||
+        ActionLearned(Scattergun) && InActionRange(OriginalHook(SpreadShot)) ||
+        !ActionLearned(Drill) && InActionRange(OriginalHook(SpreadShot));
+
+    private static bool UseReassemble(bool onAoE, int reassembleChoice = 1, int chargePool = 0, int hpThreshold = 25) =>
+        ActionReady(Reassemble) &&
+        (onAoE
+            ? UseReassembleAoE(chargePool, hpThreshold)
+            : UseReassembleST(reassembleChoice, chargePool, hpThreshold));
+
+    private static bool UseReassembleST(int reassembleChoice = 1, int chargePool = 0, int hpThreshold = 25)
+    {
+        if (!UseReassembleCharges(chargePool, hpThreshold))
+            return false;
+
+        if (reassembleChoice == 0)
+            return ShouldReassemble() && ReadyTools() >= GetRemainingCharges(Reassemble);
+
+        return reassembleChoice == 1 && HasReassembleToolTarget(onAoE: false);
+    }
+
+    #endregion
+
+    #region Gauss and Rico
+
+    private static bool IsOvercapping(uint action) =>
+        ActionReady(action) &&
+        (!ActionLearned(Traits.ChargedActionMastery) && GetRemainingCharges(action) is 1 ||
+         ActionLearned(Traits.ChargedActionMastery) && GetRemainingCharges(action) is 2) &&
+        GetCooldownChargeRemainingTime(action) < 25;
+
+    private static bool OvercapGaussRound =>
+        IsOvercapping(OriginalHook(GaussRound)) ||
+        ActionReady(OriginalHook(GaussRound)) &&
+        !ActionLearned(Hypercharge) &&
+        GetRemainingCharges(OriginalHook(GaussRound)) is 2;
+
+    private static bool OvercapRicochet =>
+        IsOvercapping(OriginalHook(Ricochet));
+
+    private static bool UseGaussRound() =>
+        ActionReady(OriginalHook(GaussRound)) &&
+        GetRemainingCharges(OriginalHook(GaussRound)) >= GetRemainingCharges(OriginalHook(Ricochet));
+
+    private static bool UseRicochet() =>
+        ActionReady(OriginalHook(Ricochet)) &&
+        GetRemainingCharges(OriginalHook(Ricochet)) > GetRemainingCharges(OriginalHook(GaussRound));
+
+    private static bool OvercapGaussRicochetProtection(ref uint actionID, bool allowRicochet = true)
+    {
+        if (OvercapGaussRound)
+        {
+            actionID = OriginalHook(GaussRound);
+            return true;
+        }
+
+        if (allowRicochet && OvercapRicochet)
+        {
+            actionID = OriginalHook(Ricochet);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool GaussRicochetWeaves(ref uint actionID, bool onAoE, bool duringHypercharge,
+        bool enabled = true, int gaussOnlyOrBoth = 0, int chargePool = 0)
+    {
+        if (!enabled)
+            return false;
+
+        if (duringHypercharge)
+        {
+            if (!JustUsedOverheatGCD(1f, onAoE) || HasWeaved())
+                return false;
+        }
+        else if (!onAoE && !JustUsedTool(2f))
+            return false;
+
+        const float spacing = 2f;
+
+        if (gaussOnlyOrBoth == 1)
+        {
+            if (HasCharges(GaussRound) && !ActionLearned(DoubleCheck))
+            {
+                actionID = GaussRound;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (GetRemainingCharges(OriginalHook(GaussRound)) > chargePool &&
+            (UseGaussRound() || !ActionLearned(Ricochet)) &&
+            (duringHypercharge || !JustUsed(OriginalHook(GaussRound), spacing) || !ActionLearned(Ricochet)))
+        {
+            actionID = OriginalHook(GaussRound);
+            return true;
+        }
+
+        if (GetRemainingCharges(OriginalHook(Ricochet)) > chargePool &&
+            UseRicochet() && (duringHypercharge || !JustUsed(OriginalHook(Ricochet), spacing)))
+        {
+            actionID = OriginalHook(Ricochet);
+            return true;
+        }
+
+        return false;
+    }
+
+    #endregion
+
+    #region HP Threshold
+
+    private static int BossHpThreshold(int hpBossOption, int hpOption, bool isBoss) =>
+        hpBossOption == 1 || !isBoss ? hpOption : 0;
+
+    private static int ReassembleHPThreshold =>
+        BossHpThreshold(MCH_ST_ReassembleHPBossOption, MCH_ST_ReassembleHPOption, TargetIsBoss());
+
+    private static int HyperchargeHPThreshold =>
+        BossHpThreshold(MCH_ST_HyperchargeHPBossOption, MCH_ST_HyperchargeHPOption, TargetIsBoss());
+
+    private static int QueenHPThreshold =>
+        BossHpThreshold(MCH_ST_QueenHPBossOption, MCH_ST_QueenHPOption, InBossEncounter());
+
+    private static int ToolsHPThreshold =>
+        BossHpThreshold(MCH_ST_ToolsHPBossOption, MCH_ST_ToolsHPOption, TargetIsBoss());
+
+    private static int BarrelStabilizerHPThreshold =>
+        BossHpThreshold(MCH_ST_BarrelStabilizerHPBossOption, MCH_ST_BarrelStabilizerHPOption, TargetIsBoss());
+
+    private static int WildfireHPThreshold =>
+        BossHpThreshold(MCH_ST_WildfireHPBossOption, MCH_ST_WildfireHPOption, TargetIsBoss());
+
+    #endregion
+
+    #region Tools
+
+    private static bool IsBelowMaxCharges(uint actionId) =>
+        GetMaxCharges(actionId) > 1 && GetRemainingCharges(actionId) < GetMaxCharges(actionId);
+
+    private static float GetToolCDRemaining(uint actionId) =>
+        IsBelowMaxCharges(actionId)
+            ? GetCooldownChargeRemainingTime(actionId)
+            : GetCooldownRemainingTime(actionId);
+
+    private static bool UseDrill(bool onAoE) =>
+        !onAoE || !ActionLearned(BioBlaster);
+
+    private static bool IsChargedToolCD(uint actionId, float time = 9f)
+    {
+        if (!ActionLearned(actionId))
+            return true;
+
+        if (HasCharges(actionId) && !IsBelowMaxCharges(actionId))
+            return false;
+
+        return GetToolCDRemaining(actionId) >= time;
+    }
+
+    private static bool IsDrillCD(float time = 9f) => IsChargedToolCD(Drill, time);
+
+    private static bool IsBioBlasterCD(float time = 9f) => IsChargedToolCD(BioBlaster, time);
+
+    private static bool IsAirAnchorCD(float time = 9f) =>
+        !ActionLearned(OriginalHook(HotShot)) ||
+        GetCooldownRemainingTime(OriginalHook(HotShot)) >= time;
+
+    private static bool IsChainSawCD(float time = 9f) =>
+        !ActionLearned(Chainsaw) ||
+        GetCooldownRemainingTime(Chainsaw) >= time;
+
+    private static bool JustUsedTool(float window) =>
+        JustUsed(OriginalHook(AirAnchor), window) ||
+        JustUsed(Chainsaw, window) ||
+        JustUsed(Drill, window) ||
+        JustUsed(Excavator, window);
+
+    private static bool ShouldHoldToolsForReassemble(
+        bool onAoE,
+        bool reassembleEnabled,
+        int reassembleChoice = 1,
+        int chargePool = 0,
+        int hpThreshold = 25)
+    {
+        if (!reassembleEnabled || HasStatusEffect(Buffs.Reassembled))
+            return false;
+
+        if (onAoE)
+            return UseReassemble(true, chargePool: chargePool, hpThreshold: hpThreshold);
+
+        return UseReassemble(false, reassembleChoice, chargePool, hpThreshold);
+    }
+
+    private static bool UseTools(
+        ref uint actionID,
+        bool onAoE,
+        bool useAirAnchor = true,
+        bool holdExcavatorForWildfire = false,
+        bool reassembleEnabled = true,
+        int reassembleChoice = 1,
+        int chargePool = 0,
+        int hpThreshold = 25)
+    {
+        if (ShouldHoldToolsForReassemble(onAoE, reassembleEnabled, reassembleChoice, chargePool, hpThreshold))
+            return false;
+
+        if (ActionReady(Chainsaw) && !HasStatusEffect(Buffs.ExcavatorReady))
+        {
+            actionID = Chainsaw;
+            return true;
+        }
+
+        if (ActionReady(Excavator) && HasStatusEffect(Buffs.ExcavatorReady) &&
+            (onAoE || !holdExcavatorForWildfire || GetStatusEffectRemainingTime(Buffs.ExcavatorReady) <= GCD * 3))
+        {
+            actionID = Excavator;
+            return true;
+        }
+
+        if ((!onAoE || useAirAnchor) && ActionReady(AirAnchor))
+        {
+            actionID = AirAnchor;
+            return true;
+        }
+
+        if (onAoE && ActionReady(BioBlaster) &&
+            !HasStatusEffect(Debuffs.Bioblaster, CurrentTarget) &&
+            CanApplyStatus(CurrentTarget, Debuffs.Bioblaster))
+        {
+            actionID = BioBlaster;
+            return true;
+        }
+
+        if (UseDrill(onAoE) && ActionReady(Drill))
+        {
+            actionID = Drill;
+            return true;
+        }
+
+        if (onAoE && HasStatusEffect(Buffs.Reassembled) && ActionReady(OriginalHook(SpreadShot)))
+        {
+            actionID = OriginalHook(SpreadShot);
+            return true;
+        }
+
+        if (!onAoE && !ActionLearned(AirAnchor) && ActionReady(HotShot) &&
+            (!ActionLearned(CleanShot) || !HasStatusEffect(Buffs.Reassembled)))
+        {
+            actionID = HotShot;
+            return true;
+        }
+
+        return false;
+    }
+
+    #endregion
+
+    #region Combos
+
+    private static float GCD => GetCooldown(OriginalHook(SplitShot)).CooldownTotal;
+
+    private static unsafe bool IsComboExpiring(float times)
+    {
+        float gcd = GCD * times;
+
+        return ActionManager.Instance()->Combo.Timer != 0 && ActionManager.Instance()->Combo.Timer < gcd;
+    }
+
+    private static uint ContinueBasicCombo(
+        bool onAoE = false,
+        bool allowReassembleOnClean = false,
+        int reassembleChoice = 1,
+        int chargePool = 0,
+        int hpThreshold = 25)
+    {
+        if (onAoE)
+            return OriginalHook(SpreadShot);
+
+        if (ComboTimer > 0)
+        {
+            if (ComboAction is SplitShot && ActionReady(OriginalHook(SlugShot)))
+                return OriginalHook(SlugShot);
+
+            if (ComboAction is SlugShot && ActionReady(OriginalHook(CleanShot)))
+            {
+                if (allowReassembleOnClean && UseReassemble(false, reassembleChoice, chargePool, hpThreshold))
+                    return Reassemble;
+
+                return OriginalHook(CleanShot);
+            }
+        }
+
+        return OriginalHook(SplitShot);
+    }
+
+    private static uint DoBasicCombo(
+        bool onAoE = false,
+        bool allowReassembleOnClean = false,
+        int reassembleChoice = 1,
+        int chargePool = 0,
+        int hpThreshold = 25) =>
+        ContinueBasicCombo(onAoE, allowReassembleOnClean, reassembleChoice, chargePool, hpThreshold);
+
+    #endregion
+
+    #region Openers
+
+    internal static WrathOpener Opener()
+    {
+        if (Lvl100StandardOpener.LevelChecked &&
+            MCH_SelectedOpener == 0)
+            return Lvl100StandardOpener;
+
+        if (Lvl100EarlyWFOpener.LevelChecked &&
+            MCH_SelectedOpener == 1)
+            return Lvl100EarlyWFOpener;
+
+        if (Lvl90EarlyTools.LevelChecked)
+            return Lvl90EarlyTools;
+
+        return WrathOpener.Dummy;
+    }
+
+    internal static MCHLvl90EarlyToolsOpener Lvl90EarlyTools = new();
+    internal static MCHLvl100EarlyWFOpener Lvl100EarlyWFOpener = new();
+    internal static MCHLvl100StandardOpener Lvl100StandardOpener = new();
+
+    internal abstract class MCHOpenerBase : WrathOpener
+    {
+        public override Preset Preset => Preset.MCH_ST_Adv_Opener;
+
+        internal override UserData ContentCheckConfig => MCH_Balance_Content;
+        internal override bool IncludePot => MCH_Opener_Potion;
+
+        public override List<(int[] Steps, Func<float> HoldDelay)> PrepullDelays { get; set; } =
+        [
+            ([1], () => CountdownRemaining - 5),
+            ([2], () => CountdownRemaining - 2),
+            ([3], () => CountdownRemaining)
+        ];
+
+        protected static bool SharedOpenerCooldowns() =>
+            (!IsEnabled(Preset.MCH_ST_Opener_BlockEarly) || CountdownActive) &&
+            GetRemainingCharges(Reassemble) is 2 &&
+            GetRemainingCharges(OriginalHook(GaussRound)) is 3 &&
+            GetRemainingCharges(OriginalHook(Ricochet)) is 3 &&
+            IsOffCooldown(Chainsaw) &&
+            IsOffCooldown(Wildfire) &&
+            IsOffCooldown(BarrelStabilizer);
+    }
+
+    internal abstract class MCHLvl100OpenerBase : MCHOpenerBase
+    {
+        public override int MinOpenerLevel => 100;
+        public override int MaxOpenerLevel => 100;
+
+        public override bool HasCooldowns() =>
+            SharedOpenerCooldowns() &&
+            IsOffCooldown(Excavator) &&
+            IsOffCooldown(FullMetalField);
+    }
+
+    internal class MCHLvl100StandardOpener : MCHLvl100OpenerBase
+    {
+        public override List<Func<uint>> OpenerActions { get; set; } =
+        [
+            () => Reassemble, // 1
+            () => Items.UseItem(Items.GetStrongestPotionRow(Items.PotionType.Dex)), // 2
+            () => AirAnchor, // 3
+            () => CheckMate, // 4
+            () => DoubleCheck, // 5
+            () => Drill, // 6
+            () => BarrelStabilizer, // 7
+            () => Chainsaw, // 8
+            () => Excavator, // 9
+            () => AutomatonQueen, // 10
+            () => Reassemble, // 11
+            () => Drill, // 12
+            () => CheckMate, // 13
+            () => Wildfire, // 14
+            () => FullMetalField, // 15
+            () => Hypercharge, // 16
+            () => DoubleCheck, // 17
+            () => BlazingShot, // 18
+            () => CheckMate, // 19
+            () => BlazingShot, // 20
+            () => DoubleCheck, // 21
+            () => BlazingShot, // 22
+            () => CheckMate, // 23
+            () => BlazingShot, // 24
+            () => DoubleCheck, // 25
+            () => BlazingShot, // 26
+            () => CheckMate, // 27
+            () => Drill, // 28
+            () => DoubleCheck, // 29
+            () => CheckMate, // 30
+            () => HeatedSplitShot, // 31
+            () => DoubleCheck, // 32
+            () => HeatedSlugShot, // 33
+            () => HeatedCleanShot // 34
+        ];
+    }
+
+    internal class MCHLvl100EarlyWFOpener : MCHLvl100OpenerBase
+    {
+        public override List<Func<uint>> OpenerActions { get; set; } =
+        [
+            () => Reassemble, // 1
+            () => Items.UseItem(Items.GetStrongestPotionRow(Items.PotionType.Dex)), // 2
+            () => AirAnchor, // 3
+            () => CheckMate, // 4
+            () => DoubleCheck, // 5
+            () => Drill, // 6
+            () => BarrelStabilizer, // 7
+            () => Reassemble, // 8
+            () => Chainsaw, // 9
+            () => DoubleCheck, // 10
+            () => Wildfire, // 11
+            () => Excavator, // 12
+            () => Hypercharge, // 13
+            () => AutomatonQueen, // 14
+            () => BlazingShot, // 15
+            () => CheckMate, // 16
+            () => BlazingShot, // 17
+            () => DoubleCheck, // 18
+            () => BlazingShot, // 19
+            () => CheckMate, // 20
+            () => BlazingShot, // 21
+            () => DoubleCheck, // 22
+            () => BlazingShot, // 23
+            () => CheckMate, // 24
+            () => Drill, // 25
+            () => DoubleCheck, // 26
+            () => CheckMate, // 27
+            () => FullMetalField, // 28
+            () => DoubleCheck, // 29
+            () => CheckMate, // 30
+            () => Drill, // 31
+            () => HeatedSplitShot, // 32
+            () => HeatedSlugShot, // 33
+            () => HeatedCleanShot // 34
+        ];
+    }
+
+    internal class MCHLvl90EarlyToolsOpener : MCHOpenerBase
+    {
+        public override int MinOpenerLevel => 90;
+        public override int MaxOpenerLevel => 95;
+
+        public override List<Func<uint>> OpenerActions { get; set; } =
+        [
+            () => Reassemble, // 1
+            () => Items.UseItem(Items.GetStrongestPotionRow(Items.PotionType.Dex)), // 2
+            () => AirAnchor, // 3
+            () => GaussRound, // 4
+            () => Ricochet, // 5
+            () => Drill, // 6
+            () => BarrelStabilizer, // 7
+            () => Chainsaw, // 8
+            () => GaussRound, // 9
+            () => Ricochet, // 10
+            () => HeatedSplitShot, // 11
+            () => GaussRound, // 12
+            () => Ricochet, // 13
+            () => HeatedSlugShot, // 14
+            () => Wildfire, // 15
+            () => HeatedCleanShot, // 16
+            () => AutomatonQueen, // 17
+            () => Hypercharge, // 18
+            () => BlazingShot, // 19
+            () => Ricochet, // 20
+            () => BlazingShot, // 21
+            () => GaussRound, // 22
+            () => BlazingShot, // 23
+            () => Ricochet, // 24
+            () => BlazingShot, // 25
+            () => GaussRound, // 26
+            () => BlazingShot, // 27
+            () => Reassemble, // 28
+            () => Drill // 29
+        ];
+
+        public override List<int> AllowUpgradeSteps { get; set; } =
+            [4, 5, 9, 10, 12, 13, 20, 22, 24, 26];
+
+        public override List<int> DelayedWeaveSteps { get; set; } =
+        [
+            15
+        ];
+
+        public override bool HasCooldowns() => SharedOpenerCooldowns();
+    }
+
+    #endregion
+
+    #region Gauge
+
+    private static MCHGauge Gauge => GetJobGauge<MCHGauge>();
+
+    private static bool IsOverheated => PredictionContext.Current?.Gauge(JobPredictionState.Keys.Flag, Gauge.IsOverheated) ?? Gauge.IsOverheated;
+
+    private static bool IsRobotActive => PredictionContext.Current?.Gauge(JobPredictionState.Keys.Flag2, Gauge.IsRobotActive) ?? Gauge.IsRobotActive;
+
+    private static byte Heat => (byte)(PredictionContext.Current?.Gauge(JobPredictionState.Keys.Primary, Gauge.Heat) ?? Gauge.Heat);
+
+    private static byte Battery => (byte)(PredictionContext.Current?.Gauge(JobPredictionState.Keys.Secondary, Gauge.Battery) ?? Gauge.Battery);
+
+    #endregion
+
+    #region ID's
+
+    public const uint
+        CleanShot = 2873,
+        HeatedCleanShot = 7413,
+        SplitShot = 2866,
+        HeatedSplitShot = 7411,
+        SlugShot = 2868,
+        HeatedSlugShot = 7412,
+        GaussRound = 2874,
+        Ricochet = 2890,
+        Reassemble = 2876,
+        Drill = 16498,
+        HotShot = 2872,
+        AirAnchor = 16500,
+        Hypercharge = 17209,
+        Heatblast = 7410,
+        SpreadShot = 2870,
+        Scattergun = 25786,
+        AutoCrossbow = 16497,
+        RookAutoturret = 2864,
+        RookOverdrive = 7415,
+        AutomatonQueen = 16501,
+        QueenOverdrive = 16502,
+        Tactician = 16889,
+        Chainsaw = 25788,
+        BioBlaster = 16499,
+        BarrelStabilizer = 7414,
+        Wildfire = 2878,
+        Dismantle = 2887,
+        Flamethrower = 7418,
+        BlazingShot = 36978,
+        DoubleCheck = 36979,
+        CheckMate = 36980,
+        Excavator = 36981,
+        FullMetalField = 36982;
+
+    public static class Buffs
+    {
+        public const ushort
+            Reassembled = 851,
+            Tactician = 1951,
+            Wildfire = 1946,
+            Overheated = 2688,
+            Flamethrower = 1205,
+            Hypercharged = 3864,
+            ExcavatorReady = 3865,
+            FullMetalMachinist = 3866;
+    }
+
+    public static class Debuffs
+    {
+        public const ushort
+            Dismantled = 860,
+            Wildfire = 861,
+            Bioblaster = 1866;
+    }
+
+    public static class Traits
+    {
+        public const ushort
+            EnhancedMultiWeapon = 605,
+            ChargedActionMastery = 292;
+    }
+
+    #endregion
+}

@@ -1,0 +1,568 @@
+using System;
+using WrathCombo.CustomComboNS;
+using WrathCombo.Data;
+using WrathCombo.Native;
+using static WrathCombo.Combos.PvE.MCH.Config;
+namespace WrathCombo.Combos.PvE;
+
+internal partial class MCH : PhysicalRanged
+{
+    internal class MCH_ST_SimpleMode : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_ST_SimpleMode;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.SingleTargetDPS, SplitShot, HeatedSplitShot))
+                return actionID;
+
+            if (!IsOverheated &&
+                ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                return contentAction;
+
+            if (CanWeave())
+            {
+                if (OvercapGaussRicochetProtection(ref actionID))
+                    return actionID;
+
+                if (IsRobotActive && ActionReady(OriginalHook(RookOverdrive)) &&
+                    GetTargetHPPercent() <= 1)
+                    return OriginalHook(RookOverdrive);
+
+                if (UseWildfire(requireBoss: true))
+                    return Wildfire;
+
+                if (UseHypercharge(false))
+                    return Hypercharge;
+
+                if (GaussRicochetWeaves(ref actionID, false, true))
+                    return actionID;
+
+                if (!IsOverheated)
+                {
+                    if (UseReassemble(false, 0))
+                        return Reassemble;
+
+                    if (UseBarrelStabilizer(requireBoss: true))
+                        return BarrelStabilizer;
+
+                    if (UseQueen())
+                        return OriginalHook(RookAutoturret);
+
+                    if (GaussRicochetWeaves(ref actionID, false, false))
+                        return actionID;
+
+                    if (ActionReady(Dismantle) &&
+                        !HasStatusEffect(Debuffs.Dismantled, CurrentTarget, true) &&
+                        CanApplyStatus(CurrentTarget, Debuffs.Dismantled) &&
+                        !JustUsed(Tactician, 6) && GroupDamageIncoming())
+                        return Dismantle;
+
+                    if (Role.CanSecondWind(40))
+                        return Role.SecondWind;
+
+                    if (Role.CanHeadGraze(true))
+                        return Role.HeadGraze;
+                }
+            }
+
+            if (UseFullMetalField())
+                return FullMetalField;
+
+            if (UseReassemble(false, 0) && !IsOverheated)
+                return Reassemble;
+
+            if (UseTools(ref actionID, false) && !IsOverheated)
+                return actionID;
+
+            if (IsOverheated && ActionReady(OriginalHook(Heatblast)))
+                return OverheatGCD(onAoE: false);
+
+            return DoBasicCombo(allowReassembleOnClean: true, reassembleChoice: 0);
+        }
+    }
+
+    internal class MCH_AoE_SimpleMode : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_AoE_SimpleMode;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, SpreadShot, Scattergun))
+                return actionID;
+
+            if (HasStatusEffect(Buffs.Flamethrower) || JustUsed(Flamethrower, GCD))
+                return All.Cease;
+
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                return contentAction;
+
+            if (CanWeave())
+            {
+                if (OvercapGaussRicochetProtection(ref actionID))
+                    return actionID;
+
+                if (UseHypercharge(true))
+                    return Hypercharge;
+
+                if (GaussRicochetWeaves(ref actionID, true, true))
+                    return actionID;
+
+                if (!IsOverheated)
+                {
+                    if (UseReassemble(true))
+                        return Reassemble;
+
+                    if (UseBarrelStabilizer(onAoE: true))
+                        return BarrelStabilizer;
+
+                    if (UseQueen(true, batteryOnly: true))
+                        return OriginalHook(RookAutoturret);
+
+                    if (GaussRicochetWeaves(ref actionID, true, false))
+                        return actionID;
+
+                    if (Role.CanSecondWind(40))
+                        return Role.SecondWind;
+
+                    if (Role.CanHeadGraze(true))
+                        return Role.HeadGraze;
+                }
+            }
+
+            if (!IsOverheated)
+            {
+                if (UseFullMetalField())
+                    return FullMetalField;
+
+                if (ActionReady(Flamethrower) &&
+                    !HasStatusEffect(Buffs.Reassembled) &&
+                    !IsMoving() && TimeStoodStill > TimeSpan.FromSeconds(3))
+                    return Flamethrower;
+
+                if (UseReassemble(true))
+                    return Reassemble;
+
+                if (UseTools(ref actionID, true))
+                    return actionID;
+            }
+
+            if (ActionReady(OriginalHook(Heatblast)) && IsOverheated)
+                return OverheatGCD(onAoE: true);
+
+            return DoBasicCombo(onAoE: true);
+        }
+    }
+
+    internal class MCH_ST_AdvancedMode : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_ST_AdvancedMode;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.SingleTargetDPS, SplitShot, HeatedSplitShot))
+                return actionID;
+
+            if (IsEnabled(Preset.MCH_ST_Adv_Opener) &&
+                (MCH_HaveTarget == 1 || HasBattleTarget()) &&
+                Opener().FullOpener(ref actionID))
+                return actionID;
+
+            if (!InCombat() &&
+                IsEnabled(Preset.MCH_ST_Adv_Opener) &&
+                IsEnabled(Preset.MCH_ST_Opener_BlockEarly) &&
+                ContentCheck.IsInConfiguredContent(
+                    MCH_Balance_Content, ContentCheck.ListSet.BossOnly))
+                return All.Cease;
+
+            if (!IsOverheated &&
+                ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                return contentAction;
+
+            if (CanWeave())
+            {
+                if (IsEnabled(Preset.MCH_ST_Adv_GaussRicochet) &&
+                    MCH_ST_GaussOnlyOrBoth == 0 &&
+                    OvercapGaussRicochetProtection(ref actionID))
+                    return actionID;
+
+                if (IsEnabled(Preset.MCH_ST_Adv_QueenOverdrive) &&
+                    IsRobotActive && ActionReady(OriginalHook(RookOverdrive)) &&
+                    GetTargetHPPercent() <= MCH_ST_QueenOverDriveHPThreshold)
+                    return OriginalHook(RookOverdrive);
+
+                if (IsEnabled(Preset.MCH_ST_Adv_WildFire) &&
+                    UseWildfire(WildfireHPThreshold, MCH_ST_WildfireBossOnlyOption))
+                    return Wildfire;
+
+                if (IsEnabled(Preset.MCH_ST_Adv_Hypercharge))
+                {
+                    bool wildfireAboutToBeUsed = IsEnabled(Preset.MCH_ST_Adv_WildFire) &&
+                                                 IsWildfireAboutToBeUsed(WildfireHPThreshold, MCH_ST_WildfireBossOnlyOption);
+
+                    if (UseHypercharge(false,
+                        hpThreshold: HyperchargeHPThreshold,
+                        skipExcavatorHold: IsEnabled(Preset.MCH_ST_Adv_Tools_AllowExcavatorPostWildfire) && wildfireAboutToBeUsed,
+                        skipHyperchargeHold: IsEnabled(Preset.MCH_ST_Adv_Tools_AllowClainsawPostWildfire) && wildfireAboutToBeUsed,
+                        wildfireHyperchargeCutoff: wildfireAboutToBeUsed ? MCH_ST_WildfireHyperchargeCutoffThreshold : 9f,
+                        wildfireBossOnlyOption: MCH_ST_WildfireBossOnlyOption))
+                        return Hypercharge;
+                }
+
+                if (IsEnabled(Preset.MCH_ST_Adv_GaussRicochet) &&
+                    GaussRicochetWeaves(ref actionID, false, true,
+                        gaussOnlyOrBoth: MCH_ST_GaussOnlyOrBoth,
+                        chargePool: MCH_ST_GaussRicoManualUse))
+                    return actionID;
+
+                if (!IsOverheated)
+                {
+                    if (IsEnabled(Preset.MCH_ST_Adv_Reassemble) &&
+                        UseReassemble(false, MCH_ST_Adv_ReassembleChoice, MCH_ST_ReassemblePool, ReassembleHPThreshold))
+                        return Reassemble;
+
+                    if (IsEnabled(Preset.MCH_ST_Adv_Stabilizer) &&
+                        UseBarrelStabilizer(false, BarrelStabilizerHPThreshold, MCH_ST_BarrelStabilizerBossOnlyOption))
+                        return BarrelStabilizer;
+
+                    if (IsEnabled(Preset.MCH_ST_Adv_TurretQueen) &&
+                        UseQueen(hpThreshold: QueenHPThreshold, wildfireBossOnlyOption: MCH_ST_WildfireBossOnlyOption,
+                            turretUsage: MCH_ST_TurretUsage))
+                        return OriginalHook(RookAutoturret);
+
+                    if (IsEnabled(Preset.MCH_ST_Adv_GaussRicochet) &&
+                        GaussRicochetWeaves(ref actionID, false, false,
+                            gaussOnlyOrBoth: MCH_ST_GaussOnlyOrBoth,
+                            chargePool: MCH_ST_GaussRicoManualUse))
+                        return actionID;
+
+                    if (IsEnabled(Preset.MCH_ST_Dismantle) &&
+                        ActionReady(Dismantle) && GroupDamageIncoming() &&
+                        !JustUsed(Tactician, 6) && CanApplyStatus(CurrentTarget, Debuffs.Dismantled) &&
+                        GetStatusEffectRemainingTime(Debuffs.Dismantled, CurrentTarget, true) > MCH_DismantledDuration)
+                        return Dismantle;
+
+                    if (IsEnabled(Preset.MCH_ST_Adv_Tactician) &&
+                        ActionReady(Tactician) && GroupDamageIncoming() &&
+                        !JustUsed(Dismantle, 6) && NumberOfAlliesInRange(Tactician) >= GetPartyMembers().Count * .75 &&
+                        !HasStatusEffects([BRD.Buffs.Troubadour, DNC.Buffs.ShieldSamba, Buffs.Tactician], anyOwner: true))
+                        return Tactician;
+
+                    if (IsEnabled(Preset.MCH_ST_Adv_SecondWind) &&
+                        Role.CanSecondWind(MCH_ST_SecondWindHPThreshold))
+                        return Role.SecondWind;
+
+                    if (Role.CanHeadGraze(Preset.MCH_ST_Adv_Interrupt))
+                        return Role.HeadGraze;
+                }
+                else
+                {
+                    if (IsEnabled(Preset.MCH_ST_Adv_TurretQueen) &&
+                        IsEnabled(Preset.MCH_ST_Adv_QueenInHypercharge) &&
+                        UseQueen(hpThreshold: QueenHPThreshold, wildfireBossOnlyOption: MCH_ST_WildfireBossOnlyOption,
+                            turretUsage: MCH_ST_TurretUsage))
+                        return OriginalHook(RookAutoturret);
+                }
+            }
+
+            if (IsEnabled(Preset.MCH_ST_Adv_Stabilizer_FullMetalField) &&
+                UseFullMetalField())
+                return FullMetalField;
+
+            if (IsEnabled(Preset.MCH_ST_Adv_Reassemble) &&
+                UseReassemble(false, MCH_ST_Adv_ReassembleChoice, MCH_ST_ReassemblePool, ReassembleHPThreshold) &&
+                !IsOverheated)
+                return Reassemble;
+
+            if (IsEnabled(Preset.MCH_ST_Adv_Tools) &&
+                GetTargetHPPercent() > ToolsHPThreshold)
+            {
+                bool wildfireAboutToBeUsed = IsEnabled(Preset.MCH_ST_Adv_WildFire) &&
+                                             IsWildfireAboutToBeUsed(WildfireHPThreshold, MCH_ST_WildfireBossOnlyOption);
+                bool holdExcavatorForWildfire = IsEnabled(Preset.MCH_ST_Adv_Tools_AllowExcavatorPostWildfire) && wildfireAboutToBeUsed;
+
+                if (UseTools(ref actionID, false,
+                        holdExcavatorForWildfire: holdExcavatorForWildfire,
+                        reassembleEnabled: IsEnabled(Preset.MCH_ST_Adv_Reassemble),
+                        reassembleChoice: MCH_ST_Adv_ReassembleChoice,
+                        chargePool: MCH_ST_ReassemblePool,
+                        hpThreshold: ReassembleHPThreshold) &&
+                    !IsOverheated)
+                    return actionID;
+            }
+
+            if (IsEnabled(Preset.MCH_ST_Adv_Heatblast) &&
+                ActionReady(OriginalHook(Heatblast)) && IsOverheated)
+                return OverheatGCD(onAoE: false);
+
+            return DoBasicCombo(
+                allowReassembleOnClean: IsEnabled(Preset.MCH_ST_Adv_Reassemble),
+                reassembleChoice: MCH_ST_Adv_ReassembleChoice,
+                chargePool: MCH_ST_ReassemblePool,
+                hpThreshold: ReassembleHPThreshold);
+        }
+    }
+
+    internal class MCH_AoE_AdvancedMode : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_AoE_AdvancedMode;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, SpreadShot, Scattergun))
+                return actionID;
+
+            if (HasStatusEffect(Buffs.Flamethrower) || JustUsed(Flamethrower, GCD))
+                return All.Cease;
+
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                return contentAction;
+
+            if (CanWeave())
+            {
+                if (IsEnabled(Preset.MCH_AoE_Adv_GaussRicochet) &&
+                    OvercapGaussRicochetProtection(ref actionID))
+                    return actionID;
+
+                if (IsEnabled(Preset.MCH_AoE_Adv_QueenOverdrive) &&
+                    IsRobotActive && ActionReady(OriginalHook(RookOverdrive)) &&
+                    GetTargetHPPercent() <= MCH_AoE_QueenOverDriveHPThreshold)
+                    return OriginalHook(RookOverdrive);
+
+                if (IsEnabled(Preset.MCH_AoE_Adv_Hypercharge) &&
+                    UseHypercharge(true, MCH_AoE_AirAnchor, MCH_AoE_HyperchargeToolHold, MCH_AoE_HyperchargeHPThreshold))
+                    return Hypercharge;
+
+                if (IsEnabled(Preset.MCH_AoE_Adv_GaussRicochet) &&
+                    GaussRicochetWeaves(ref actionID, true, true))
+                    return actionID;
+
+                if (!IsOverheated)
+                {
+                    if (IsEnabled(Preset.MCH_AoE_Adv_Reassemble) &&
+                        UseReassemble(true, chargePool: MCH_AoE_ReassemblePool, hpThreshold: MCH_AoE_ReassembleHPThreshold))
+                        return Reassemble;
+
+                    if (IsEnabled(Preset.MCH_AoE_Adv_Stabilizer) &&
+                        UseBarrelStabilizer(true, MCH_AoE_BarrelStabilizerHPThreshold))
+                        return BarrelStabilizer;
+
+                    if (IsEnabled(Preset.MCH_AoE_Adv_Queen) &&
+                        UseQueen(true, MCH_AoE_TurretBatteryUsage,
+                            MCH_AoE_QueenHpThreshold))
+                        return OriginalHook(RookAutoturret);
+
+                    if (IsEnabled(Preset.MCH_AoE_Adv_GaussRicochet) &&
+                        GaussRicochetWeaves(ref actionID, true, false))
+                        return actionID;
+
+                    if (IsEnabled(Preset.MCH_AoE_Adv_SecondWind) &&
+                        Role.CanSecondWind(MCH_AoE_SecondWindHPThreshold))
+                        return Role.SecondWind;
+
+                    if (Role.CanHeadGraze(Preset.MCH_AoE_Adv_Interrupt))
+                        return Role.HeadGraze;
+                }
+            }
+
+            if (!IsOverheated)
+            {
+                if (IsEnabled(Preset.MCH_AoE_Adv_Stabilizer_FullMetalField) &&
+                    UseFullMetalField())
+                    return FullMetalField;
+
+                if (IsEnabled(Preset.MCH_AoE_Adv_FlameThrower) &&
+                    ActionReady(Flamethrower) &&
+                    !HasStatusEffect(Buffs.Reassembled) &&
+                    (MCH_AoE_FlamethrowerMovement == 1 ||
+                     MCH_AoE_FlamethrowerMovement == 0 && !IsMoving() &&
+                     TimeStoodStill > TimeSpan.FromSeconds(MCH_AoE_FlamethrowerTimeStill)) &&
+                    GetTargetHPPercent() > MCH_AoE_FlamethrowerHPOption)
+                    return Flamethrower;
+
+                if (IsEnabled(Preset.MCH_AoE_Adv_Reassemble) &&
+                    UseReassemble(true, chargePool: MCH_AoE_ReassemblePool, hpThreshold: MCH_AoE_ReassembleHPThreshold))
+                    return Reassemble;
+
+                if (IsEnabled(Preset.MCH_AoE_Adv_Tools) &&
+                    GetTargetHPPercent() > MCH_AoE_ToolsHPThreshold &&
+                    UseTools(ref actionID, true, MCH_AoE_AirAnchor,
+                        reassembleEnabled: IsEnabled(Preset.MCH_AoE_Adv_Reassemble),
+                        chargePool: MCH_AoE_ReassemblePool,
+                        hpThreshold: MCH_AoE_ReassembleHPThreshold))
+                    return actionID;
+            }
+
+            if (ActionReady(OriginalHook(Heatblast)) && IsOverheated)
+                return OverheatGCD(true, IsEnabled(Preset.MCH_AoE_Adv_GaussRicochet));
+
+            return DoBasicCombo(onAoE: true);
+        }
+    }
+
+    internal class MCH_ST_BasicCombo : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_ST_BasicCombo;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (actionID is not (CleanShot or HeatedCleanShot))
+                return actionID;
+
+            return DoBasicCombo();
+        }
+    }
+
+    internal class MCH_DismantleProtection : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_DismantleProtection;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (actionID is not Dismantle)
+                return actionID;
+
+            return HasStatusEffect(Debuffs.Dismantled, CurrentTarget, true) && IsOffCooldown(Dismantle)
+                ? All.Cease
+                : actionID;
+        }
+    }
+
+    internal class MCH_DismantleTactician : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_DismantleTactician;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (actionID is not Dismantle)
+                return actionID;
+
+            return (IsOnCooldown(Dismantle) || !ActionLearned(Dismantle) || !HasBattleTarget()) &&
+                   ActionReady(Tactician) && !HasStatusEffect(Buffs.Tactician)
+                ? Tactician
+                : actionID;
+        }
+    }
+
+    internal class MCH_HeatblastGaussRicochet : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_Heatblast;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (actionID is not (Heatblast or BlazingShot))
+                return actionID;
+
+            if (IsEnabled(Preset.MCH_Heatblast_AutoBarrel) &&
+                ActionReady(BarrelStabilizer) && !IsOverheated &&
+                !HasStatusEffect(Buffs.FullMetalMachinist))
+                return BarrelStabilizer;
+
+            if (IsEnabled(Preset.MCH_Heatblast_Wildfire) &&
+                ActionReady(Wildfire) && JustUsed(Hypercharge) &&
+                !HasStatusEffect(Buffs.Wildfire) &&
+                CanApplyStatus(CurrentTarget, Debuffs.Wildfire))
+                return Wildfire;
+
+            if (!IsOverheated &&
+                (ActionReady(Hypercharge) || HasStatusEffect(Buffs.Hypercharged)))
+                return Hypercharge;
+
+            if (IsEnabled(Preset.MCH_Heatblast_GaussRound) &&
+                CanWeave() &&
+                GaussRicochetWeaves(ref actionID, false, true))
+                return actionID;
+
+            if (IsOverheated && ActionReady(OriginalHook(Heatblast)))
+                return OverheatGCD(onAoE: false);
+
+            return actionID;
+        }
+    }
+
+    internal class MCH_AutoCrossbowGaussRicochet : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_AutoCrossbow;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (actionID is not AutoCrossbow)
+                return actionID;
+
+            if (IsEnabled(Preset.MCH_AutoCrossbow_AutoBarrel) &&
+                ActionReady(BarrelStabilizer) && !IsOverheated &&
+                !HasStatusEffect(Buffs.FullMetalMachinist))
+                return BarrelStabilizer;
+
+            if (!IsOverheated &&
+                (ActionReady(Hypercharge) || HasStatusEffect(Buffs.Hypercharged)))
+                return Hypercharge;
+
+            if (IsEnabled(Preset.MCH_AutoCrossbow_GaussRound) &&
+                CanWeave() &&
+                GaussRicochetWeaves(ref actionID, true, true))
+                return actionID;
+
+            if (IsOverheated && ActionReady(AutoCrossbow))
+                return OverheatGCD(true, alwaysAutoCrossbow: true);
+
+            return actionID;
+        }
+    }
+
+    internal class MCH_Overdrive : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_Overdrive;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (actionID is not (AutomatonQueen or RookAutoturret))
+                return actionID;
+
+            return IsRobotActive
+                ? OriginalHook(QueenOverdrive)
+                : actionID;
+        }
+    }
+
+    internal class MCH_BigHitter : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_BigHitter;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (actionID is not HotShot)
+                return actionID;
+
+            return actionID switch
+            {
+                HotShot when ActionLearned(Excavator) && HasStatusEffect(Buffs.ExcavatorReady) => CalcBestAction(actionID, Excavator, Chainsaw, AirAnchor, Drill),
+                HotShot when ActionLearned(Chainsaw) => CalcBestAction(actionID, Chainsaw, AirAnchor, Drill),
+                HotShot when ActionLearned(AirAnchor) => CalcBestAction(actionID, AirAnchor, Drill),
+                HotShot when ActionLearned(Drill) => CalcBestAction(actionID, Drill, HotShot),
+                HotShot when !ActionLearned(Drill) => HotShot,
+                _ => actionID
+            };
+        }
+    }
+
+    internal class MCH_GaussRoundRicochet : CustomCombo
+    {
+        protected internal override Preset Preset => Preset.MCH_GaussRoundRicochet;
+
+        protected override uint Invoke(uint actionID)
+        {
+            if (actionID is not (GaussRound or Ricochet or CheckMate or DoubleCheck))
+                return actionID;
+
+            return actionID switch
+            {
+                GaussRound or DoubleCheck when MCH_GaussRico == 0 && ActionReady(OriginalHook(GaussRound)) && (UseGaussRound() || !ActionLearned(Ricochet)) => OriginalHook(GaussRound),
+                GaussRound or DoubleCheck when MCH_GaussRico == 0 && ActionReady(OriginalHook(Ricochet)) && UseRicochet() => OriginalHook(Ricochet),
+                Ricochet or CheckMate when MCH_GaussRico == 1 && ActionReady(OriginalHook(GaussRound)) && (UseGaussRound() || !ActionLearned(Ricochet)) => OriginalHook(GaussRound),
+                Ricochet or CheckMate when MCH_GaussRico == 1 && ActionReady(OriginalHook(Ricochet)) && UseRicochet() => OriginalHook(Ricochet),
+                _ => actionID
+            };
+        }
+    }
+}

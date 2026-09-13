@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0-windows7.0": {
+      "DalamudPackager": {
+        "type": "Direct",
+        "requested": "[15.0.0, )",
+        "resolved": "15.0.0",
+        "contentHash": "411vwC8/X8Z/sQ2TI6v3SvOn66xFPeOjFn3Zn+h0d3Ox2t1kFm66AhDvmx/qcMwVrR+Hidxj0dadpQ2dgyXMBQ=="
+      },
+      "DotNet.ReproducibleBuilds": {
+        "type": "Direct",
+        "requested": "[1.2.39, )",
+        "resolved": "1.2.39",
+        "contentHash": "fcFN01tDTIQqDuTwr1jUQK/geofiwjG5DycJQOnC72i1SsLAk1ELe+apBOuZ11UMQG8YKFZG1FgvjZPbqHyatg=="
+      },
+      "System.Speech": {
+        "type": "Transitive",
+        "resolved": "10.0.5",
+        "contentHash": "MYkGiMGWYc9rhyvsmf2UGIHD4RVJ3+uNgllFPP1YW6ILJJDXpDN8jMcy++0E/KrG507kTPCo5EOW4tEwUOCKhQ=="
+      },
+      "WrathCombo.API": {
+        "type": "Transitive",
+        "resolved": "0.5.7",
+        "contentHash": "A7KURat4s3efIj+KO5LTy6Vky1Y0Hsnqt4XWBL6xYsLlYSxlqhBCS3Y/LrEkohDuGletwRjfkx8IiLTiVnEmxw=="
+      },
+      "VieriRotationHelper.Switch": {
+        "type": "Project",
+        "dependencies": {
+          "WrathCombo.API": "[0.5.7, )"
+        }
+      },
+      "vieriwrathengine": {
+        "type": "Project",
+        "dependencies": {
+          "System.Speech": "[10.0.5, )",
+          "VieriWrathEngine.ECommons": "[3.2.0.19, )",
+          "VieriWrathEngine.PunishLib": "[1.0.0, )",
+          "WrathCombo.API": "[0.5.7, )"
+        }
+      },
+      "VieriWrathEngine.ECommons": {
+        "type": "Project"
+      },
+      "VieriWrathEngine.PunishLib": {
+        "type": "Project",
+        "dependencies": {
+          "VieriWrathEngine.ECommons": "[3.2.0.19, )"
+        }
+      }
+    }
+  }
+}
