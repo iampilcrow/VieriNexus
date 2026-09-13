@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>2.0.0.11</Version>
+    <AssemblyName>VieriRotationHelper</AssemblyName>
+    <RootNamespace>VieriRotationHelper</RootNamespace>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Media/Fonts/Miedinger.ttf" />
+    <Compile Remove="tests/**/*.cs" />
+    <Compile Remove="tools/**/*.cs" />
+    <Compile Remove="Engine/**/*.cs" />
+    <EmbeddedResource Remove="Engine/**/*" />
+    <Compile Remove="SwitchRuntime/**/*.cs" />
+    <EmbeddedResource Remove="SwitchRuntime/**/*" />
+    <ProjectReference Include="Engine/VieriWrathEngine.csproj" />
+    <ProjectReference Include="SwitchRuntime/WrathSwitch.csproj" />
+    <None Include="Engine/Upstream/LICENSE" Link="licenses/WrathCombo.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Engine/Upstream/ECommons/LICENSE.md" Link="licenses/ECommons.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Engine/Upstream/PunishLib/LICENCE.md" Link="licenses/PunishLib.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="SwitchRuntime/LICENSE" Link="licenses/VieriWrathSwitch.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

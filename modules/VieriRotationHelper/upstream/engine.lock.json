@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "wrath": "736597dee5d5ee90cd043becf27e8d973fda43e0",
+  "ecommons": "e76756e632558563bbbcb4ffb3d0499ed11e2eea",
+  "punishlib": "f8b3e807c02f02f0f05fae3cdf7d92bc9d0516b5",
+  "mode": "unified-engine-with-side-effect-free-prediction",
+  "assemblies": ["VieriWrathEngine", "VieriWrathEngine.ECommons", "VieriWrathEngine.PunishLib", "WrathCombo.API", "VieriRotationHelper.Switch"],
+  "sourceRoot": "Engine/Upstream",
+  "adaptations": [
+    "Full upstream ActionReplacer, AutoRotationController and IPC provider hosted by VieriRotationHelper",
+    "CustomCombo.Suggest entry point and preset scope shared by execution and suggestions",
+    "Ignore hotbar consolidation switch during evaluator entry validation",
+    "Thread-local prediction guards on upstream mutation paths",
+    "Normal live hooks outside prediction; side effects suppressed only while forecasting",
+    "Wrath configuration stored inside the VieriRotationHelper root configuration",
+    "Isolated engine assembly names with exact WrathCombo IPC compatibility",
+    "Embedded VieriWrathSwitch with exact legacy command and BeginAutomation compatibility",
+    "Hilda-style isolated forward timeline for multi-action Wrath forecasts",
+    "All-job deterministic gauge, MP, player-status, target-debuff, stack, phase, and transformation shadow state",
+    "Random outcomes are never invented; live state restarts the forecast when the game resolves them"
+  ]
+}

@@ -1,0 +1,962 @@
+using Dalamud.Game.ClientState.JobGauge.Types;
+using Dalamud.Game.ClientState.Statuses;
+using ECommons.GameHelpers;
+using System;
+using System.Collections.Frozen;
+using System.Collections.Generic;
+using System.Linq;
+using WrathCombo.Combos.PvE.ALL;
+using WrathCombo.CustomComboNS;
+using WrathCombo.CustomComboNS.Functions;
+using WrathCombo.Extensions;
+using static WrathCombo.Combos.PvE.BLM.Config;
+using static WrathCombo.CustomComboNS.Functions.CustomComboFunctions;
+namespace WrathCombo.Combos.PvE;
+
+internal partial class BLM
+{
+    #region Misc
+
+    private static int MaxPolyglot =>
+        TraitLevelChecked(Traits.EnhancedPolyglotII) ? 3 :
+        TraitLevelChecked(Traits.EnhancedPolyglot) ? 2 : 1;
+
+    private static bool IsPolyglotCapped =>
+        PolyglotStacks == MaxPolyglot;
+
+    private static int BossHpThreshold(int hpBossOption, int hpOption, bool isBoss) =>
+        hpBossOption == 1 || !isBoss ? hpOption : 0;
+
+    private static int LeyLinesHPThreshold =>
+        BossHpThreshold(BLM_ST_LeyLinesHPBossOption, BLM_ST_LeyLinesHPOption, InBossEncounter());
+
+    private static bool HasPolyglot =>
+        PolyglotStacks > 0;
+
+    #endregion
+
+    #region Polyglot
+
+    private static uint PolyglotSpell =>
+        ActionLearned(Xenoglossy) ? Xenoglossy : Foul;
+
+    private static bool OvercapPolyglotProtection =>
+        IsPolyglotCapped && PolyglotTimer <= 5;
+
+    private static bool ShouldSpendPolyglotInFire(
+        bool alwaysSpend = true,
+        int polyglotMovementThreshold = 0,
+        int polyglotSaveUsage = 0)
+    {
+        if (!HasPolyglot)
+            return false;
+
+        if (alwaysSpend)
+            return true;
+
+        return PolyglotStacks > polyglotMovementThreshold &&
+               PolyglotStacks > polyglotSaveUsage;
+    }
+
+    #endregion
+
+    #region Fire Phase
+
+    private static bool CanFlareStar() =>
+        ActionLearned(FlareStar) && AstralSoulStacks is 6;
+
+    private static float TimeSinceFirestarterBuff =>
+        HasStatusEffect(Buffs.Firestarter) ? GetPartyMembers().First().TimeSinceBuffApplied(Buffs.Firestarter) : 0;
+
+    private static uint FireSpam =>
+        ActionReady(Fire4)
+            ? Fire4
+            : Fire;
+
+    private static bool CanFire3 =>
+        ActionLearned(Fire3) && HasStatusEffect(Buffs.Firestarter) &&
+        (AstralFireStacks < 3 || !ActionLearned(Fire4) && TimeSinceFirestarterBuff >= GCD * 3);
+
+    private static bool CanFireParadox =>
+        IsParadoxActive && MP.Cur >= MP.FireParadox &&
+        (!HasStatusEffect(Buffs.Firestarter) && AstralFireStacks < 3 ||
+         JustUsed(FlareStar, GCD * 4) ||
+         !ActionLearned(FlareStar) && ActionReady(Despair));
+
+    private static bool IsEndOfFirePhase =>
+        IsInFirePhase && !ActionReady(Despair) && !ActionReady(FireSpam) && !ActionReady(FlareStar);
+
+    #endregion
+
+    #region Ice Phase
+
+    private static uint BlizzardSpam =>
+        ActionReady(Blizzard4)
+            ? Blizzard4
+            : Blizzard;
+
+    private static bool IsUmbralHeartCapped =>
+        UmbralHearts is 3;
+
+    private static bool IsEndOfIcePhaseAoE =>
+        IsInIcePhase && IsUmbralHeartCapped && TraitLevelChecked(Traits.EnhancedAstralFire);
+
+    private static bool JustUsedFreezeOrBlizzard =>
+        JustUsed(Freeze, GCD) || JustUsed(Blizzard4, GCD);
+
+    #endregion
+
+    #region Thunder
+
+    private static IStatus? ThunderDebuffST =>
+        GetStatusEffect(ThunderList[OriginalHook(Thunder)], CurrentTarget);
+
+    private static IStatus? ThunderDebuffAoE =>
+        GetStatusEffect(ThunderList[OriginalHook(Thunder2)], CurrentTarget);
+
+    private static bool UseThunder(int hpThreshold = 0, float dotRefresh = 5f)
+    {
+        uint dotAction = OriginalHook(Thunder);
+        ThunderList.TryGetValue(dotAction, out ushort dotDebuffID);
+        float dotRemaining = GetStatusEffectRemainingTime(dotDebuffID, CurrentTarget);
+
+        return ActionReady(dotAction) &&
+               CanApplyStatus(CurrentTarget, dotDebuffID) &&
+               !JustUsedOn(dotAction, CurrentTarget, 5f) &&
+               HasBattleTarget() &&
+               GetTargetHPPercent() > hpThreshold &&
+               dotRemaining <= dotRefresh;
+    }
+
+    internal static int ThunderHPThreshold()
+    {
+        if (InBossEncounter())
+            return TargetIsBoss() ? BLM_ST_ThunderBossHPOption : BLM_ST_ThunderBossAddsHPOption;
+
+        return BLM_ST_ThunderTrashHPOption;
+    }
+
+    private static bool UseAoEThunder(int hpThreshold = 0, float dotRefresh = 3f) =>
+        ActionLearned(OriginalHook(Thunder2)) && HasStatusEffect(Buffs.Thunderhead) &&
+        CanApplyStatus(CurrentTarget, ThunderList[OriginalHook(Thunder2)]) &&
+        GetTargetHPPercent() > hpThreshold &&
+        (!IsInIcePhase || JustUsedFreezeOrBlizzard || IsEndOfIcePhaseAoE || !ActionReady(Freeze)) &&
+        (ThunderDebuffAoE is null && ThunderDebuffST is null ||
+         ThunderDebuffAoE?.RemainingTime <= dotRefresh ||
+         ThunderDebuffST?.RemainingTime <= dotRefresh);
+
+    #endregion
+
+    #region Phase GCDs
+
+    private static bool UseFirePhaseGcd(
+        ref uint actionID,
+        bool useFlareStar = true,
+        bool useDespair = true,
+        bool useTranspose = true,
+        bool usePolyglot = true,
+        bool alwaysSpendPolyglot = true,
+        int polyglotMovementThreshold = 0,
+        int polyglotSaveUsage = 0)
+    {
+        if (usePolyglot &&
+            ShouldSpendPolyglotInFire(alwaysSpendPolyglot, polyglotMovementThreshold, polyglotSaveUsage))
+        {
+            actionID = PolyglotSpell;
+            return true;
+        }
+
+        if (CanFireParadox)
+        {
+            actionID = OriginalHook(Fire);
+            return true;
+        }
+
+        if (CanFire3)
+        {
+            actionID = Fire3;
+            return true;
+        }
+
+        if (useFlareStar && CanFlareStar())
+        {
+            actionID = FlareStar;
+            return true;
+        }
+
+        if (ActionReady(FireSpam) &&
+            (ActionLearned(Despair) && MP.Cur - MP.FireI >= 800 || !ActionLearned(Despair)))
+        {
+            actionID = FireSpam;
+            return true;
+        }
+
+        if (ActionReady(Flare) && !ActionLearned(Fire4) && MP.Cur <= 800)
+        {
+            actionID = Flare;
+            return true;
+        }
+
+        if (useDespair && ActionReady(Despair))
+        {
+            actionID = Despair;
+            return true;
+        }
+
+        if (ActionReady(Blizzard3) && IsEndOfFirePhase)
+        {
+            actionID = Blizzard3;
+            return true;
+        }
+
+        if (useTranspose && ActionReady(Transpose) &&
+            !ActionLearned(Fire3) && MP.Cur < MP.FireI)
+        {
+            actionID = Transpose;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool UseIcePhaseGcd(ref uint actionID, bool useTranspose = true)
+    {
+        if (UmbralHearts is 3 && UmbralIceStacks is 3 && IsParadoxActive)
+        {
+            actionID = OriginalHook(Blizzard);
+            return true;
+        }
+
+        if (MP.Full || JustUsed(Blizzard4))
+        {
+            if (ActionLearned(Fire3))
+            {
+                actionID = Fire3;
+                return true;
+            }
+
+            if (useTranspose && ActionReady(Transpose) && !ActionReady(Blizzard3))
+            {
+                actionID = Transpose;
+                return true;
+            }
+
+            if (!ActionReady(Transpose) && ActionLearned(Fire))
+            {
+                actionID = Fire;
+                return true;
+            }
+        }
+
+        if (ActionReady(Blizzard3) && UmbralIceStacks < 3 &&
+            (HasStatusEffect(Role.Buffs.Swiftcast) ||
+             HasStatusEffect(Buffs.Triplecast) ||
+             JustUsed(Freeze, 10f)))
+        {
+            actionID = Blizzard3;
+            return true;
+        }
+
+        if (ActionReady(BlizzardSpam))
+        {
+            actionID = BlizzardSpam;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool UseOutOfPhaseGcd(ref uint actionID)
+    {
+        if (ActionLearned(Blizzard3))
+        {
+            actionID = MP.Cur < 7500 ? Blizzard3 : Fire3;
+            return true;
+        }
+
+        if (ActionLearned(Fire) && !ActionReady(Transpose) && MP.Cur > MP.FireI)
+        {
+            actionID = Fire;
+            return true;
+        }
+
+        return false;
+    }
+
+    #endregion
+
+    #region ST Weaves
+
+    private static bool UseAmplifier(bool onAoE = false) =>
+        ActionReady(Amplifier) &&
+        (onAoE ? PolyglotTimer >= 20 : !IsPolyglotCapped);
+
+    private static bool UseLeyLines(
+        int minCharges = 1,
+        bool allowMoving = true,
+        double timeStillSeconds = 2.5,
+        int hpThreshold = 0) =>
+        ActionReady(LeyLines) && !HasStatusEffect(Buffs.LeyLines) &&
+        !JustUsed(LeyLines) &&
+        GetRemainingCharges(LeyLines) > minCharges &&
+        (allowMoving || !IsMoving() && TimeStoodStill > TimeSpan.FromSeconds(timeStillSeconds)) &&
+        GetTargetHPPercent() > hpThreshold;
+
+    private static bool UseEndOfFireWeave(
+        ref uint actionID,
+        bool useManafont = true,
+        bool useSwiftcast = true,
+        bool useTriplecast = true,
+        bool triplecastIgnoreLeyLines = true,
+        bool triplecastRequireChargeReserve = false,
+        bool useTranspose = true,
+        bool transposeIncludeLowMp = false,
+        uint fallbackWhenNoTranspose = 0)
+    {
+        if (!IsEndOfFirePhase)
+            return false;
+
+        if (useManafont && ActionReady(Manafont))
+        {
+            actionID = Manafont;
+            return true;
+        }
+
+        if (useSwiftcast &&
+            ActionReady(Role.Swiftcast) && JustUsed(Despair) &&
+            GetCooldownRemainingTime(Manafont) > GCD &&
+            !HasStatusEffect(Buffs.Triplecast) &&
+            InActionRange(Fire) && HasBattleTarget())
+        {
+            actionID = Role.Swiftcast;
+            return true;
+        }
+
+        if (useTriplecast &&
+            ActionReady(Triplecast) && IsOnCooldown(Role.Swiftcast) &&
+            !HasStatusEffect(Role.Buffs.Swiftcast) && !HasStatusEffect(Buffs.Triplecast) &&
+            InActionRange(Fire) && HasBattleTarget() &&
+            (triplecastIgnoreLeyLines || !HasStatusEffect(Buffs.LeyLines)) &&
+            (!triplecastRequireChargeReserve || HasTriplecastChargesForMovement()) &&
+            JustUsed(Despair) && !JustUsed(Triplecast) && !JustUsed(Manafont))
+        {
+            actionID = Triplecast;
+            return true;
+        }
+
+        if (useTranspose &&
+            ActionReady(Transpose) &&
+            (HasStatusEffect(Role.Buffs.Swiftcast) ||
+             HasStatusEffect(Buffs.Triplecast) ||
+             transposeIncludeLowMp && !ActionLearned(Fire3) && MP.Cur < MP.FireI))
+        {
+            actionID = Transpose;
+            return true;
+        }
+
+        if (fallbackWhenNoTranspose != 0 && !ActionReady(Transpose))
+        {
+            actionID = fallbackWhenNoTranspose;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool UseIceWeave(
+        ref uint actionID,
+        bool useTranspose = true,
+        bool useSwiftcast = true,
+        bool useTriplecast = false,
+        bool triplecastIgnoreLeyLines = true,
+        bool triplecastRequireChargeReserve = false)
+    {
+        if (!IsInIcePhase)
+            return false;
+
+        if (useTranspose && MP.Full && JustUsed(Paradox) && ActionReady(Transpose))
+        {
+            actionID = Transpose;
+            return true;
+        }
+
+        if (ActionReady(Blizzard3) && UmbralIceStacks < 3)
+        {
+            if (useSwiftcast &&
+                ActionReady(Role.Swiftcast) && !HasStatusEffect(Buffs.Triplecast) &&
+                HasBattleTarget() && InActionRange(Blizzard))
+            {
+                actionID = Role.Swiftcast;
+                return true;
+            }
+
+            if (useTriplecast &&
+                ActionReady(Triplecast) && IsOnCooldown(Role.Swiftcast) &&
+                HasBattleTarget() && InActionRange(Blizzard) && !JustUsed(Triplecast) &&
+                !HasStatusEffect(Role.Buffs.Swiftcast) && !HasStatusEffect(Buffs.Triplecast) &&
+                (triplecastIgnoreLeyLines || !HasStatusEffect(Buffs.LeyLines)) &&
+                (!triplecastRequireChargeReserve || HasTriplecastChargesForMovement()) &&
+                JustUsed(Despair) && !JustUsed(Manafont))
+            {
+                actionID = Triplecast;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool UseManaward(
+        int hpThreshold = 60,
+        bool simpleLogic = true,
+        int triggerMode = 0,
+        bool soloOption = false) =>
+        ActionReady(Manaward) && !LocalPlayer!.HasShield() &&
+        (simpleLogic
+            ? PlayerHealthPercentageHp() < hpThreshold && !IsInParty() || GroupDamageIncoming()
+            : triggerMode == 0 && PlayerHealthPercentageHp() <= hpThreshold && GroupDamageIncoming() ||
+              (triggerMode == 1 || triggerMode == 0 && soloOption && !IsInParty()) &&
+              PlayerHealthPercentageHp() <= hpThreshold ||
+              triggerMode == 2 && GroupDamageIncoming());
+
+    private static bool UseAddle() =>
+        Role.CanAddle() && GroupDamageIncoming();
+
+    #endregion
+
+    #region ST GCD Utilities
+
+    private static bool UseScathe() =>
+        IsMoving() && !ActionLearned(Triplecast) && ActionReady(Scathe);
+
+    private static bool UsePolyglotOvercap() =>
+        OvercapPolyglotProtection;
+
+    private static bool UseAmplifierXeno() =>
+        ActionLearned(Amplifier) &&
+        GetCooldownRemainingTime(Amplifier) < 5 &&
+        IsPolyglotCapped;
+
+    private static bool UseMovementGcd(ref uint actionID, bool useConfiguredPriority = false)
+    {
+        if (!IsMoving() || !InCombat() || !HasBattleTarget() || !InActionRange(Fire))
+            return false;
+
+        if (useConfiguredPriority)
+        {
+            foreach(int priority in BLM_ST_MovementPriority.OrderBy(x => x))
+            {
+                int index = BLM_ST_MovementPriority.IndexOf(priority);
+                if (TryMovementAction(index, ref actionID))
+                    return true;
+            }
+
+            return false;
+        }
+
+        if (ActionReady(Triplecast) &&
+            !HasStatusEffect(Buffs.Triplecast) &&
+            !HasStatusEffect(Role.Buffs.Swiftcast) &&
+            !HasStatusEffect(Buffs.LeyLines) &&
+            !JustUsed(Triplecast))
+        {
+            actionID = Triplecast;
+            return true;
+        }
+
+        if (ActionLearned(Paradox) &&
+            IsInFirePhase && IsParadoxActive &&
+            MP.Cur >= MP.FireParadox &&
+            !HasStatusEffect(Buffs.Firestarter) &&
+            !HasStatusEffect(Buffs.Triplecast) &&
+            !HasStatusEffect(Role.Buffs.Swiftcast))
+        {
+            actionID = OriginalHook(Fire);
+            return true;
+        }
+
+        if (ActionReady(Role.Swiftcast) &&
+            !HasStatusEffect(Buffs.Triplecast))
+        {
+            actionID = Role.Swiftcast;
+            return true;
+        }
+
+        if (HasPolyglot &&
+            !HasStatusEffect(Buffs.Triplecast) &&
+            !HasStatusEffect(Role.Buffs.Swiftcast))
+        {
+            actionID = PolyglotSpell;
+            return true;
+        }
+
+        return false;
+    }
+
+    #endregion
+
+    #region AoE Weaves
+
+    private static bool UseAoETriplecastMovement() =>
+        IsMoving() && InCombat() &&
+        InActionRange(Fire2) && HasBattleTarget() &&
+        ActionReady(Triplecast) &&
+        !HasStatusEffect(Buffs.Triplecast) &&
+        !JustUsed(Triplecast);
+
+    private static bool UseAoEManafont() =>
+        ActionReady(Manafont) && IsEndOfFirePhase;
+
+    private static bool UseAoETranspose() =>
+        ActionReady(Transpose) && (IsEndOfFirePhase || IsEndOfIcePhaseAoE);
+
+    #endregion
+
+    #region AoE GCDs
+
+    private static bool UseAoEPolyglotOvercap() =>
+        OvercapPolyglotProtection && ActionReady(Foul);
+
+    private static bool UseAoEPolyglot() =>
+        (IsEndOfFirePhase || IsEndOfIcePhaseAoE || IsInIcePhase && JustUsedFreezeOrBlizzard) &&
+        HasPolyglot && ActionReady(Foul);
+
+    private static bool UseAoEParadoxFiller() =>
+        IsParadoxActive && (IsEndOfIcePhaseAoE || IsInIcePhase && JustUsedFreezeOrBlizzard);
+
+    private static bool UseAoEFirePhaseGcd(
+        ref uint actionID,
+        bool useTriplecast = true,
+        int triplecastHoldCharges = 0,
+        bool useTranspose = true,
+        bool useBlizzard2Fallback = false)
+    {
+        if (CanFlareStar())
+        {
+            actionID = FlareStar;
+            return true;
+        }
+
+        if (ActionReady(Fire2) && !TraitLevelChecked(Traits.UmbralHeart))
+        {
+            actionID = OriginalHook(Fire2);
+            return true;
+        }
+
+        if (useTriplecast &&
+            !HasStatusEffect(Buffs.Triplecast) && ActionReady(Triplecast) &&
+            HasBattleTarget() && InActionRange(Fire2) && !JustUsed(Triplecast) &&
+            GetRemainingCharges(Triplecast) > triplecastHoldCharges &&
+            IsUmbralHeartCapped && GetCooldownRemainingTime(Manafont) > GCD * 3)
+        {
+            actionID = Triplecast;
+            return true;
+        }
+
+        if (ActionReady(Flare))
+        {
+            actionID = Flare;
+            return true;
+        }
+
+        if (useBlizzard2Fallback &&
+            ActionLearned(Blizzard2) &&
+            TraitLevelChecked(Traits.AspectMasteryIII) &&
+            !TraitLevelChecked(Traits.UmbralHeart))
+        {
+            actionID = OriginalHook(Blizzard2);
+            return true;
+        }
+
+        if (useTranspose && ActionReady(Transpose) && MP.Cur < MP.FireAoE)
+        {
+            actionID = Transpose;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool UseAoEIcePhaseGcd(
+        ref uint actionID,
+        bool useTranspose = true,
+        bool useFire2WithoutTranspose = false,
+        bool useBlizzard4Sub = true,
+        bool flareTransposeRequiresNoUmbralHeart = false)
+    {
+        if (IsUmbralHeartCapped ||
+            MP.Cur >= 5000 && ActionLearned(Flare) &&
+            (!flareTransposeRequiresNoUmbralHeart || !TraitLevelChecked(Traits.UmbralHeart)) ||
+            MP.Full && !ActionLearned(Flare))
+        {
+            if (useTranspose && ActionReady(Transpose))
+            {
+                actionID = Transpose;
+                return true;
+            }
+
+            if (useFire2WithoutTranspose &&
+                ActionLearned(Fire2) &&
+                TraitLevelChecked(Traits.AspectMasteryIII))
+            {
+                actionID = OriginalHook(Fire2);
+                return true;
+            }
+        }
+
+        if (ActionReady(Freeze))
+        {
+            actionID = useBlizzard4Sub &&
+                       ActionReady(Blizzard4) && HasBattleTarget() &&
+                       NumberOfEnemiesInRange(Freeze, CurrentTarget) == 2
+                ? Blizzard4
+                : Freeze;
+            return true;
+        }
+
+        if (!ActionReady(Freeze) && ActionLearned(Blizzard2))
+        {
+            actionID = OriginalHook(Blizzard2);
+            return true;
+        }
+
+        return false;
+    }
+
+    #endregion
+
+    #region Movement Prio
+
+    private const int MovementDespair = 0;
+    private const int MovementTriplecast = 1;
+    private const int MovementParadox = 2;
+    private const int MovementSwiftcast = 3;
+    private const int MovementXenoglossy = 4;
+    private const int MovementFire3 = 5;
+    private const int MovementScathe = 6;
+
+    private static bool HasTriplecastChargesForMovement() =>
+        !BLM_ST_MovementOption[MovementDespair] ||
+        GetRemainingCharges(Triplecast) > BLM_ST_TriplecastMovementCharges;
+
+    private static (uint Action, Preset Preset, Func<bool> Logic)[]
+        PrioritizedMovement =>
+    [
+        (Despair, Preset.BLM_ST_Movement,
+            () => BLM_ST_MovementOption[MovementDespair] &&
+                  ActionReady(Despair) &&
+                  TraitLevelChecked(Traits.EnhancedAstralFire) &&
+                  IsInFirePhase && MP.Cur is >= 800 and < 1500 &&
+                  !HasStatusEffect(Buffs.Triplecast) &&
+                  !HasStatusEffect(Role.Buffs.Swiftcast)),
+
+        (Triplecast, Preset.BLM_ST_Movement,
+            () => BLM_ST_MovementOption[MovementTriplecast] &&
+                  ActionReady(Triplecast) &&
+                  !HasStatusEffect(Buffs.Triplecast) &&
+                  !HasStatusEffect(Role.Buffs.Swiftcast) &&
+                  !HasStatusEffect(Buffs.LeyLines) &&
+                  !JustUsed(Triplecast)),
+
+        (OriginalHook(Fire), Preset.BLM_ST_Movement,
+            () => BLM_ST_MovementOption[MovementParadox] &&
+                  ActionReady(OriginalHook(Paradox)) &&
+                  IsInFirePhase && IsParadoxActive &&
+                  MP.Cur >= MP.FireParadox &&
+                  !HasStatusEffect(Buffs.Firestarter) &&
+                  !HasStatusEffect(Buffs.Triplecast) &&
+                  !HasStatusEffect(Role.Buffs.Swiftcast)),
+
+        (Role.Swiftcast, Preset.BLM_ST_Movement,
+            () => BLM_ST_MovementOption[MovementSwiftcast] &&
+                  ActionReady(Role.Swiftcast) &&
+                  !HasStatusEffect(Buffs.Triplecast)),
+
+        (Xenoglossy, Preset.BLM_ST_Movement,
+            () => BLM_ST_MovementOption[MovementXenoglossy] &&
+                  ActionReady(Xenoglossy) &&
+                  HasPolyglot &&
+                  !HasStatusEffect(Buffs.Triplecast) &&
+                  !HasStatusEffect(Role.Buffs.Swiftcast)),
+
+        (Fire3, Preset.BLM_ST_Movement,
+            () => BLM_ST_MovementOption[MovementFire3] &&
+                  ActionReady(Fire3) &&
+                  IsInFirePhase &&
+                  HasStatusEffect(Buffs.Firestarter) &&
+                  !HasStatusEffect(Buffs.Triplecast) &&
+                  !HasStatusEffect(Role.Buffs.Swiftcast)),
+
+        (Scathe, Preset.BLM_ST_Movement,
+            () => BLM_ST_MovementOption[MovementScathe] &&
+                  ActionReady(Scathe) &&
+                  !HasStatusEffect(Buffs.Triplecast) &&
+                  !HasStatusEffect(Role.Buffs.Swiftcast))
+    ];
+
+    private static bool TryMovementAction(int index, ref uint actionID)
+    {
+        uint action = PrioritizedMovement[index].Action;
+        if (!(ActionReady(action) && ActionLearned(action) && PrioritizedMovement[index].Logic()))
+            return false;
+
+        actionID = action;
+        return true;
+    }
+
+    #endregion
+
+    #region Openers
+
+    internal static WrathOpener Opener()
+    {
+        if (StandardOpener.LevelChecked &&
+            BLM_SelectedOpener == 0)
+            return StandardOpener;
+
+        if (FlareOpener.LevelChecked &&
+            BLM_SelectedOpener == 1)
+            return FlareOpener;
+
+        return WrathOpener.Dummy;
+    }
+
+    internal static BLMStandardOpener StandardOpener = new();
+    internal static BLMFlareOpener FlareOpener = new();
+
+    internal abstract class BLMOpenerBase : WrathOpener
+    {
+        public override int MinOpenerLevel => 100;
+        public override int MaxOpenerLevel => 100;
+
+        public override Preset Preset => Preset.BLM_ST_Opener;
+
+        internal override UserData ContentCheckConfig => BLM_Balance_Content;
+        internal override bool IncludePot => BLM_Opener_Potion;
+
+        public override List<(int[] Steps, Func<bool> Condition)> SkipSteps { get; set; } =
+        [
+            ([7], () => HasStatusEffect(Buffs.LeyLines))
+        ];
+
+        public override List<int> DelayedWeaveSteps { get; set; } = [7];
+
+        public override bool HasCooldowns() =>
+            MP.Full &&
+            IsOffCooldown(Manafont) &&
+            GetRemainingCharges(Triplecast) >= 1 &&
+            GetRemainingCharges(LeyLines) >= 1 &&
+            IsOffCooldown(Role.Swiftcast) &&
+            IsOffCooldown(Amplifier);
+    }
+
+    internal class BLMStandardOpener : BLMOpenerBase
+    {
+        public override List<Func<uint>> OpenerActions { get; set; } =
+        [
+            () => Fire3, // 1
+            () => HighThunder, // 2
+            () => Role.Swiftcast, // 3
+            () => Amplifier, // 4
+            () => Fire4, // 5
+            () => Items.UseItem(Items.GetStrongestPotionRow(Items.PotionType.Int)), // 6
+            () => LeyLines, // 7
+            () => Fire4, // 8
+            () => Fire4, // 9
+            () => Fire4, // 10
+            () => Fire4, // 11
+            () => Xenoglossy, // 12
+            () => Manafont, // 13
+            () => Fire4, // 14
+            () => FlareStar, // 15
+            () => Fire4, // 16
+            () => Fire4, // 17
+            () => HighThunder, // 18
+            () => Fire4, // 19
+            () => Fire4, // 20
+            () => Fire4, // 21
+            () => Fire4, // 22
+            () => FlareStar, // 23
+            () => Despair, // 24
+            () => Transpose, // 25
+            () => Triplecast, // 26
+            () => Blizzard3, // 27
+            () => Blizzard4, // 28
+            () => Paradox, // 29
+            () => Transpose, // 30
+            () => Paradox, // 31
+            () => Fire3 // 32
+        ];
+    }
+
+    internal class BLMFlareOpener : BLMOpenerBase
+    {
+        public override List<Func<uint>> OpenerActions { get; set; } =
+        [
+            () => Fire3, // 1
+            () => HighThunder, // 2
+            () => Role.Swiftcast, // 3
+            () => Amplifier, // 4
+            () => Fire4, // 5
+            () => Items.UseItem(Items.GetStrongestPotionRow(Items.PotionType.Int)), // 6
+            () => LeyLines, // 7
+            () => Fire4, // 8
+            () => Xenoglossy, // 9
+            () => Fire4, // 10
+            () => Fire4, // 11
+            () => Despair, // 12
+            () => Manafont, // 13
+            () => Fire4, // 14
+            () => Fire4, // 15
+            () => FlareStar, // 16
+            () => Fire4, // 17
+            () => HighThunder, // 18
+            () => Fire4, // 19
+            () => Fire4, // 20
+            () => Fire4, // 21
+            () => Paradox, // 22
+            () => Triplecast, // 23
+            () => Flare, // 24
+            () => FlareStar, // 25
+            () => Transpose, // 26
+            () => Blizzard3, // 27
+            () => Blizzard4, // 28
+            () => Paradox, // 29
+            () => Transpose, // 30
+            () => Fire3 // 31
+        ];
+    }
+
+  #endregion
+
+    #region Gauge
+
+    private static BLMGauge Gauge => GetJobGauge<BLMGauge>();
+
+    private static bool IsInFirePhase => AstralFireStacks > 0;
+
+    private static byte AstralFireStacks => (byte)(PredictionContext.Current?.Gauge(JobPredictionState.Keys.Primary, Gauge.AstralFireStacks) ?? Gauge.AstralFireStacks);
+
+    private static bool IsInIcePhase => UmbralIceStacks > 0;
+
+    private static byte UmbralIceStacks => (byte)(PredictionContext.Current?.Gauge(JobPredictionState.Keys.Secondary, Gauge.UmbralIceStacks) ?? Gauge.UmbralIceStacks);
+
+    private static byte UmbralHearts => (byte)(PredictionContext.Current?.Gauge(JobPredictionState.Keys.Tertiary, Gauge.UmbralHearts) ?? Gauge.UmbralHearts);
+
+    private static bool IsParadoxActive => PredictionContext.Current?.Gauge(JobPredictionState.Keys.Flag, Gauge.IsParadoxActive) ?? Gauge.IsParadoxActive;
+
+    private static int AstralSoulStacks => PredictionContext.Current?.Gauge(JobPredictionState.Keys.Quaternary, Gauge.AstralSoulStacks) ?? Gauge.AstralSoulStacks;
+
+    private static byte PolyglotStacks => (byte)(PredictionContext.Current?.Gauge(JobPredictionState.Keys.Extra, Gauge.PolyglotStacks) ?? Gauge.PolyglotStacks);
+
+    private static int PolyglotTimer => (PredictionContext.Current?.Gauge(JobPredictionState.Keys.Timer, Gauge.EnochianTimer) ?? Gauge.EnochianTimer) / 1000;
+
+    private static class MP
+    {
+        private static unsafe uint Max => Player.Character->MaxMana;
+
+        internal static bool Full => Max == Cur;
+
+        internal static uint Cur => CurrentMp;
+
+        internal static int FireI => GetResourceCost(OriginalHook(Fire));
+
+        internal static int FireAoE => GetResourceCost(OriginalHook(Fire2));
+
+        internal static int FireParadox => GetResourceCost(Paradox);
+    }
+
+    private static readonly FrozenDictionary<uint, ushort> ThunderList = new Dictionary<uint, ushort>
+    {
+        { Thunder, Debuffs.Thunder },
+        { Thunder2, Debuffs.Thunder2 },
+        { Thunder3, Debuffs.Thunder3 },
+        { Thunder4, Debuffs.Thunder4 },
+        { HighThunder, Debuffs.HighThunder },
+        { HighThunder2, Debuffs.HighThunder2 }
+    }.ToFrozenDictionary();
+
+    private static float GCD => GetCooldown(OriginalHook(Fire)).CooldownTotal;
+
+    #endregion
+
+    #region ID's
+
+    public const uint
+        Fire = 141,
+        Blizzard = 142,
+        Thunder = 144,
+        Fire2 = 147,
+        Transpose = 149,
+        Fire3 = 152,
+        Thunder3 = 153,
+        Blizzard3 = 154,
+        AetherialManipulation = 155,
+        Scathe = 156,
+        Manaward = 157,
+        Manafont = 158,
+        Freeze = 159,
+        Flare = 162,
+        LeyLines = 3573,
+        Blizzard4 = 3576,
+        Fire4 = 3577,
+        BetweenTheLines = 7419,
+        Thunder4 = 7420,
+        Triplecast = 7421,
+        Foul = 7422,
+        Thunder2 = 7447,
+        Despair = 16505,
+        UmbralSoul = 16506,
+        Xenoglossy = 16507,
+        Blizzard2 = 25793,
+        HighFire2 = 25794,
+        HighBlizzard2 = 25795,
+        Amplifier = 25796,
+        Paradox = 25797,
+        HighThunder = 36986,
+        HighThunder2 = 36987,
+        FlareStar = 36989;
+
+    // Debuff Pairs of Actions and Debuff
+    public static class Buffs
+    {
+        public const ushort
+            Firestarter = 165,
+            LeyLines = 737,
+            CircleOfPower = 738,
+            Triplecast = 1211,
+            AstralFire = 173, // Do not use, for translation only
+            AstralFire2 = 174, // Do not use, for translation only
+            AstralFire3 = 175, // Do not use, for translation only
+            UmbralIce = 176, // Do not use, for translation only
+            UmbralIce2 = 177, // Do not use, for translation only
+            UmbralIce3 = 178, // Do not use, for translation only
+            Thunderhead = 3870;
+    }
+
+    public static class Debuffs
+    {
+        public const ushort
+            Thunder = 161,
+            Thunder2 = 162,
+            Thunder3 = 163,
+            Thunder4 = 1210,
+            HighThunder = 3871,
+            HighThunder2 = 3872;
+    }
+
+    public static class Traits
+    {
+        public const uint
+            UmbralHeart = 295,
+            EnhancedPolyglot = 297,
+            AspectMasteryIII = 459,
+            EnhancedFoul = 461,
+            EnhancedManafont = 463,
+            Enochian = 460,
+            EnhancedPolyglotII = 615,
+            EnhancedAstralFire = 616;
+    }
+
+    #endregion
+}

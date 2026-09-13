@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>0.1.6.15</Version>
+    <AssemblyName>VieriRotationHelper.Switch</AssemblyName>
+    <RootNamespace>WrathSwitch</RootNamespace>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IsPackable>false</IsPackable>
+    <Use_DalamudPackager>false</Use_DalamudPackager>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+    <InternalsVisibleTo Include="WrathSwitch.Tests" />
+    <PackageReference Include="WrathCombo.API" Version="0.5.7" />
+  </ItemGroup>
+</Project>

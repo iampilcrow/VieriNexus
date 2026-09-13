@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0-windows7.0": {
+      "DotNet.ReproducibleBuilds": {
+        "type": "Direct",
+        "requested": "[1.2.39, )",
+        "resolved": "1.2.39",
+        "contentHash": "fcFN01tDTIQqDuTwr1jUQK/geofiwjG5DycJQOnC72i1SsLAk1ELe+apBOuZ11UMQG8YKFZG1FgvjZPbqHyatg=="
+      },
+      "WrathCombo.API": {
+        "type": "Direct",
+        "requested": "[0.5.7, )",
+        "resolved": "0.5.7",
+        "contentHash": "A7KURat4s3efIj+KO5LTy6Vky1Y0Hsnqt4XWBL6xYsLlYSxlqhBCS3Y/LrEkohDuGletwRjfkx8IiLTiVnEmxw=="
+      }
+    }
+  }
+}

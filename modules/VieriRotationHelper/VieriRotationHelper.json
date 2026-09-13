@@ -1,0 +1,10 @@
+{
+  "Author": "Valentina Vieri",
+  "Name": "VieriRotationHelper",
+  "Punchline": "Rotation engine, Auto-Rotation switch, and Hilda-style suggestions in one suite.",
+  "Description": "A unified combat suite containing the full Wrath rotation engine, Auto-Rotation and automation IPC, the VieriWrathSwitch overlay and safety controls, plus Hilda-style single-target, AoE, and dynamic suggestion bars for every combat job.",
+  "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "Tags": [ "Rotation", "Wrath Combo", "Combat", "UI" ]
+}
