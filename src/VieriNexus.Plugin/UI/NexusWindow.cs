@@ -344,7 +344,20 @@ internal sealed class NexusWindow : Window
         var readyCount = required.Count(x => x.IsReady);
         ImGui.ProgressBar((float)readyCount / required.Length, new Vector2(-1, 22),
             $"{readyCount} of {required.Length} required services ready");
-        ImGui.TextDisabled("Migration-source Vieri products are not global dependencies. Progression checks Vieri and stock provider contracts separately without requiring both implementations at once.");
+        if (ImGui.Button("Open Dalamud Plugins##dependencies-open-plugins"))
+            dependencies.OpenPluginInstaller();
+        ImGui.SameLine();
+        if (ImGui.Button("Repository settings##dependencies-open-repositories"))
+            dependencies.OpenRepositorySettings();
+        if (!string.IsNullOrWhiteSpace(dependencies.ActionMessage))
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, dependencies.ActionSucceeded ? NexusTheme.Green : NexusTheme.Amber);
+            ImGui.TextWrapped(dependencies.ActionMessage);
+            ImGui.PopStyleColor();
+        }
+        ImGui.PushStyleColor(ImGuiCol.Text, NexusTheme.Muted);
+        ImGui.TextWrapped("Migration-source Vieri products are not global dependencies. Progression checks Vieri and stock provider contracts separately without requiring both implementations at once.");
+        ImGui.PopStyleColor();
         ImGui.Spacing();
 
         NexusTheme.SectionTitle("Required", "Core navigation, travel, quest, duty, and market providers");
@@ -379,36 +392,51 @@ internal sealed class NexusWindow : Window
         foreach (var status in statuses)
         {
             ImGui.TableNextColumn();
-            BeginPanel(status.Definition.DisplayName.ToUpperInvariant(), 132);
+            BeginAutoPanel(status.Definition.DisplayName.ToUpperInvariant());
             var color = status.Health switch
             {
                 DependencyHealth.Healthy => NexusTheme.Green,
                 DependencyHealth.Disabled => NexusTheme.Amber,
                 _ => NexusTheme.Red,
             };
-            NexusTheme.StatusDot(color, status.Health.ToString());
+            var state = status.Health switch
+            {
+                DependencyHealth.Healthy => "Ready",
+                DependencyHealth.Disabled => "Installed but disabled",
+                _ => "Not installed",
+            };
+            NexusTheme.StatusDot(color, state);
             ImGui.SameLine();
             ImGui.TextColored(NexusTheme.Gold, status.Definition.Capability);
             ImGui.TextWrapped(status.Definition.Description);
             if (!string.IsNullOrWhiteSpace(status.Version))
                 ImGui.TextDisabled($"Version {status.Version}");
-            var action = status.Health switch
+            bool working = dependencies.IsWorking(status.Definition.Id);
+            var action = working ? "Working..." : status.Health switch
             {
-                DependencyHealth.Missing => "Install",
-                DependencyHealth.Disabled => "Enable",
-                _ => "Manage",
+                DependencyHealth.Missing => "Install and enable",
+                DependencyHealth.Disabled => "Enable now",
+                _ => "Manage in Dalamud",
             };
-            if (ImGui.Button($"{action}##dependency-{status.Definition.Id}", new Vector2(112, 0)))
-                dependencies.OpenInstaller(status);
-            if (status.Health == DependencyHealth.Missing && !string.IsNullOrWhiteSpace(status.Definition.RepositoryUrl))
+            if (working)
+                ImGui.BeginDisabled();
+            if (ImGui.Button($"{action}##dependency-{status.Definition.Id}", new Vector2(-1, 0)))
             {
-                ImGui.SameLine();
-                if (ImGui.Button($"Add repository##dependency-repo-{status.Definition.Id}"))
-                    dependencies.OpenRepositorySetup(status);
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Copies the repository address and opens Dalamud Settings. Paste it under Experimental → Custom Plugin Repositories, save, then press Install here.");
+                if (status.Health == DependencyHealth.Healthy)
+                    dependencies.OpenInstaller(status);
+                else
+                    dependencies.InstallOrEnable(status);
             }
-            EndPanel();
+            if (working)
+                ImGui.EndDisabled();
+            if (status.Health != DependencyHealth.Healthy)
+            {
+                if (ImGui.Button($"Open in Dalamud##dependency-manual-{status.Definition.Id}", new Vector2(-1, 0)))
+                    dependencies.OpenInstaller(status);
+            }
+            if (status.Health == DependencyHealth.Missing && !string.IsNullOrWhiteSpace(status.Definition.RepositoryUrl))
+                ImGui.TextDisabled("Its required repository will be added automatically.");
+            EndAutoPanel();
         }
 
         ImGui.EndTable();

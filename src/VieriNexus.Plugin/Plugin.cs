@@ -106,7 +106,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
 
-        dependencyService = new DependencyService(PluginInterface, CommandManager);
+        dependencyService = new DependencyService(PluginInterface, Log);
         var legacyInventory = new LegacyConfigurationInventory(PluginInterface);
         embeddedModules = new EmbeddedModuleManager(
             PluginInterface,
