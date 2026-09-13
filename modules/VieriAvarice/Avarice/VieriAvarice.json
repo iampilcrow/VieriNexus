@@ -1,0 +1,16 @@
+{
+  "Author": "Valentina Vieri",
+  "Name": "VieriAvarice",
+  "InternalName": "VieriAvarice",
+  "Description": "Valentina Vieri's upstream-compatible customization of PunishXIV Avarice, with positional feedback, range indicators, and native FFXIV window occlusion.",
+  "Punchline": "Avarice positional overlays that correctly hide behind native FFXIV windows.",
+  "ApplicableVersion": "any",
+  "RepoUrl": "https://www.thedailypilcrow.com/dalamud/",
+  "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
+  "Tags": [
+    "combat",
+    "UI",
+    "Vieri"
+  ],
+  "DalamudApiLevel": 15
+}
