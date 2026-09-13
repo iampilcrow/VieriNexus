@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>VieriNexus.Contracts</AssemblyName>
+    <RootNamespace>VieriNexus.Contracts</RootNamespace>
+  </PropertyGroup>
+</Project>
