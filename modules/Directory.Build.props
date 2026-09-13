@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Imported engines retain their own compiler/nullability baselines. They are built as isolated
+    Nexus modules and must not inherit the stricter settings used by Nexus-owned code.
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>
