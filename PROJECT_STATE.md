@@ -3,7 +3,7 @@
 Working snapshot: 2026-09-13 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
 Current product version: `0.1.0.68`
-Current published source: `0.1.0.67`, source `002f63c55f3ded8fc9a6a22d4f581b9136263e4c`, website release `a9f1e57a4da09127ec2c1a82adeaba6f7ab5d580`, verification documentation `aaeca2d66fe84e5ccb8b2a82fafc1f2298e550a5`. Release deployment `dpl_5KtJpMTsBnU8dqGcT141wijZxQm5` and final documentation deployment `dpl_DwuHAhQ1JjxA3hgM15k1VTsYGKVm` are Ready on both canonical aliases; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `5E7D964F2A66F357111077B6C75600EE747C7F8004EC63692DF8E69C69B6946B` / `A3C0CC839520936F4C0DB45EE54C865D9C4B998931321620183543AE8A3E2E27`; Discord workflow `34761275834` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+Current published source: `0.1.0.68`, source `b54d2a9c1b3246bba42c8319916153237e4ac42c`, website release `940389428ea848b49c0edf9838fede87af25c3c3`, verification documentation `bec526545cc7c3de0d83c0a4061028461f21c258`. Release deployment `dpl_3MYccs3vF5xnKfS9T81mugkWcxee` and final documentation deployment `dpl_6YuYh1HLoVPJvk3HYj5woLVC7AoB` are Ready on both canonical aliases; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `0058D5A3EC48B4154804E36CD802C7843DF13FC68E05924E11A0021833D560A3` / `A872C796DC6C00F1BBBE9749A803AE68CC75306B5738E1E074B0C262107E8800`; Discord workflow `34762642242` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
 Current workstream: version 0.1.0.68 makes Combat one coherent Nexus page with only On-Screen Ability Suggestions, Wrath Combo, and Manual On-Screen Switch. It removes module/predecessor/integration/keybind clutter and restores the full configured suggestion strip through a no-replacement shadow timeline while stock Wrath remains the sole rotation/action-replacement provider. Version 0.1.0.67 remains the single duty-presentation release.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
@@ -732,12 +732,12 @@ These are migration requirements, not current Nexus features:
 ### Git and release state
 
 - Branch: `main`.
-- Current release source/implementation commit: `73fc2352fb0ba755d6bbd89ac3d526548fa21513 Rebuild VieriDeck replacement as Plugins page`; publication is recorded in this current `PROJECT_STATE.md` update.
+- Current release source/implementation commit: `b54d2a9c1b3246bba42c8319916153237e4ac42c Simplify Combat and restore suggestion forecast`; publication is recorded in this current `PROJECT_STATE.md` update.
 - `origin/main` contains both the released implementation and published-source state commits.
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.68`. Dalamud API 15. Version 0.1.0.67 is the currently published production feed entry while 0.1.0.68 is being released; every prior version remains an immutable historical archive.
+- Plugin project version: `0.1.0.68`. Dalamud API 15. Version 0.1.0.68 is the currently published production feed entry; every prior version remains an immutable historical archive.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.
@@ -1721,3 +1721,5 @@ This reduces dependence on model context and prevents project knowledge from bei
 - SQLite is the architectural recommendation for durable orchestration state but was not explicitly approved or implemented.
 - The exact first proof goal (proposed Viper current level +2), manual-override resume UI/authorization mechanism, broader Custom UI default-enabled set, large content-data update mechanism, and remote-command allow/deny lists still require explicit product decisions before their corresponding implementation.
 - No `AGENTS.md` existed in the VieriNexus repository at recovery. Future threads must still check again.
+
+Verification evidence for 0.1.0.68: source `b54d2a9c1b3246bba42c8319916153237e4ac42c`, Daily Pilcrow release `940389428ea848b49c0edf9838fede87af25c3c3`, and verification documentation `bec526545cc7c3de0d83c0a4061028461f21c258` are pushed. Combat now presents only On-Screen Ability Suggestions, Wrath Combo, and Manual On-Screen Switch; module/predecessor/integration/keybind clutter is absent. Stock Wrath supplies the live lead and remains the sole rotation/action-replacement provider, while the side-effect-free evaluator advances the configured visual forecast instead of collapsing it to one icon. All 331 Nexus tests, 21 prediction checks, 70 positional checks, 1,544 rotation visual/hotkey checks, 15 window-input checks, the complete Release build, five-module package verifier, all 205 website tests, typecheck, production build, and focused local/live validation pass. Release deployment `dpl_3MYccs3vF5xnKfS9T81mugkWcxee` and final documentation deployment `dpl_6YuYh1HLoVPJvk3HYj5woLVC7AoB` are Ready on both canonical aliases. Runtime/source SHA-256: `0058D5A3EC48B4154804E36CD802C7843DF13FC68E05924E11A0021833D560A3` / `A872C796DC6C00F1BBBE9749A803AE68CC75306B5738E1E074B0C262107E8800`. Discord workflow `34762642242` succeeded.
