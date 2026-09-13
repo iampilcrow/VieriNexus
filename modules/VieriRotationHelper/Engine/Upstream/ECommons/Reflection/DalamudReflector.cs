@@ -118,8 +118,17 @@ public static class DalamudReflector
 
     public static object GetPluginManager()
     {
-        return Svc.PluginInterface.GetType().Assembly.
-                GetType("Dalamud.Service`1", true).MakeGenericType(Svc.PluginInterface.GetType().Assembly.GetType("Dalamud.Plugin.Internal.PluginManager", true)).
+        // Embedded runtimes receive a DispatchProxy implementation of
+        // IDalamudPluginInterface. Its generated assembly is not Dalamud and
+        // therefore cannot contain Dalamud.Service or PluginManager. Resolve
+        // the real host assembly from the loaded runtime instead of assuming
+        // the interface implementation's assembly owns those internal types.
+        var dalamudAssembly = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(assembly =>
+            assembly.GetType("Dalamud.Service`1", false) != null &&
+            assembly.GetType("Dalamud.Plugin.Internal.PluginManager", false) != null)
+            ?? throw new InvalidOperationException("The Dalamud runtime assembly is not available.");
+        return dalamudAssembly.
+                GetType("Dalamud.Service`1", true).MakeGenericType(dalamudAssembly.GetType("Dalamud.Plugin.Internal.PluginManager", true)).
                 GetMethod("Get").Invoke(null, BindingFlags.Default, null, Array.Empty<object>(), null);
     }
 

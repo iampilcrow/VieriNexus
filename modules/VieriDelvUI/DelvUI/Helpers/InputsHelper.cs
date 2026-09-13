@@ -140,11 +140,19 @@ namespace DelvUI.Helpers
         private IGameObject? _target = null;
         private bool _ignoringMouseover = false;
 
-        public bool IsProxyEnabled => _config.InputsProxyEnabled;
+        private bool NativeProxyAllowed => EmbeddedInputSafetyPolicy.AllowsNativeMouseProxy(
+            Plugin.PluginInterface.GetPluginConfigDirectory());
+
+        public bool IsProxyEnabled => NativeProxyAllowed && _config.InputsProxyEnabled;
 
         public void ToggleProxy(bool enabled)
         {
-            _config.InputsProxyEnabled = enabled;
+            _config.InputsProxyEnabled = enabled && NativeProxyAllowed;
+            if (!_config.InputsProxyEnabled)
+            {
+                ClearTarget();
+                RestoreWndProc();
+            }
             ConfigurationManager.Instance.SaveConfigurations();
         }
 
@@ -205,6 +213,13 @@ namespace DelvUI.Helpers
         private void OnConfigReset(ConfigurationManager sender)
         {
             _config = sender.GetConfigObject<HUDOptionsConfig>();
+            if (!NativeProxyAllowed)
+            {
+                // A copied standalone configuration may have this enabled. Do
+                // not persist a host-wide native hook in the embedded runtime.
+                _config.InputsProxyEnabled = false;
+                HandlingMouseInputs = false;
+            }
         }
 
         //private void HandleUIMouseOverActorId(long arg1, long arg2)
