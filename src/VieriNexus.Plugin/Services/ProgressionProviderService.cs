@@ -42,6 +42,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly ICallGateSubscriber<uint, int, bool, object> autoDutyRun;
     private readonly ICallGateSubscriber<object> autoDutyStop;
     private readonly ICallGateSubscriber<int, object> autoDutySetLevelingMode;
+    private readonly ICallGateSubscriber<string, string> autoDutyGetConfig;
     private readonly ICallGateSubscriber<string, object, object> autoDutySetConfig;
     // Identity marker only. Nexus never dispatches this VieriAutoDuty-only endpoint.
     private readonly ICallGateSubscriber<int, string> vieriAutoDutyIdentityMarker;
@@ -66,6 +67,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly Dictionary<string, HashSet<string>> unsupportedQuestIdsByProvider = [];
     private long nexusGearStartedSequence;
     private long nexusGearCompletedSequence;
+    private long nextDutyPresentationSync;
+    private bool dutyPresentationInitialized;
 
     internal ProgressionProviderService(
         IDalamudPluginInterface pluginInterface,
@@ -105,6 +108,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         autoDutyRun = pluginInterface.GetIpcSubscriber<uint, int, bool, object>("AutoDuty.Run");
         autoDutyStop = pluginInterface.GetIpcSubscriber<object>("AutoDuty.Stop");
         autoDutySetLevelingMode = pluginInterface.GetIpcSubscriber<int, object>("AutoDuty.SetLevelingMode");
+        autoDutyGetConfig = pluginInterface.GetIpcSubscriber<string, string>("AutoDuty.GetConfig");
         autoDutySetConfig = pluginInterface.GetIpcSubscriber<string, object, object>("AutoDuty.SetConfig");
         vieriAutoDutyIdentityMarker = pluginInterface.GetIpcSubscriber<int, string>("AutoDuty.StartProgressionLeveling");
         gearCatalog = new NexusGearCatalogService(dataManager, playerState, objectTable);
@@ -176,7 +180,50 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
     internal ProgressionCharacterMetrics CharacterMetrics() => new(CurrentItemLevel(), CurrentGil());
 
-    internal void UpdateGearAdapter() => gearExecution.Update(DateTimeOffset.UtcNow);
+    internal void UpdateGearAdapter()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        gearExecution.Update(now);
+        ReconcileDutyPresentation(now);
+    }
+
+    private void ReconcileDutyPresentation(DateTimeOffset now)
+    {
+        if (now.ToUnixTimeMilliseconds() < nextDutyPresentationSync)
+            return;
+        nextDutyPresentationSync = now.ToUnixTimeMilliseconds() + 3000;
+
+        ProgressionProviderSelection selection = Snapshot().Duties;
+        bool stockReady = selection.IsReady && selection.Selected?.Id == AutoDutyStockProviderId;
+        if (!stockReady || !autoDutySetConfig.HasAction)
+        {
+            dutyPresentationInitialized = false;
+            return;
+        }
+
+        try
+        {
+            string? overlaySetting = autoDutyGetConfig.HasFunction
+                ? autoDutyGetConfig.InvokeFunc("ShowOverlay")
+                : null;
+            if (!dutyPresentationInitialized)
+            {
+                autoDutySetConfig.InvokeAction("AutoManageRotationPluginState", "true");
+                autoDutySetConfig.InvokeAction("rotationPlugin", "WrathCombo");
+            }
+            if (!dutyPresentationInitialized || !IsFalseSetting(overlaySetting))
+                autoDutySetConfig.InvokeAction("ShowOverlay", "false");
+            dutyPresentationInitialized = true;
+        }
+        catch
+        {
+            // Provider reloads briefly invalidate IPC delegates. Retry on the next bounded sync.
+            dutyPresentationInitialized = false;
+        }
+    }
+
+    private static bool IsFalseSetting(string? value) =>
+        bool.TryParse(value?.Trim().Trim('"'), out bool parsed) && !parsed;
 
     internal ProgressionProviderSnapshot Snapshot()
     {

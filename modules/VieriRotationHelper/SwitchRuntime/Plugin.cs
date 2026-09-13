@@ -82,7 +82,8 @@ public sealed class Plugin : IDalamudPlugin
         rotationWindow = new RotationWindow(this) { IsOpen = Configuration.ShowWindow };
         settingsWindow = new SettingsWindow(this);
         windowSystem.AddWindow(rotationWindow);
-        windowSystem.AddWindow(settingsWindow);
+        if (!embedded)
+            windowSystem.AddWindow(settingsWindow);
 
         CommandManager.AddHandler(MainCommand, new CommandInfo(OnCommand)
         {
@@ -120,7 +121,14 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.Save();
     }
 
-    public void OpenSettings() => settingsWindow.IsOpen = true;
+    public void OpenSettings()
+    {
+        if (embedded)
+            CommandManager.ProcessCommand("/nexus combat");
+        else
+            settingsWindow.IsOpen = true;
+    }
+    public void DrawSettingsInline() => settingsWindow.DrawInline();
 
     public void ToggleRotation() => SetRotation(!AutoRotationEnabled);
 

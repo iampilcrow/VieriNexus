@@ -9,7 +9,8 @@ internal sealed class EmbeddedRotationProvider : IDisposable
     private readonly Configuration configuration;
     internal uint EntryAction { get; private set; }
     internal string Status { get; private set; } = "Waiting for a character.";
-    internal bool IsActive => runtime != null;
+    internal bool IsActive => wrath.IsLoaded || runtime != null;
+    internal bool UsesStockWrath => wrath.IsLoaded;
     private long nextErrorLog;
 
     internal EmbeddedRotationProvider(Plugin owner, WrathLiveProvider wrath)

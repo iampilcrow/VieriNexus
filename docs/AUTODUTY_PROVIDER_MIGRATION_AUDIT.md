@@ -7,7 +7,7 @@ Common ancestor: `17f54e99235d84fe39582258eca7058fc5fb3e2b`
 
 ## Decision
 
-The permanent dependency is stock AutoDuty as a replaceable, module-scoped Duty provider. As of Nexus 0.1.0.63, VieriAutoDuty is a settings-migration source only and is not an executable provider candidate. Nexus owns Vieri-specific goals, policy, UI, routes, travel composition, gear/inventory decisions, maintenance scheduling, telemetry, commands, and cross-provider coordination. Stock AutoDuty continues to own its supported duty paths and internal duty state machine.
+The permanent dependency is stock AutoDuty as a replaceable, module-scoped Duty provider. As of Nexus 0.1.0.63, VieriAutoDuty is a settings-migration source only and is not an executable provider candidate. Nexus owns Vieri-specific goals, policy, UI, routes, travel composition, gear/inventory decisions, maintenance scheduling, telemetry, commands, and cross-provider coordination. Stock AutoDuty continues to own its supported duty paths and internal duty state machine. As of 0.1.0.67, Nexus also continuously reconciles the stock provider's presentation: AutoDuty's overlay remains disabled, Wrath Combo remains its selected rotation provider, and the Nexus operations overlay is the single visible duty-control surface.
 
 This matches the stock-Questionable direction: compatible upstream updates should normally require only a provider-contract check, not a Vieri fork merge or a Nexus source change.
 

@@ -11,7 +11,7 @@ internal sealed class SettingsWindow : Window
     private readonly WrathLiveProvider wrath;
 
     internal SettingsWindow(Plugin plugin, WrathLiveProvider wrath)
-        : base("VieriRotationHelper Suite###VieriRotationHelperSettings")
+        : base("Nexus Combat · Rotation###VieriRotationHelperSettings")
     {
         this.plugin = plugin;
         this.wrath = wrath;
@@ -24,7 +24,9 @@ internal sealed class SettingsWindow : Window
         };
     }
 
-    public override void Draw()
+    public override void Draw() => DrawNexusContents();
+
+    internal void DrawNexusContents()
     {
         if (!ImGui.BeginTabBar("###VieriCombatSuiteTabs")) return;
         if (ImGui.BeginTabItem("Suggestions")) { DrawSuggestions(); ImGui.EndTabItem(); }
@@ -56,8 +58,7 @@ internal sealed class SettingsWindow : Window
         if (cfg.WindowHotkey != VirtualKey.NO_KEY && !cfg.WindowHotkeyControl && !cfg.WindowHotkeyShift && !cfg.WindowHotkeyAlt)
             ImGui.TextWrapped("Warning: an unmodified key can also trigger while typing in chat.");
         ImGui.Separator();
-        ImGui.TextWrapped("Rotation ON/OFF (F1 by default) and the other switch shortcuts remain in Switch settings.");
-        if (ImGui.Button("Open Switch keybind settings")) plugin.OpenSwitchSettings();
+        ImGui.TextWrapped("Rotation ON/OFF (F1 by default) and the other switch shortcuts are configured in the Switch tab on this page.");
     }
 
     private void DrawSuggestions()
@@ -96,20 +97,19 @@ internal sealed class SettingsWindow : Window
         changed |= ImGui.Checkbox("Dim actions when target is out of range", ref plugin.Configuration.ShowRangeFade);
         changed |= ImGui.Checkbox("Show nearby enemy count", ref plugin.Configuration.ShowEnemyCount);
         changed |= ImGui.Checkbox("Debug state and parity", ref plugin.Configuration.DebugMode);
-        ImGui.TextWrapped("Hilda-style game icon frames, hotkeys, positional symbols, cooldowns, and multi-action prediction are driven by the same integrated Wrath rules that execute the rotation.");
+        ImGui.TextWrapped("Nexus suggestions use the live decisions produced by stock Wrath Combo, with the familiar Vieri icon frames, hotkeys, positional symbols, cooldowns, and multi-action presentation.");
         if (changed) plugin.Save();
     }
 
     private void DrawRotationEngine()
     {
         var color = plugin.EmbeddedEngineActive ? new Vector4(.35f, 1f, .5f, 1f) : new Vector4(1f, .65f, .2f, 1f);
-        ImGui.TextColored(color, plugin.EmbeddedEngineActive ? "Integrated Wrath engine: ACTIVE" : "Integrated Wrath engine: WAITING");
+        ImGui.TextColored(color, plugin.EmbeddedEngineActive ? "Stock Wrath connection: ACTIVE" : "Stock Wrath connection: WAITING");
         ImGui.TextWrapped(plugin.EngineStatus);
         ImGui.Spacing();
-        if (plugin.EmbeddedEngineActive && ImGui.Button("Open full Rotation Engine settings", new Vector2(280, 34)))
+        if (plugin.EmbeddedEngineActive && ImGui.Button("Open Wrath Combo settings", new Vector2(280, 34)))
             plugin.OpenEngineSettings();
-        ImGui.TextWrapped("All Wrath job presets, advanced options, action replacement, Auto-Rotation, targeting, opener logic, and IPC controls now run inside VieriRotationHelper. Disable the separate Wrath Combo plugin to prevent duplicate action hooks.");
-        ImGui.TextDisabled("Legacy command aliases remain available: /wrath and /wrathcombo");
+        ImGui.TextWrapped("Stock Wrath Combo owns job presets, action replacement, Auto-Rotation, targeting, and opener logic. Nexus reads its live decisions and adds the Vieri presentation without installing a second action hook.");
     }
 
     private void DrawSwitch()
@@ -121,17 +121,17 @@ internal sealed class SettingsWindow : Window
         if (ImGui.Checkbox("Show the movable switch", ref show)) { cfg.ShowWindow = show; plugin.Save(); }
         ImGui.TextWrapped(cfg.BlockAutomatedMovement ? "Manual Movement / Targeting Only is ON." : "Manual Movement / Targeting Only is OFF.");
         ImGui.TextWrapped(cfg.CombatOnlyRotation ? "In Combat Only is ON." : "In Combat Only is OFF.");
-        if (ImGui.Button("Open full Switch settings", new Vector2(240, 34))) plugin.OpenSwitchSettings();
-        ImGui.TextDisabled("Legacy commands remain available: /wrathswitch and /ws");
+        ImGui.Separator();
+        plugin.DrawSwitchSettings();
     }
 
     private static void DrawIntegrations()
     {
         ImGui.TextColored(new Vector4(.35f, 1f, .5f, 1f), "Compatibility interfaces are enabled");
-        ImGui.BulletText("WrathCombo.* IPC contracts for AutoDuty, BossMod, Avarice, and other clients");
-        ImGui.BulletText("WrathSwitch.BeginAutomation for VieriCodex and VieriAutoDuty");
-        ImGui.BulletText("Existing Wrath commands and automation lease behavior");
+        ImGui.BulletText("Stock Wrath Combo remains the single rotation and action-hook provider");
+        ImGui.BulletText("AutoDuty and other clients continue using WrathCombo IPC directly");
+        ImGui.BulletText("Nexus owns Vieri suggestions, switch controls, and automation coordination");
         ImGui.Spacing();
-        ImGui.TextWrapped("VieriRotationHelper is now the provider. After installing it, disable the separate Wrath Combo and VieriWrathSwitch plugins, then reload plugins once so only one action hook and one switch provider exist.");
+        ImGui.TextWrapped("Keep stock Wrath Combo enabled. The separate VieriRotationHelper and VieriWrathSwitch plugins should remain disabled because their custom behavior now runs inside Nexus.");
     }
 }

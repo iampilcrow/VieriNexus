@@ -121,6 +121,27 @@ internal sealed class EmbeddedModuleManager : IDisposable
         return true;
     }
 
+    internal bool DrawInlineSettings(string id)
+    {
+        if (!loaded.TryGetValue(id, out LoadedModule? module))
+            return false;
+        try
+        {
+            MethodInfo? draw = module.Plugin.GetType().GetMethod(
+                "DrawNexusSettings",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (draw is null)
+                return false;
+            draw.Invoke(module.Plugin, null);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "Nexus could not draw inline settings for embedded module {Module}", id);
+            return false;
+        }
+    }
+
     public void Dispose()
     {
         foreach (string id in loaded.Keys.ToArray())

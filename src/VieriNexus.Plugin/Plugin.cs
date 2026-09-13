@@ -383,7 +383,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriNexus. Pages: plugins, routes, progression, queue, atlas, migration. Controls: status, start, resume, last, stop, maintenance, repair, extract, register, coffers, desynth, gcturnin, storage, sell, play <route>, preview <route>.",
+            HelpMessage = "Open VieriNexus. Pages: plugins, combat, routes, automation, atlas, dependencies. Controls: status, start, resume, last, stop, maintenance, repair, extract, register, coffers, desynth, gcturnin, storage, sell, play <route>, preview <route>.",
         });
         CommandManager.AddHandler(ShortCommand, new CommandInfo(OnCommand)
         {
@@ -631,6 +631,10 @@ public sealed class Plugin : IDalamudPlugin
                 break;
             case "routes":
                 Configuration.SelectedPage = "Routes & Navigation";
+                mainWindow.IsOpen = true;
+                break;
+            case "combat":
+                Configuration.SelectedPage = "Combat";
                 mainWindow.IsOpen = true;
                 break;
             case "progression":

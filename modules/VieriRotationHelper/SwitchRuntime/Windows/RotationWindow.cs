@@ -13,7 +13,7 @@ internal sealed class RotationWindow : Window
     private Vector2 currentSize;
 
     public RotationWindow(Plugin plugin)
-        : base(plugin.IsEmbedded ? "VieriRotationHelper Switch###WrathSwitchStatus" : "VieriWrathSwitch###WrathSwitchStatus")
+        : base(plugin.IsEmbedded ? "Nexus Rotation Switch###WrathSwitchStatus" : "VieriWrathSwitch###WrathSwitchStatus")
     {
         this.plugin = plugin;
         lastLockState = plugin.Configuration.LockWindow;

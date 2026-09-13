@@ -8,7 +8,7 @@ not loaded into Nexus's own assembly context.
 
 | Nexus page | Internal runtime | Replaces after local preparation |
 | --- | --- | --- |
-| Combat | Rotation suggestions, embedded Wrath engine, switch overlay, and hotkeys | VieriRotationHelper |
+| Combat | Rotation suggestions, stock-Wrath presentation, switch overlay, and hotkeys | VieriRotationHelper |
 | Combat | Positional forecasts, profiles, encounter feedback, and overlay | VieriAvarice |
 | Custom UI | Complete customized HUD, profiles, highlighting, nameplates, markers, party roles, and ready checks | VieriDelvUI |
 | Market | Owned-retainer matching, guarded repricing, pacing, confirmation, and verification | VieriAutoMarket |
@@ -32,7 +32,11 @@ Nexus forwards the real Dalamud services required by each module, but supplies a
 module-scoped plugin interface, UI callback surface, assembly directory, and
 configuration directory. Draw callbacks continue normally. Open-config and
 open-main callbacks are captured so opening Nexus does not open every embedded
-window; each module's settings are opened from its owning Nexus page.
+window. Combat's complete Vieri suggestion and switch settings render inside its
+owning Nexus page; the legacy rotation settings command, window hotkey, and switch
+context menu navigate back to that page instead of creating a predecessor window.
+Stock Wrath's own engine settings remain stock-owned and open only when explicitly
+requested from the Nexus page.
 
 A module never runs beside its standalone predecessor. While the predecessor is
 loaded, Nexus prepares settings and reports that it is waiting. When the user
@@ -68,8 +72,11 @@ Nexus release package.
 The consolidation does not copy general-purpose provider engines into Nexus.
 Stock Questionable owns ordinary quest execution; Nexus layers only its five
 validated route corrections when the exact matching route bundle is present.
-Stock AutoDuty owns ordinary duty execution. Boss Mod, vnavmesh, Lifestream, and
-Fast Job Switcher remain external providers behind their narrow contracts.
+Stock AutoDuty owns ordinary duty execution, but Nexus is the sole duty-control
+presentation. While the provider is ready, Nexus keeps AutoDuty's stock overlay
+disabled and selects stock Wrath Combo for AutoDuty's rotation integration. Boss
+Mod, vnavmesh, Lifestream, and Fast Job Switcher remain external providers behind
+their narrow contracts.
 Provider updates therefore do not require rebuilding Nexus unless their public
 contract changes or a guarded compatibility check detects a real incompatibility.
 

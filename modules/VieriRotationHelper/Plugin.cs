@@ -1,4 +1,5 @@
 using Dalamud.Game.Command;
+using Dalamud.Bindings.ImGui;
 using Dalamud.IoC;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
@@ -32,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PositionalGuidance positionalGuidance;
     private readonly WrathSwitch.Plugin? switchRuntime;
     private readonly GameplayOverlayGate gameplayOverlayGate = new();
+    private readonly bool nexusHosted;
     internal OverlayFonts Fonts { get; }
     internal HotkeyResolver Hotkeys { get; }
     internal WindowHotkeyController WindowHotkey { get; }
@@ -40,6 +42,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin()
     {
+        nexusHosted = PluginInterface.GetType().Assembly.IsDynamic;
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
         WindowHotkey = new WindowHotkeyController(this);
@@ -63,15 +66,21 @@ public sealed class Plugin : IDalamudPlugin
         windows.AddWindow(new RotationBarWindow(this, coordinator, display, RotationMode.Aoe));
         windows.AddWindow(new RotationBarWindow(this, coordinator, display, RotationMode.Dynamic));
         settingsWindow = new SettingsWindow(this, wrath);
-        windows.AddWindow(settingsWindow);
+        if (!nexusHosted)
+            windows.AddWindow(settingsWindow);
 
         CommandManager.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open VieriRotationHelper settings. Use '/vrh toggle' to show or hide suggestions.",
+            HelpMessage = nexusHosted
+                ? "Open Nexus Combat settings. Use '/vrh toggle' to show or hide rotation suggestions."
+                : "Open VieriRotationHelper settings. Use '/vrh toggle' to show or hide suggestions.",
         });
         PluginInterface.UiBuilder.Draw += Draw;
-        PluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
-        PluginInterface.UiBuilder.OpenMainUi += OpenSettings;
+        if (!nexusHosted)
+        {
+            PluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
+            PluginInterface.UiBuilder.OpenMainUi += OpenSettings;
+        }
 
         if (separateSwitchLoaded)
             ChatGui.Print("[VieriRotationHelper] The separate VieriWrathSwitch remains authoritative for its switch overlay. Nexus suggestions continue to follow stock Wrath Combo.");
@@ -81,8 +90,11 @@ public sealed class Plugin : IDalamudPlugin
     {
         PluginInterface.UiBuilder.Draw -= Draw;
         WindowHotkey.CancelCapture();
-        PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
-        PluginInterface.UiBuilder.OpenMainUi -= OpenSettings;
+        if (!nexusHosted)
+        {
+            PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
+            PluginInterface.UiBuilder.OpenMainUi -= OpenSettings;
+        }
         CommandManager.RemoveHandler(Command);
         windows.RemoveAllWindows();
         switchRuntime?.Dispose();
@@ -123,9 +135,35 @@ public sealed class Plugin : IDalamudPlugin
         WindowHotkey.Update();
         windows.Draw();
     }
-    internal void ToggleSettings() => settingsWindow.IsOpen = !settingsWindow.IsOpen;
-    internal void OpenSettings() => settingsWindow.IsOpen = true;
-    internal void OpenEngineSettings() => engine.OpenSettings();
+    internal void ToggleSettings()
+    {
+        if (nexusHosted)
+            CommandManager.ProcessCommand("/nexus combat");
+        else
+            settingsWindow.IsOpen = !settingsWindow.IsOpen;
+    }
+    internal void OpenSettings()
+    {
+        if (nexusHosted)
+            CommandManager.ProcessCommand("/nexus combat");
+        else
+            settingsWindow.IsOpen = true;
+    }
+    internal void DrawNexusSettings() => settingsWindow.DrawNexusContents();
+    internal void OpenEngineSettings()
+    {
+        if (engine.UsesStockWrath)
+            CommandManager.ProcessCommand("/wrath");
+        else
+            engine.OpenSettings();
+    }
+    internal void DrawSwitchSettings()
+    {
+        if (switchRuntime != null)
+            switchRuntime.DrawSettingsInline();
+        else
+            ImGui.TextWrapped("Disable the separate VieriWrathSwitch plugin to let Nexus load and own these switch controls.");
+    }
     internal void OpenSwitchSettings()
     {
         if (switchRuntime != null)

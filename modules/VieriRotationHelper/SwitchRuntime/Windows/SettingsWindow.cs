@@ -9,7 +9,7 @@ internal sealed class SettingsWindow : Window
     private readonly Plugin plugin;
 
     public SettingsWindow(Plugin plugin)
-        : base(plugin.IsEmbedded ? "VieriRotationHelper · Switch###WrathSwitchSettings" : "VieriWrathSwitch Settings###WrathSwitchSettings", ImGuiWindowFlags.NoCollapse)
+        : base(plugin.IsEmbedded ? "Nexus Combat · Rotation Switch###WrathSwitchSettings" : "VieriWrathSwitch Settings###WrathSwitchSettings", ImGuiWindowFlags.NoCollapse)
     {
         this.plugin = plugin;
         Size = new Vector2(570, 540);
@@ -21,7 +21,9 @@ internal sealed class SettingsWindow : Window
         };
     }
 
-    public override void Draw()
+    public override void Draw() => DrawInline();
+
+    internal void DrawInline()
     {
         var cfg = plugin.Configuration;
         var stateColor = !plugin.WrathAvailable
@@ -59,7 +61,7 @@ internal sealed class SettingsWindow : Window
         var blockMovement = cfg.BlockAutomatedMovement;
         if (ImGui.Checkbox("Manual Movement / Targeting Only", ref blockMovement))
             plugin.SetMovementSafety(blockMovement);
-        ImGui.TextWrapped("When ON, VieriCodex, AutoDuty, BossMod, and navmesh movement, targeting, and automatic camera steering are paused. Wrath Auto-Rotation stays available for the target you select. Turn it OFF to let the paused task continue immediately.");
+        ImGui.TextWrapped("When ON, Nexus, AutoDuty, Boss Mod, and navmesh movement, targeting, and automatic camera steering are paused. Wrath Auto-Rotation stays available for the target you select. Turn it OFF to let the paused task continue immediately.");
         var combatOnly = cfg.CombatOnlyRotation;
         if (ImGui.Checkbox("In Combat Only", ref combatOnly))
             plugin.SetCombatOnly(combatOnly);
@@ -75,7 +77,7 @@ internal sealed class SettingsWindow : Window
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.TextUnformatted("Keybind");
-        ImGui.TextWrapped("The keybind is read directly from FFXIV's key-state buffer and works while the game is focused. Choose an unused combination; VieriWrathSwitch does not consume the key, so FFXIV can still respond to the same bind.");
+        ImGui.TextWrapped("The keybind is read directly from FFXIV's key-state buffer and works while the game is focused. Choose an unused combination; Nexus does not consume the key, so FFXIV can still respond to the same bind.");
         ImGui.TextUnformatted($"Current: {plugin.HotkeyName}");
 
         if (plugin.IsCapturingHotkey)
@@ -112,7 +114,7 @@ internal sealed class SettingsWindow : Window
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextWrapped("To remove Wrath Combo's original entry: open Dalamud Settings → Server Info Bar and disable the “Wrath Combo” entry. VieriWrathSwitch does not take ownership of another plugin's server-bar item.");
+        ImGui.TextWrapped("To remove Wrath Combo's original entry: open Dalamud Settings → Server Info Bar and disable the “Wrath Combo” entry. Nexus does not take ownership of another plugin's server-bar item.");
         ImGui.TextDisabled("Commands: /ws, /ws toggle, /ws on, /ws off, /ws safe, /ws combat, /ws bind, /ws lock, /ws unlock");
     }
 }

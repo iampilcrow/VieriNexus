@@ -3994,7 +3994,14 @@ internal sealed class NexusWindow : Window
         bool enabled = plugin.Configuration.IsEmbeddedModuleEnabled(module.Id);
         if (ImGui.Checkbox($"Enable inside Nexus##embedded-{module.Id}", ref enabled))
             embeddedModules.SetEnabled(module.Id, enabled);
-        if (module.CanOpenSettings)
+        if (module.CanOpenSettings && module.Id.Equals("rotation", StringComparison.OrdinalIgnoreCase))
+        {
+            ImGui.Spacing();
+            if (ImGui.CollapsingHeader("Rotation settings###nexus-inline-rotation", ImGuiTreeNodeFlags.DefaultOpen) &&
+                !embeddedModules.DrawInlineSettings(module.Id))
+                TextWrapped(NexusTheme.Amber, "Nexus Rotation settings are temporarily unavailable.");
+        }
+        else if (module.CanOpenSettings)
         {
             ImGui.SameLine();
             if (ImGui.Button($"Open settings##embedded-open-{module.Id}"))
