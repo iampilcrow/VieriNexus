@@ -25,6 +25,7 @@ internal sealed class ProgressAtlasService
     private readonly uint[] aetheryteIds;
     private readonly uint[] aetherCurrentIds;
     private readonly uint[] achievementIds;
+    private readonly AchievementAtlasTarget[] achievementTargets;
     private readonly MapDiscoveryRegion[] mapDiscoveryRegions;
     private readonly AetheryteAtlasTarget[] aetheryteTargets;
     private readonly AetherCurrentAtlasTarget[] aetherCurrentTargets;
@@ -39,6 +40,11 @@ internal sealed class ProgressAtlasService
     {
         this.clientState = clientState;
         this.playerState = playerState;
+        Dictionary<uint, TerritoryAtlasInfo> territories = dataManager.GetExcelSheet<TerritoryType>()
+            .Where(row => row.RowId > 0)
+            .ToDictionary(row => row.RowId, row => new TerritoryAtlasInfo(
+                row.PlaceName.ValueNullable?.Name.ToString() ?? $"Territory {row.RowId}",
+                ExpansionName(row.ExVersion.RowId)));
         Aetheryte[] aetherytes = dataManager.GetExcelSheet<Aetheryte>()
             .Where(row => row.RowId > 0 && row.Territory.RowId > 0)
             .Where(row => row.IsAetheryte ||
@@ -59,7 +65,9 @@ internal sealed class ProgressAtlasService
                     : value.Row.AethernetName.ValueNullable?.Name.ToString() ?? $"Aethernet shard {value.Row.RowId}",
                 value.Row.Territory.RowId,
                 new Vector3(value.Level!.Value.X, value.Level.Value.Y, value.Level.Value.Z),
-                !value.Row.IsAetheryte))
+                !value.Row.IsAetheryte,
+                territories.GetValueOrDefault(value.Row.Territory.RowId)?.Name ?? $"Territory {value.Row.Territory.RowId}",
+                territories.GetValueOrDefault(value.Row.Territory.RowId)?.Expansion ?? "Other"))
             .OrderBy(target => target.TerritoryId)
             .ThenBy(target => target.Name, StringComparer.CurrentCulture)
             .ToArray();
@@ -71,7 +79,12 @@ internal sealed class ProgressAtlasService
             .Distinct()
             .Order()
             .ToArray();
-        aetherCurrentTargets = LoadAetherCurrentTargets();
+        aetherCurrentTargets = LoadAetherCurrentTargets()
+            .Select(target => target with
+            {
+                TerritoryName = territories.GetValueOrDefault(target.TerritoryId)?.Name ?? $"Territory {target.TerritoryId}",
+                Expansion = territories.GetValueOrDefault(target.TerritoryId)?.Expansion ?? "Other",
+            }).ToArray();
         aetherCurrentQuestTargets = dataManager.GetExcelSheet<AetherCurrentCompFlgSet>()
             .Where(row => row.RowId > 0 && row.Territory.IsValid)
             .SelectMany(row => row.AetherCurrents
@@ -86,21 +99,37 @@ internal sealed class ProgressAtlasService
                         questId,
                         string.IsNullOrWhiteSpace(name) ? $"Quest {questId}" : name,
                         quest.ClassJobLevel[0],
-                        row.Territory.RowId);
+                        row.Territory.RowId,
+                        territories.GetValueOrDefault(row.Territory.RowId)?.Name ?? $"Territory {row.Territory.RowId}",
+                        territories.GetValueOrDefault(row.Territory.RowId)?.Expansion ?? "Other");
                 }))
             .DistinctBy(target => target.QuestId)
             .OrderBy(target => target.TerritoryId)
             .ThenBy(target => target.RequiredLevel)
             .ThenBy(target => target.QuestId)
             .ToArray();
-        achievementIds = dataManager.GetExcelSheet<SheetAchievement>()
+        SheetAchievement[] achievementRows = dataManager.GetExcelSheet<SheetAchievement>()
             .Where(row => row.RowId > 0 && !row.Name.IsEmpty && row.AchievementCategory.RowId > 0)
             .Where(row => row.AchievementCategory.Value.AchievementKind.RowId != 9)
+            .ToArray();
+        achievementIds = achievementRows
             .Select(row => row.RowId)
             .Distinct()
             .Order()
             .ToArray();
-        mapDiscoveryRegions = BuildMapDiscoveryRegions(dataManager);
+        achievementTargets = achievementRows.Select(row => new AchievementAtlasTarget(
+                row.RowId,
+                row.Name.ToString(),
+                row.AchievementCategory.Value.Name.ToString()))
+            .OrderBy(target => target.Category, StringComparer.CurrentCulture)
+            .ThenBy(target => target.Name, StringComparer.CurrentCulture)
+            .ToArray();
+        mapDiscoveryRegions = BuildMapDiscoveryRegions(dataManager)
+            .Select(target => target with
+            {
+                TerritoryName = territories.GetValueOrDefault(target.TerritoryId)?.Name ?? $"Territory {target.TerritoryId}",
+                Expansion = territories.GetValueOrDefault(target.TerritoryId)?.Expansion ?? "Other",
+            }).ToArray();
         huntingLogCatalog = LoadHuntingLogCatalog();
         current = Empty(DateTimeOffset.MinValue);
     }
@@ -111,6 +140,7 @@ internal sealed class ProgressAtlasService
     internal IReadOnlyList<AetherCurrentAtlasTarget> AetherCurrentTargets => aetherCurrentTargets;
     internal IReadOnlyList<AetherCurrentQuestAtlasTarget> AetherCurrentQuestTargets => aetherCurrentQuestTargets;
     internal IReadOnlyList<MapDiscoveryRegion> ExplorationTargets => mapDiscoveryRegions;
+    internal IReadOnlyList<AchievementAtlasTarget> AchievementTargets => achievementTargets;
 
     internal static unsafe bool IsAetheryteUnlocked(uint id)
     {
@@ -128,6 +158,12 @@ internal sealed class ProgressAtlasService
     {
         MapDiscoveryManager* manager = MapDiscoveryManager.Instance();
         return manager != null && manager->IsMapRegionDiscovered(mapId, discoveryId);
+    }
+
+    internal static unsafe bool IsAchievementComplete(uint id)
+    {
+        AchievementState* achievements = AchievementState.Instance();
+        return achievements != null && achievements->IsLoaded() && achievements->IsComplete((int)id);
     }
 
     internal void Update(DateTimeOffset now)
@@ -444,7 +480,9 @@ internal sealed class ProgressAtlasService
         string Name,
         uint TerritoryId,
         Vector3 Position,
-        bool IsShard);
+        bool IsShard,
+        string TerritoryName,
+        string Expansion);
 
     internal sealed record AetherCurrentAtlasTarget(
         uint AetherCurrentId,
@@ -455,6 +493,8 @@ internal sealed class ProgressAtlasService
         float Z)
     {
         internal Vector3 Position => new(X, Y, Z);
+        internal string TerritoryName { get; init; } = string.Empty;
+        internal string Expansion { get; init; } = "Other";
     }
 
     internal sealed record AetherCurrentQuestAtlasTarget(
@@ -462,14 +502,35 @@ internal sealed class ProgressAtlasService
         uint QuestId,
         string QuestName,
         int RequiredLevel,
-        uint TerritoryId);
+        uint TerritoryId,
+        string TerritoryName,
+        string Expansion);
 
     internal sealed record MapDiscoveryRegion(
         uint TerritoryId,
         uint MapId,
         byte DiscoveryId,
         string Name,
-        IReadOnlyList<Vector3> Positions);
+        IReadOnlyList<Vector3> Positions)
+    {
+        internal string TerritoryName { get; init; } = string.Empty;
+        internal string Expansion { get; init; } = "Other";
+    }
+
+    internal sealed record AchievementAtlasTarget(uint Id, string Name, string Category);
+
+    private sealed record TerritoryAtlasInfo(string Name, string Expansion);
+
+    private static string ExpansionName(uint id) => id switch
+    {
+        0 => "A Realm Reborn",
+        1 => "Heavensward",
+        2 => "Stormblood",
+        3 => "Shadowbringers",
+        4 => "Endwalker",
+        5 => "Dawntrail",
+        _ => "Other",
+    };
 
     private sealed record MapDiscoveryRegionBuilder(
         uint TerritoryId,

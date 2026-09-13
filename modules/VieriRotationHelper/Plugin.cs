@@ -73,8 +73,8 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
         PluginInterface.UiBuilder.OpenMainUi += OpenSettings;
 
-        if (wrath.IsLoaded || separateSwitchLoaded)
-            ChatGui.PrintError("[VieriRotationHelper] Disable the separate Wrath Combo and VieriWrathSwitch plugins, then reload plugins once to activate the complete integrated suite. Your old settings files are preserved.");
+        if (separateSwitchLoaded)
+            ChatGui.Print("[VieriRotationHelper] The separate VieriWrathSwitch remains authoritative for its switch overlay. Nexus suggestions continue to follow stock Wrath Combo.");
     }
 
     public void Dispose()

@@ -7,7 +7,7 @@ namespace VieriNexus;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 9;
+    public int Version { get; set; } = 10;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
@@ -16,6 +16,8 @@ public sealed class Configuration : IPluginConfiguration
     public bool ShowOperationsOverlay { get; set; }
     public bool LockOperationsOverlay { get; set; }
     public bool OperationsOverlayTransparent { get; set; }
+    public bool HideOperationsOverlayWhenStopped { get; set; }
+    public bool OperationsOverlayAnchorBottom { get; set; }
     public bool ShowOperationsStatus { get; set; } = true;
     public bool ManageQuestionableRouteCorrections { get; set; } = true;
     public bool PendingCodexQueuePromotion { get; set; }
@@ -38,6 +40,8 @@ public sealed class Configuration : IPluginConfiguration
         EmbeddedModules = new Dictionary<string, bool>(EmbeddedModules ?? [], StringComparer.OrdinalIgnoreCase);
         if (storedVersion < 8 && LegacyImports.TryGetValue("codex", out LegacyImportState? codex) && codex.Activated)
             PendingCodexQueuePromotion = true;
+        if (storedVersion < 10)
+            AppliedOperationsReceiptId = null;
         foreach (CharacterConfiguration character in Characters.Values)
         {
             character.Progression ??= new ProgressionDraftConfiguration();
@@ -45,7 +49,7 @@ public sealed class Configuration : IPluginConfiguration
             ProgressionQueuePolicy.Normalize(character.ProgressionQueue);
             character.Atlas ??= new AtlasAutomationConfiguration();
         }
-        Version = 9;
+        Version = 10;
     }
 
     public CharacterConfiguration ForCharacter(string key)

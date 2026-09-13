@@ -106,7 +106,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
 
-        dependencyService = new DependencyService(PluginInterface);
+        dependencyService = new DependencyService(PluginInterface, CommandManager);
         var legacyInventory = new LegacyConfigurationInventory(PluginInterface);
         embeddedModules = new EmbeddedModuleManager(
             PluginInterface,
@@ -694,6 +694,8 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.ShowOperationsOverlay = profile.Overlay.ShowOverlay;
         Configuration.LockOperationsOverlay = profile.Overlay.LockPosition;
         Configuration.OperationsOverlayTransparent = profile.Overlay.TransparentBackground;
+        Configuration.HideOperationsOverlayWhenStopped = profile.Overlay.HideWhenStopped;
+        Configuration.OperationsOverlayAnchorBottom = profile.Overlay.AnchorBottom;
         Configuration.ShowOperationsStatus = profile.Overlay.ShowDutyStatus || profile.Overlay.ShowActionStatus;
         Configuration.AppliedOperationsReceiptId = receipt.Id;
         Configuration.AppliedOperationsCharacterId = PlayerState.ContentId;

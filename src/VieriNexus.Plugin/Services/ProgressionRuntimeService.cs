@@ -166,6 +166,9 @@ internal sealed class ProgressionRuntimeService
     internal ProgressionActionResult StopAfterCurrentDuty() => coordinator?.StopAfterCurrentDuty()
         ?? new ProgressionActionResult(false, "No Progression goal is loaded.");
 
+    internal ProgressionActionResult PauseNow() => coordinator?.PauseNow()
+        ?? new ProgressionActionResult(false, "No Progression goal is loaded.");
+
     internal ProgressionActionResult StopNow() => coordinator?.StopNow()
         ?? new ProgressionActionResult(false, "No Progression goal is loaded.");
 

@@ -96,6 +96,8 @@ internal sealed class ProgressAtlasActionService
         !ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId) &&
         target.Positions.Count > 0 && IsTerritoryAccessible(target.TerritoryId));
 
+    internal bool CanReachTerritory(uint territoryId) => IsTerritoryAccessible(territoryId);
+
     internal bool StartNextAetheryte(out string result)
     {
         ProgressAtlasService.AetheryteAtlasTarget? target = atlas.AetheryteTargets
@@ -112,6 +114,21 @@ internal sealed class ProgressAtlasActionService
             return false;
         }
 
+        return StartAetheryte(target, out result);
+    }
+
+    internal bool StartAetheryte(ProgressAtlasService.AetheryteAtlasTarget target, out string result)
+    {
+        if (ProgressAtlasService.IsAetheryteUnlocked(target.Id))
+        {
+            result = $"{target.Name} is already attuned.";
+            return false;
+        }
+        if (!IsTerritoryAccessible(target.TerritoryId))
+        {
+            result = $"{target.Name} is not reachable with the character's currently unlocked travel network.";
+            return false;
+        }
         return Start(new Objective(
             AtlasActionKind.Aetheryte,
             target.IsShard ? $"Attune {target.Name}" : $"Attune {target.Name} Aetheryte",
@@ -140,9 +157,24 @@ internal sealed class ProgressAtlasActionService
             return false;
         }
 
+        return StartFieldCurrent(target, out result);
+    }
+
+    internal bool StartFieldCurrent(ProgressAtlasService.AetherCurrentAtlasTarget target, out string result)
+    {
+        if (ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId))
+        {
+            result = "That Aether Current is already collected.";
+            return false;
+        }
+        if (!IsTerritoryAccessible(target.TerritoryId))
+        {
+            result = $"{target.TerritoryName} is not reachable with the character's currently unlocked travel network.";
+            return false;
+        }
         return Start(new Objective(
             AtlasActionKind.FieldAetherCurrent,
-            $"Collect field Aether Current {target.AetherCurrentId}",
+            $"Collect field Aether Current in {target.TerritoryName}",
             target.TerritoryId,
             target.Position,
             target.DataId,
@@ -172,6 +204,24 @@ internal sealed class ProgressAtlasActionService
         return StartQuest(quest, out result);
     }
 
+    internal bool StartAetherCurrentQuest(ProgressAtlasService.AetherCurrentQuestAtlasTarget target, out string result)
+    {
+        if (ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId))
+        {
+            result = $"{target.QuestName} is already complete.";
+            return false;
+        }
+        ProgressionQuestCandidate? quest = questProvider
+            .EligibleAetherCurrentQuests([target], objectTable.LocalPlayer?.Level ?? 0)
+            .FirstOrDefault();
+        if (quest is null)
+        {
+            result = $"{target.QuestName} is not accepted or currently unlockable with a supported stock Questionable path.";
+            return false;
+        }
+        return StartQuest(quest, out result);
+    }
+
     internal bool StartNextExploration(out string result)
     {
         var candidates = atlas.ExplorationTargets
@@ -190,15 +240,30 @@ internal sealed class ProgressAtlasActionService
             return false;
         }
 
+        return StartExploration(candidates.Target, candidates.Position, out result);
+    }
+
+    internal bool StartExploration(ProgressAtlasService.MapDiscoveryRegion target, Vector3 position, out string result)
+    {
+        if (ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId))
+        {
+            result = $"{target.Name} is already discovered.";
+            return false;
+        }
+        if (!IsTerritoryAccessible(target.TerritoryId))
+        {
+            result = $"{target.TerritoryName} is not reachable with the character's currently unlocked travel network.";
+            return false;
+        }
         return Start(new Objective(
             AtlasActionKind.Exploration,
-            $"Explore {candidates.Target.Name}",
-            candidates.Target.TerritoryId,
-            candidates.Position,
+            $"Explore {target.Name}",
+            target.TerritoryId,
+            position,
             0,
             0,
-            candidates.Target.MapId,
-            candidates.Target.DiscoveryId,
+            target.MapId,
+            target.DiscoveryId,
             3.5f), out result);
     }
 

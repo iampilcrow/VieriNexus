@@ -18,6 +18,9 @@ public static class NexusDependencyCatalog
         new("vnavmesh", "vnavmesh", "Navigation", "Builds navigation meshes and moves safely within the loaded zone.", true, ["vnavmesh"], "https://puni.sh/api/repository/veyn"),
         new("lifestream", "Lifestream", "Travel", "Handles Aetheryte, Aethernet, world, and local travel services.", true, ["Lifestream"], "https://raw.githubusercontent.com/NightmareXIV/MyDalamudPlugins/main/pluginmaster.json"),
         new("textadvance", "TextAdvance", "Questing", "Accepts and turns in quests and advances supported dialogue and cutscenes.", true, ["TextAdvance"], "https://raw.githubusercontent.com/NightmareXIV/MyDalamudPlugins/main/pluginmaster.json"),
+        new("questionable", "Questionable", "Quest Execution", "Runs stock quest routes while Nexus chooses objectives, applies its five protected route corrections, and verifies completion.", true, ["Questionable"], "https://love.puni.sh/ment.json", "Questionable"),
+        new("autoduty", "AutoDuty", "Duty Execution", "Runs one Nexus-selected supported duty at a time while Nexus owns goals, maintenance, gear, and the replacement overlay.", true, ["AutoDuty"], "https://puni.sh/api/repository/erdelf", "AutoDuty"),
+        new("wrath", "Wrath Combo", "Rotations", "Provides the stock auto-rotation engine used by AutoDuty; Nexus reads its live decisions for Vieri suggestions and controls it only through IPC.", true, ["WrathCombo"], "https://love.puni.sh/ment.json", "Wrath Combo"),
         new("marketbuddy", "Marketbuddy", "Market", "Applies configured retainer listing price changes for Nexus market automation.", true, ["Marketbuddy"], "https://love.puni.sh/ment.json"),
         new("allagan-market", "Allagan Market", "Market", "Provides market ownership, pricing, scan state, and undercut intelligence.", true, ["AllaganMarket"], null, "Allagan Market"),
 
@@ -36,6 +39,6 @@ public static class NexusDependencyCatalog
         new("select-string", "SelectString", "Questing", "Provides keyboard selection for numbered dialogue and menu choices used by supported routes.", false, ["SelectString"], "https://raw.githubusercontent.com/NightmareXIV/MyDalamudPlugins/main/pluginmaster.json"),
         new("quest-map", "QuestMap", "Progression", "Adds quest and reward discovery when reviewing progression options.", false, ["QuestMap"]),
         new("yes-already", "YesAlready", "Interactions", "Provides compatible confirmation automation; Nexus pauses it during flows that require exclusive control.", false, ["YesAlready"], "https://love.puni.sh/ment.json"),
-        new("skippy", "Skippy", "Duty Playback", "Adds optional supported MSQ duty playback skipping detected by the duty module.", false, ["Skippy"]),
+        new("skippy", "Skippy", "Duty Playback", "Adds optional supported MSQ duty playback skipping detected by the duty module.", false, ["Skippy"], "https://puni.sh/api/repository/boxu", "Skippy"),
     ];
 }

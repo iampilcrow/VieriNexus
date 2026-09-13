@@ -1,5 +1,6 @@
 using Dalamud.Interface;
 using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
 using VieriNexus.Application;
 
 namespace VieriNexus.Services;
@@ -25,7 +26,7 @@ internal sealed record PluginPresence(
     string? Version,
     string? DisplayName = null);
 
-internal sealed class DependencyService(IDalamudPluginInterface pluginInterface)
+internal sealed class DependencyService(IDalamudPluginInterface pluginInterface, ICommandManager commandManager)
 {
     internal IReadOnlyList<DependencyStatus> Snapshot()
     {
@@ -76,5 +77,12 @@ internal sealed class DependencyService(IDalamudPluginInterface pluginInterface)
             : PluginInstallerOpenKind.InstalledPlugins;
         pluginInterface.OpenPluginInstallerTo(kind,
             dependency.Definition.InstallerSearch ?? dependency.Definition.DisplayName);
+    }
+
+    internal void OpenRepositorySetup(DependencyStatus dependency)
+    {
+        if (!string.IsNullOrWhiteSpace(dependency.Definition.RepositoryUrl))
+            Dalamud.Bindings.ImGui.ImGui.SetClipboardText(dependency.Definition.RepositoryUrl);
+        commandManager.ProcessCommand("/xlsettings");
     }
 }

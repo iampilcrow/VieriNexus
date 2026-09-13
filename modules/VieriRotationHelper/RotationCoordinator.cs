@@ -59,7 +59,7 @@ internal sealed class RotationCoordinator(
 
         RotationSuggestion lead;
         var parity = false;
-        if (wrath.IsLoaded && sourceAction != 0 && embeddedLead.ActionId != 0 &&
+        if (wrath.IsLoaded && embeddedLead.Source != SuggestionSource.LiveWrath && sourceAction != 0 && embeddedLead.ActionId != 0 &&
             wrath.GetAdjusted(sourceAction) != wrath.GetNativeAdjusted(sourceAction))
         {
             var exact = wrath.GetAdjusted(sourceAction);

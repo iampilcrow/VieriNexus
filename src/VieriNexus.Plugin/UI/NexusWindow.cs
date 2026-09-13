@@ -14,11 +14,8 @@ internal sealed class NexusWindow : Window
     private static readonly (string Group, string Id, string Label)[] Navigation =
     [
         ("OVERVIEW", "Home", "Home"),
-        ("OVERVIEW", "Overview", "Control Center"),
         ("OVERVIEW", "Automation", "Automation"),
-        ("OVERVIEW", "Progression", "Progression"),
         ("OVERVIEW", "Progress Atlas", "Atlas"),
-        ("OVERVIEW", "Queue", "Queue"),
         ("OVERVIEW", "Plugins", "Plugins"),
         ("MODULES", "Combat", "Combat"),
         ("MODULES", "Gear & Inventory", "Gear"),
@@ -27,7 +24,6 @@ internal sealed class NexusWindow : Window
         ("MODULES", "Custom UI", "Custom UI"),
         ("MODULES", "Communications", "Communications"),
         ("SETUP", "Dependencies", "Dependencies"),
-        ("SETUP", "Migration", "Migration"),
         ("SETUP", "Settings", "Settings"),
     ];
 
@@ -69,6 +65,8 @@ internal sealed class NexusWindow : Window
     private int selectedBuiltInRoute;
     private string progressionMessage = string.Empty;
     private string progressAtlasMessage = string.Empty;
+    private string progressAtlasSearch = string.Empty;
+    private bool progressAtlasRemainingOnly = true;
     private GearUpgradePreview? gearUpgradePreview;
     private readonly HashSet<int> selectedGearUpgradeSlots = [];
     private string gearShoppingMessage = string.Empty;
@@ -151,8 +149,14 @@ internal sealed class NexusWindow : Window
         NexusTheme.Push();
         if (plugin.Configuration.SelectedPage == "Command Center")
             plugin.Configuration.SelectedPage = "Plugins";
+        if (plugin.Configuration.SelectedPage == "Overview")
+            plugin.Configuration.SelectedPage = "Home";
+        if (plugin.Configuration.SelectedPage is "Progression" or "Queue")
+            plugin.Configuration.SelectedPage = "Automation";
+        if (plugin.Configuration.SelectedPage == "Migration")
+            plugin.Configuration.SelectedPage = "Dependencies";
         var setupLocked = !plugin.Configuration.FirstRunComplete || !dependencies.RequiredReady;
-        if (setupLocked && plugin.Configuration.SelectedPage is not ("Dependencies" or "Migration" or "Settings"))
+        if (setupLocked && plugin.Configuration.SelectedPage is not ("Dependencies" or "Settings"))
             plugin.Configuration.SelectedPage = "Dependencies";
     }
 
@@ -190,7 +194,7 @@ internal sealed class NexusWindow : Window
 
             var selected = plugin.Configuration.SelectedPage == item.Id;
             var setupLocked = !plugin.Configuration.FirstRunComplete || !dependencies.RequiredReady;
-            var allowed = !setupLocked || item.Id is "Dependencies" or "Migration" or "Settings";
+            var allowed = !setupLocked || item.Id is "Dependencies" or "Settings";
             if (!allowed)
                 ImGui.BeginDisabled();
             if (selected)
@@ -220,16 +224,17 @@ internal sealed class NexusWindow : Window
         switch (plugin.Configuration.SelectedPage)
         {
             case "Home": DrawHome(); break;
-            case "Overview": DrawOverview(); break;
-            case "Progression": DrawProgression(); break;
-            case "Queue": DrawProgressionQueue(); break;
+            case "Overview": DrawHome(); break;
+            case "Automation": DrawAutomation(); break;
+            case "Progression": DrawAutomation(); break;
+            case "Queue": DrawAutomation(); break;
             case "Progress Atlas": DrawProgressAtlas(); break;
             case "Gear & Inventory": DrawGearAndInventory(); break;
             case "Routes & Navigation": DrawRoutesAndNavigation(); break;
             case "Plugins": DrawPlugins(); break;
             case "Command Center": DrawPlugins(); break;
             case "Dependencies": DrawDependencies(); break;
-            case "Migration": DrawMigration(); break;
+            case "Migration": DrawDependencies(); break;
             case "Settings": DrawSettings(); break;
             default: DrawModulePage(plugin.Configuration.SelectedPage); break;
         }
@@ -329,6 +334,10 @@ internal sealed class NexusWindow : Window
     private void DrawDependencies()
     {
         PageHeading("Dependencies", "Required services unlock Nexus. Recommended integrations add optional automation and convenience features.");
+        DrawMigrationQuickStart();
+        if (ImGui.CollapsingHeader("Imported settings and Questionable route protection###DependencyMigrationDetails"))
+            DrawQuestionableCompatibility();
+        ImGui.Spacing();
         var statuses = dependencies.Snapshot();
         var required = statuses.Where(x => x.Definition.Required).ToArray();
         var recommended = statuses.Where(x => !x.Definition.Required).ToArray();
@@ -394,9 +403,10 @@ internal sealed class NexusWindow : Window
             if (status.Health == DependencyHealth.Missing && !string.IsNullOrWhiteSpace(status.Definition.RepositoryUrl))
             {
                 ImGui.SameLine();
-                ImGui.TextDisabled("External repository");
+                if (ImGui.Button($"Add repository##dependency-repo-{status.Definition.Id}"))
+                    dependencies.OpenRepositorySetup(status);
                 if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip(status.Definition.RepositoryUrl);
+                    ImGui.SetTooltip("Copies the repository address and opens Dalamud Settings. Paste it under Experimental → Custom Plugin Repositories, save, then press Install here.");
             }
             EndPanel();
         }
@@ -2773,9 +2783,47 @@ internal sealed class NexusWindow : Window
         EndAutoPanel();
     }
 
-    private void DrawProgression()
+    private void DrawAutomation()
     {
-        PageHeading("Progression", "Set a level goal once; Nexus plans the work and delegates only bounded provider tasks.");
+        PageHeading("Automation", "Run one current-job goal or an ordered job queue from one coordinated workspace.");
+        CharacterSnapshot? character = world.Current.Character.Value;
+        ProgressionGoalState? goal = progressionRuntime.State;
+        ProgressionQueueConfiguration? queue = character is { Key.IsKnown: true }
+            ? plugin.Configuration.ForCharacter(character.Key.ToString()).ProgressionQueue
+            : null;
+
+        BeginAutoPanel("CURRENT ACTIVITY");
+        if (queue?.IsRunning == true || queue?.IsPaused == true)
+            NexusTheme.StatusDot(queue.IsRunning ? NexusTheme.Green : NexusTheme.Amber,
+                $"Job Queue • {queue.StatusDetail}");
+        else if (goal is not null && goal.Goal.Status is not (GoalStatus.Cancelled or GoalStatus.Satisfied))
+            NexusTheme.StatusDot(goal.Goal.Status == GoalStatus.Active ? NexusTheme.Green : NexusTheme.Amber,
+                $"Current Job Goal • {goal.Goal.StatusDetail}");
+        else
+            NexusTheme.StatusDot(NexusTheme.Muted, "No automation is running");
+        TextWrapped(NexusTheme.Muted,
+            "Starting one mode hands off safely from the other. Stock Questionable, AutoDuty, Wrath Combo, Lifestream, Boss Mod, and vnavmesh perform only their bounded mechanics; Nexus owns the plan and controls.");
+        EndAutoPanel();
+
+        if (!ImGui.BeginTabBar("###NexusAutomationModes"))
+            return;
+        if (ImGui.BeginTabItem("Current Job Goal"))
+        {
+            DrawProgression(showHeading: false);
+            ImGui.EndTabItem();
+        }
+        if (ImGui.BeginTabItem("Job Queue"))
+        {
+            DrawProgressionQueue(showHeading: false);
+            ImGui.EndTabItem();
+        }
+        ImGui.EndTabBar();
+    }
+
+    private void DrawProgression(bool showHeading = true)
+    {
+        if (showHeading)
+            PageHeading("Progression", "Set a level goal once; Nexus plans the work and delegates only bounded provider tasks.");
 
         CharacterSnapshot? character = world.Current.Character.Value;
         ProgressionProviderSnapshot providers = progressionProviders.Snapshot();
@@ -2792,18 +2840,6 @@ internal sealed class NexusWindow : Window
 
         CharacterConfiguration characterConfiguration = plugin.Configuration.ForCharacter(character.Key.ToString());
         ProgressionDraftConfiguration draftConfiguration = characterConfiguration.Progression;
-        ProgressionQueueConfiguration queue = characterConfiguration.ProgressionQueue;
-        BeginAutoPanel("JOB QUEUE");
-        NexusTheme.StatusDot(queue.IsRunning ? NexusTheme.Green : queue.IsPaused ? NexusTheme.Amber : NexusTheme.Muted,
-            queue.IsRunning ? $"Running step {queue.CurrentIndex + 1} of {queue.Steps.Count}" :
-            queue.IsPaused ? "Paused" : $"{queue.Steps.Count} configured step(s)");
-        TextWrapped(NexusTheme.Muted, queue.StatusDetail);
-        if (ImGui.Button("Open Job Queue", new Vector2(-1, 0)))
-        {
-            plugin.Configuration.SelectedPage = "Queue";
-            plugin.Save();
-        }
-        EndAutoPanel();
         if (draftConfiguration.TargetLevel == 0)
         {
             draftConfiguration.TargetLevel = Math.Min(
@@ -2832,7 +2868,7 @@ internal sealed class NexusWindow : Window
         {
             ImGui.TableNextColumn();
             bool mainScenario = draftConfiguration.AllowMainScenario;
-            if (ImGui.Checkbox("Main Scenario quests", ref mainScenario))
+            if (ImGui.Checkbox("Main Scenario Quests (MSQ)", ref mainScenario))
             {
                 draftConfiguration.AllowMainScenario = mainScenario;
                 changed = true;
@@ -2860,7 +2896,7 @@ internal sealed class NexusWindow : Window
             }
             ImGui.TableNextColumn();
             bool sideQuests = draftConfiguration.AllowSideQuests;
-            if (ImGui.Checkbox("General side quests", ref sideQuests))
+            if (ImGui.Checkbox("Side Quests", ref sideQuests))
             {
                 draftConfiguration.AllowSideQuests = sideQuests;
                 changed = true;
@@ -2910,9 +2946,10 @@ internal sealed class NexusWindow : Window
             DrawProgressionPlan(plan);
     }
 
-    private void DrawProgressionQueue()
+    private void DrawProgressionQueue(bool showHeading = true)
     {
-        PageHeading("Job Queue", "Build an ordered multi-job leveling queue. Nexus owns the targets and verification; stock providers perform bounded work.");
+        if (showHeading)
+            PageHeading("Job Queue", "Build an ordered multi-job leveling queue. Nexus owns the targets and verification; stock providers perform bounded work.");
 
         CharacterSnapshot? character = world.Current.Character.Value;
         if (character is null || !character.Key.IsKnown)
@@ -2978,7 +3015,7 @@ internal sealed class NexusWindow : Window
                     ? "Installed but disabled"
                     : "Required dependency is missing");
         TextWrapped(NexusTheme.Muted,
-            "Nexus uses the same lower-case class/job slash commands proven in VieriCodex, then waits for the game to confirm the equipped job.");
+            "Nexus uses Fast Job Switcher's proven class/job slash commands, then waits for the game to confirm the equipped job.");
         if (!progressionQueue.IsFastJobSwitcherLoaded)
         {
             DependencyStatus dependency = dependencies.Snapshot().First(item => item.Definition.Id == "fast-job-switcher");
@@ -3270,6 +3307,11 @@ internal sealed class NexusWindow : Window
             "This data belongs to Nexus and remains available after VieriCodex is disabled.");
         EndAutoPanel();
 
+        ImGui.SetNextItemWidth(Math.Max(260f, ImGui.GetContentRegionAvail().X * .55f));
+        ImGui.InputTextWithHint("###ProgressAtlasSearch", "Search expansion, area, objective, or category", ref progressAtlasSearch, 120);
+        ImGui.SameLine();
+        ImGui.Checkbox("Remaining only", ref progressAtlasRemainingOnly);
+
         foreach (ProgressAtlasCategorySnapshot category in snapshot.Categories)
         {
             BeginAutoPanel(category.Name.ToUpperInvariant());
@@ -3289,8 +3331,7 @@ internal sealed class NexusWindow : Window
                 category.Total == 0 ? "—" : $"{category.Completion:P0}");
             TextWrapped(NexusTheme.Muted, category.Detail);
             DrawProgressAtlasCategoryAction(category);
-            if (category.Id == ProgressAtlasCategoryId.HuntingLogs)
-                DrawHuntingLogAtlasTargets();
+            DrawProgressAtlasCategoryDetails(category);
             EndAutoPanel();
         }
 
@@ -3354,17 +3395,185 @@ internal sealed class NexusWindow : Window
         }
     }
 
+    private void DrawProgressAtlasCategoryDetails(ProgressAtlasCategorySnapshot category)
+    {
+        if (!ImGui.CollapsingHeader($"Browse {category.Name}###AtlasBrowse{category.Id}"))
+            return;
+
+        switch (category.Id)
+        {
+            case ProgressAtlasCategoryId.Aetherytes:
+                DrawAetheryteAtlasDetails();
+                break;
+            case ProgressAtlasCategoryId.AetherCurrents:
+                DrawAetherCurrentAtlasDetails();
+                break;
+            case ProgressAtlasCategoryId.Achievements:
+                DrawAchievementAtlasDetails();
+                break;
+            case ProgressAtlasCategoryId.Exploration:
+                DrawExplorationAtlasDetails();
+                break;
+            case ProgressAtlasCategoryId.HuntingLogs:
+                DrawHuntingLogAtlasTargets();
+                break;
+        }
+    }
+
+    private void DrawAetheryteAtlasDetails()
+    {
+        var targets = progressAtlas.AetheryteTargets
+            .Select(target => (Target: target, Complete: ProgressAtlasService.IsAetheryteUnlocked(target.Id)))
+            .Where(item => !progressAtlasRemainingOnly || !item.Complete)
+            .Where(item => AtlasMatches(item.Target.Name, item.Target.TerritoryName, item.Target.Expansion))
+            .GroupBy(item => item.Target.Expansion);
+        foreach (var expansion in targets)
+        {
+            if (!ImGui.CollapsingHeader($"{expansion.Key} ({expansion.Count()})###AtlasTravel{expansion.Key}"))
+                continue;
+            foreach (var item in expansion)
+            {
+                bool reachable = progressAtlasActions.CanReachTerritory(item.Target.TerritoryId);
+                ImGui.TextColored(item.Complete ? NexusTheme.Green : reachable ? NexusTheme.Cyan : NexusTheme.Muted,
+                    item.Complete ? "Complete" : reachable ? "Ready" : "Locked");
+                if (!item.Complete && reachable)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive);
+                    if (ImGui.SmallButton($"Go Here###AtlasAetheryte{item.Target.Id}"))
+                        progressAtlasActions.StartAetheryte(item.Target, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
+                ImGui.SameLine();
+                ImGui.TextWrapped($"{item.Target.Name} — {item.Target.TerritoryName}");
+            }
+        }
+    }
+
+    private void DrawAetherCurrentAtlasDetails()
+    {
+        var fields = progressAtlas.AetherCurrentTargets
+            .Select(target => (Target: target, Complete: ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId)))
+            .Where(item => !progressAtlasRemainingOnly || !item.Complete)
+            .Where(item => AtlasMatches(item.Target.TerritoryName, item.Target.Expansion))
+            .GroupBy(item => item.Target.Expansion);
+        foreach (var expansion in fields)
+        {
+            if (!ImGui.CollapsingHeader($"{expansion.Key} field currents ({expansion.Count()})###AtlasField{expansion.Key}"))
+                continue;
+            foreach (var item in expansion)
+            {
+                bool reachable = progressAtlasActions.CanReachTerritory(item.Target.TerritoryId);
+                ImGui.TextColored(item.Complete ? NexusTheme.Green : reachable ? NexusTheme.Cyan : NexusTheme.Muted,
+                    item.Complete ? "Collected" : reachable ? "Ready" : "Locked");
+                if (!item.Complete && reachable)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive);
+                    if (ImGui.SmallButton($"Go Here###AtlasField{item.Target.AetherCurrentId}"))
+                        progressAtlasActions.StartFieldCurrent(item.Target, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
+                ImGui.SameLine();
+                ImGui.TextWrapped($"{item.Target.TerritoryName} • Current {item.Target.AetherCurrentId}");
+            }
+        }
+
+        var quests = progressAtlas.AetherCurrentQuestTargets
+            .Select(target => (Target: target, Complete: ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId)))
+            .Where(item => !progressAtlasRemainingOnly || !item.Complete)
+            .Where(item => AtlasMatches(item.Target.QuestName, item.Target.TerritoryName, item.Target.Expansion))
+            .GroupBy(item => item.Target.Expansion);
+        foreach (var expansion in quests)
+        {
+            if (!ImGui.CollapsingHeader($"{expansion.Key} quest currents ({expansion.Count()})###AtlasCurrentQuest{expansion.Key}"))
+                continue;
+            foreach (var item in expansion)
+            {
+                ImGui.TextColored(item.Complete ? NexusTheme.Green : NexusTheme.Amber,
+                    item.Complete ? "Complete" : $"Level {item.Target.RequiredLevel}");
+                if (!item.Complete)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive);
+                    if (ImGui.SmallButton($"Start###AtlasQuest{item.Target.QuestId}"))
+                        progressAtlasActions.StartAetherCurrentQuest(item.Target, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
+                ImGui.SameLine();
+                ImGui.TextWrapped($"{item.Target.QuestName} — {item.Target.TerritoryName}");
+            }
+        }
+    }
+
+    private void DrawAchievementAtlasDetails()
+    {
+        var targets = progressAtlas.AchievementTargets
+            .Select(target => (Target: target, Complete: ProgressAtlasService.IsAchievementComplete(target.Id)))
+            .Where(item => !progressAtlasRemainingOnly || !item.Complete)
+            .Where(item => AtlasMatches(item.Target.Name, item.Target.Category))
+            .GroupBy(item => item.Target.Category);
+        foreach (var category in targets)
+        {
+            if (!ImGui.CollapsingHeader($"{category.Key} ({category.Count()})###AtlasAchievement{category.Key}"))
+                continue;
+            foreach (var item in category.Take(250))
+            {
+                ImGui.TextColored(item.Complete ? NexusTheme.Green : NexusTheme.Muted,
+                    item.Complete ? "Complete" : "Remaining");
+                ImGui.SameLine();
+                ImGui.TextWrapped(item.Target.Name);
+            }
+            if (category.Count() > 250)
+                TextWrapped(NexusTheme.Muted, "Refine the search to show the remaining matching achievements.");
+        }
+    }
+
+    private void DrawExplorationAtlasDetails()
+    {
+        var targets = progressAtlas.ExplorationTargets
+            .Select(target => (Target: target,
+                Complete: ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId)))
+            .Where(item => !progressAtlasRemainingOnly || !item.Complete)
+            .Where(item => AtlasMatches(item.Target.Name, item.Target.TerritoryName, item.Target.Expansion))
+            .GroupBy(item => item.Target.Expansion);
+        foreach (var expansion in targets)
+        {
+            if (!ImGui.CollapsingHeader($"{expansion.Key} ({expansion.Count()})###AtlasExploration{expansion.Key}"))
+                continue;
+            foreach (var item in expansion)
+            {
+                bool reachable = progressAtlasActions.CanReachTerritory(item.Target.TerritoryId);
+                ImGui.TextColored(item.Complete ? NexusTheme.Green : reachable ? NexusTheme.Cyan : NexusTheme.Muted,
+                    item.Complete ? "Discovered" : reachable ? "Ready" : "Locked");
+                if (!item.Complete && reachable && item.Target.Positions.FirstOrDefault() is { } position)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive);
+                    if (ImGui.SmallButton($"Go Here###AtlasExplore{item.Target.MapId}-{item.Target.DiscoveryId}"))
+                        progressAtlasActions.StartExploration(item.Target, position, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
+                ImGui.SameLine();
+                ImGui.TextWrapped($"{item.Target.Name} — {item.Target.TerritoryName}");
+            }
+        }
+    }
+
+    private bool AtlasMatches(params string[] values) => string.IsNullOrWhiteSpace(progressAtlasSearch) ||
+        values.Any(value => value.Contains(progressAtlasSearch, StringComparison.CurrentCultureIgnoreCase));
+
     private void DrawHuntingLogAtlasTargets()
     {
         IReadOnlyList<HuntingLogTargetProgress> targets = progressAtlas.HuntingTargets;
         HuntingLogTargetProgress[] current = targets
-            .Where(target => target.IsCurrentRank && target.Killed < target.Required)
+            .Where(target => target.IsCurrentRank)
+            .Where(target => !progressAtlasRemainingOnly || target.Killed < target.Required)
+            .Where(target => AtlasMatches(target.LogName, target.TargetName, $"Rank {target.Rank + 1}"))
             .OrderBy(target => target.LogName, StringComparer.CurrentCulture)
             .ThenBy(target => target.Rank)
             .ThenBy(target => target.TargetName, StringComparer.CurrentCulture)
             .ToArray();
-        if (!ImGui.CollapsingHeader($"Current incomplete targets ({current.Length})###AtlasHuntingTargets"))
-            return;
         if (current.Length == 0)
         {
             TextWrapped(NexusTheme.Muted, "No incomplete targets are available in the current unlocked ranks.");
@@ -3658,6 +3867,18 @@ internal sealed class NexusWindow : Window
         if (ImGui.Checkbox("Transparent overlay background", ref transparentOperations))
         {
             plugin.Configuration.OperationsOverlayTransparent = transparentOperations;
+            plugin.Save();
+        }
+        bool hideOperationsWhenStopped = plugin.Configuration.HideOperationsOverlayWhenStopped;
+        if (ImGui.Checkbox("Hide overlay when nothing is running", ref hideOperationsWhenStopped))
+        {
+            plugin.Configuration.HideOperationsOverlayWhenStopped = hideOperationsWhenStopped;
+            plugin.Save();
+        }
+        bool anchorOperationsBottom = plugin.Configuration.OperationsOverlayAnchorBottom;
+        if (ImGui.Checkbox("Keep the overlay bottom edge anchored", ref anchorOperationsBottom))
+        {
+            plugin.Configuration.OperationsOverlayAnchorBottom = anchorOperationsBottom;
             plugin.Save();
         }
         bool showOperationsStatus = plugin.Configuration.ShowOperationsStatus;

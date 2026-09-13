@@ -61,7 +61,11 @@ internal sealed class ProgressionQueueRuntimeService
         ProgressionQueueConfiguration queue = owner.ProgressionQueue;
         ProgressionQueuePolicy.Normalize(queue);
         if (progression.State?.Goal.Status is GoalStatus.Active or GoalStatus.Paused or GoalStatus.Blocked)
-            return new(false, "Finish or cancel the current level goal before starting the queue.");
+        {
+            ProgressionActionResult handoff = progression.StopNow();
+            if (!handoff.Success)
+                return new(false, $"Nexus could not hand off the current-job goal to the queue: {handoff.Message}");
+        }
 
         int next = ProgressionQueuePolicy.FindNextEnabledIndex(queue.Steps, fromIndex);
         if (next < 0)
@@ -73,7 +77,9 @@ internal sealed class ProgressionQueueRuntimeService
         queue.ActiveGoalId = null;
         queue.EffectiveMethod = null;
         SetState(queue, ProgressionQueueRuntimeState.PreparingStep,
-            $"Preparing step {next + 1}: {JobLabel(queue.Steps[next].ClassJobId)} to level {queue.Steps[next].TargetLevel}.");
+            progression.State?.Goal.Status is GoalStatus.Active or GoalStatus.Paused or GoalStatus.Blocked
+                ? "Stopping the current-job activity before the queue starts. Nexus will continue automatically after inactivity is confirmed."
+                : $"Preparing step {next + 1}: {JobLabel(queue.Steps[next].ClassJobId)} to level {queue.Steps[next].TargetLevel}.");
         return new(true, queue.StatusDetail);
     }
 
@@ -161,6 +167,16 @@ internal sealed class ProgressionQueueRuntimeService
         }
         if (!queue.IsRunning || queue.IsPaused || DateTimeOffset.UtcNow < nextActionAtUtc)
             return;
+
+        if (queue.ActiveGoalId is null && progression.State is { } prior &&
+            prior.Goal.Status is not (GoalStatus.Cancelled or GoalStatus.Satisfied))
+        {
+            if (prior.ActiveTask is null)
+                progression.StopNow();
+            SetStateIfChanged(queue, ProgressionQueueRuntimeState.PreparingStep,
+                "Waiting for the previous current-job activity to stop before the queue starts automatically.");
+            return;
+        }
 
         ProgressionQueueStepConfiguration? step = CurrentStep(queue);
         if (step is null || !step.Enabled)

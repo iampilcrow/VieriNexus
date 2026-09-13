@@ -138,7 +138,13 @@ public sealed record AutoDutyProfileSnapshot(
     string Name,
     IReadOnlyList<ulong> CharacterIds,
     AutoDutyOverlayPreferences Overlay,
-    AutoDutyMaintenancePolicy Maintenance);
+    AutoDutyMaintenancePolicy Maintenance)
+{
+    // AutoDuty stores the preferred bell as its destination territory (0-3 are
+    // the Inn/apartment/personal/FC shortcuts). An init property keeps schema-1
+    // working copies backward compatible; absent data safely retains Inn (0).
+    public uint PreferredSummoningBell { get; init; }
+}
 
 public sealed record AutoDutyMigrationSnapshot(
     int SchemaVersion,

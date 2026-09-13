@@ -18,7 +18,7 @@ internal sealed class EmbeddedRotationProvider : IDisposable
         configuration = owner.Configuration;
         if (wrath.IsLoaded)
         {
-            Status = "The separate Wrath Combo plugin is loaded. Disable it and reload VieriRotationHelper to activate the integrated engine without duplicate hooks.";
+            Status = "Stock Wrath Combo is the live rotation engine; Nexus is reading its adjusted actions for suggestions.";
             return;
         }
         try
@@ -42,6 +42,14 @@ internal sealed class EmbeddedRotationProvider : IDisposable
     {
         try
         {
+            if (wrath.IsLoaded)
+            {
+                EntryAction = mode == RotationMode.Aoe ? anchor.AoeAction : anchor.SingleTargetAction;
+                uint action = wrath.GetAdjusted(EntryAction);
+                Status = $"{anchor.Job}: live stock Wrath Combo action {action}.";
+                return new RotationSuggestion(action, mode, SuggestionSource.LiveWrath, true,
+                    "Exact action currently selected by stock Wrath Combo.", true);
+            }
             if (runtime == null)
                 return new(0, mode, SuggestionSource.EmbeddedVieri, false, Status);
             var decision = runtime.Evaluate(anchor.JobId, mode == RotationMode.Aoe, null);

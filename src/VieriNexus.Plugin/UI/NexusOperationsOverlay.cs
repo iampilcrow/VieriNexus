@@ -11,6 +11,23 @@ namespace VieriNexus.UI;
 
 internal sealed class NexusOperationsOverlay : Window
 {
+    private static readonly IReadOnlyDictionary<uint, (string Name, Vector3 Position)> SummoningBells =
+        new Dictionary<uint, (string, Vector3)>
+        {
+            [129] = ("Limsa Lominsa Lower Decks", new(-123.88806f, 17.990356f, 21.469421f)),
+            [133] = ("Old Gridania", new(171.00781f, 15.487854f, -101.487854f)),
+            [131] = ("Ul'dah — Steps of Thal", new(148.91272f, 3.982544f, -44.205383f)),
+            [419] = ("The Pillars", new(-151.1712f, -12.64978f, -11.7647705f)),
+            [635] = ("Rhalgr's Reach", new(-57.63336f, -0.015319824f, 49.30188f)),
+            [628] = ("Kugane", new(19.394226f, 4.043579f, 53.025024f)),
+            [759] = ("The Doman Enclave", new(60.56299f, -0.015319824f, -3.982666f)),
+            [819] = ("The Crystarium", new(-69.840576f, -7.7058716f, 123.49121f)),
+            [820] = ("Eulmore", new(7.1869507f, 83.17688f, 31.448853f)),
+            [962] = ("Old Sharlayan", new(42.09961f, 2.517002f, -39.414062f)),
+            [963] = ("Radz-at-Han", new(26.749023f, -0.015319824f, -53.696533f)),
+            [1185] = ("Tuliyollal", new(18.57019f, -14.023071f, 120.408936f)),
+            [1186] = ("Solution Nine", new(-151.59845f, 0.59503174f, -15.304871f)),
+        };
     private readonly Plugin plugin;
     private readonly NavigationRouteRuntimeService navigation;
     private readonly GearShoppingRuntimeService gear;
@@ -20,6 +37,7 @@ internal sealed class NexusOperationsOverlay : Window
     private readonly NexusControlService control;
     private readonly Action<string> openPage;
     private readonly ICallGateSubscriber<string, object> lifestreamCommand;
+    private readonly ICallGateSubscriber<int?, object> enqueueInnShortcut;
     private readonly ICallGateSubscriber<bool> lifestreamBusy;
     private readonly ICallGateSubscriber<object> lifestreamAbort;
     private readonly ICallGateSubscriber<Vector3, bool, float, Vector3?> pointOnFloor;
@@ -28,23 +46,9 @@ internal sealed class NexusOperationsOverlay : Window
     private bool quickTravelObservedBusy;
     private string quickTravelDestination = string.Empty;
     private DateTimeOffset quickTravelStartedAt;
-
-    private static readonly QuickPoint[] SummoningBells =
-    [
-        new("Limsa Lominsa", 129, new(-123.88806f, 17.990356f, 21.469421f)),
-        new("Old Gridania", 133, new(171.00781f, 15.487854f, -101.487854f)),
-        new("Ul'dah", 131, new(148.91272f, 3.982544f, -44.205383f)),
-        new("The Pillars", 419, new(-151.1712f, -12.64978f, -11.7647705f)),
-        new("Rhalgr's Reach", 635, new(-57.63336f, -0.015319824f, 49.30188f)),
-        new("Kugane", 628, new(19.394226f, 4.043579f, 53.025024f)),
-        new("The Doman Enclave", 759, new(60.56299f, -0.015319824f, -3.982666f)),
-        new("The Crystarium", 819, new(-69.840576f, -7.7058716f, 123.49121f)),
-        new("Eulmore", 820, new(7.1869507f, 83.17688f, 31.448853f)),
-        new("Old Sharlayan", 962, new(42.09961f, 2.517002f, -39.414062f)),
-        new("Radz-at-Han", 963, new(26.749023f, -0.015319824f, -53.696533f)),
-        new("Tuliyollal", 1185, new(18.57019f, -14.023071f, 120.408936f)),
-        new("Nexus Arcade", 1186, new(-151.59845f, 0.59503174f, -15.304871f)),
-    ];
+    private Vector2 lastPosition;
+    private int priorLineCount = 1;
+    private int currentLineCount = 1;
 
     internal NexusOperationsOverlay(
         Plugin plugin,
@@ -67,6 +71,7 @@ internal sealed class NexusOperationsOverlay : Window
         this.control = control;
         this.openPage = openPage;
         lifestreamCommand = Plugin.PluginInterface.GetIpcSubscriber<string, object>("Lifestream.ExecuteCommand");
+        enqueueInnShortcut = Plugin.PluginInterface.GetIpcSubscriber<int?, object>("Lifestream.EnqueueInnShortcut");
         lifestreamBusy = Plugin.PluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy");
         lifestreamAbort = Plugin.PluginInterface.GetIpcSubscriber<object>("Lifestream.Abort");
         pointOnFloor = Plugin.PluginInterface.GetIpcSubscriber<Vector3, bool, float, Vector3?>(
@@ -75,7 +80,8 @@ internal sealed class NexusOperationsOverlay : Window
         IsOpen = true;
     }
 
-    public override bool DrawConditions() => plugin.Configuration.ShowOperationsOverlay;
+    public override bool DrawConditions() => plugin.Configuration.ShowOperationsOverlay &&
+        (!plugin.Configuration.HideOperationsOverlayWhenStopped || IsAnyOperationActive());
 
     public override void PreDraw()
     {
@@ -84,6 +90,17 @@ internal sealed class NexusOperationsOverlay : Window
             Flags |= ImGuiWindowFlags.NoMove;
         if (plugin.Configuration.OperationsOverlayTransparent)
             Flags |= ImGuiWindowFlags.NoBackground;
+        int heightDifference = currentLineCount - priorLineCount;
+        if (plugin.Configuration.OperationsOverlayAnchorBottom && heightDifference != 0)
+        {
+            Position ??= lastPosition;
+            Position -= new Vector2(0, ImGui.GetTextLineHeightWithSpacing() * heightDifference);
+        }
+        else
+        {
+            Position = null;
+        }
+        priorLineCount = currentLineCount;
         NexusTheme.Push();
     }
 
@@ -91,15 +108,20 @@ internal sealed class NexusOperationsOverlay : Window
 
     public override void Draw()
     {
+        lastPosition = ImGui.GetWindowPos();
         UpdateQuickTravel();
         bool navigationActive = navigation.Status.State is not NavigationRouteExecutionState.Idle and
             not NavigationRouteExecutionState.Completed and not NavigationRouteExecutionState.Failed;
         bool gearActive = gear.Status.IsActive;
         bool progressionActive = progression.State?.Goal.Status == VieriNexus.Domain.GoalStatus.Active;
+        bool progressionPaused = progression.State?.Goal.Status == VieriNexus.Domain.GoalStatus.Paused;
         bool maintenanceActive = maintenance.Status.IsActive;
         bool dummyTravelActive = strikingDummies.Status.IsActive;
+        AutoDutyOverlayPreferences? overlay = maintenance.CurrentProfile?.Overlay;
         bool anyActive = navigationActive || gearActive || progressionActive || maintenanceActive || dummyTravelActive ||
                          quickTravelRequested;
+        currentLineCount = plugin.Configuration.ShowOperationsStatus &&
+                           (anyActive || !string.IsNullOrWhiteSpace(message)) ? 2 : 1;
 
         if (anyActive)
         {
@@ -114,67 +136,86 @@ internal sealed class NexusOperationsOverlay : Window
             ImGui.SameLine();
         }
 
-        CategoryButton("Goto", "NexusGoto");
-        if (ImGui.BeginPopup("NexusGoto"))
+        if (progressionActive)
         {
-            if (ImGui.Selectable("Saved routes")) Open("Routes & Navigation");
-            if (ImGui.Selectable("Inn")) StartLifestream("inn", "inn");
-            if (ImGui.Selectable("Grand Company headquarters")) StartLifestream("gc", "Grand Company headquarters");
-            if (ImGui.Selectable("Grand Company supply counter")) StartGrandCompanyPoint(barracks: false);
-            if (ImGui.Selectable("Grand Company barracks entrance")) StartGrandCompanyPoint(barracks: true);
-            if (ImGui.Selectable("Flag marker")) StartFlagMarker();
-            if (ImGui.Selectable("Apartment")) StartLifestream("apartment", "apartment");
-            if (ImGui.Selectable("Personal estate")) StartLifestream("home", "personal estate");
-            if (ImGui.Selectable("Free Company estate")) StartLifestream("fc", "Free Company estate");
-            if (ImGui.Selectable("Market board")) StartLifestream("mb", "market board");
-            if (ImGui.BeginMenu("Summoning bells"))
+            if (ImGui.Button("Pause"))
+                message = progression.PauseNow().Message;
+            ImGui.SameLine();
+            bool lastRunArmed = progression.State?.StopAfterCurrentDuty == true;
+            if (lastRunArmed)
+                ImGui.BeginDisabled();
+            if (ImGui.Button(lastRunArmed ? "Last Run Set" : "Last Run"))
+                message = progression.StopAfterCurrentDuty().Message;
+            if (lastRunArmed)
+                ImGui.EndDisabled();
+            ImGui.SameLine();
+        }
+        else if (progressionPaused)
+        {
+            if (ImGui.Button("Resume"))
+                message = progression.Resume().Message;
+            ImGui.SameLine();
+        }
+
+        if (overlay?.ShowGoto != false)
+        {
+            CategoryButton("Goto", "NexusGoto");
+            if (ImGui.BeginPopup("NexusGoto"))
             {
-                foreach (QuickPoint bell in SummoningBells)
-                    if (ImGui.Selectable(bell.Name))
-                        StartPoint($"Summoning bell — {bell.Name}", bell.TerritoryId, bell.Position, 4f);
-                ImGui.EndMenu();
-            }
-            if (ImGui.Selectable("Triple Triad trader"))
-                StartPoint("Triple Triad trader", 144, new(-56.1f, 1.6f, 16.6f), 4f);
-            if (ImGui.BeginMenu("Striking dummies"))
-            {
-                foreach (IGrouping<string, StrikingDummyDestination> expansion in
-                         StrikingDummyCatalog.Destinations.GroupBy(item => item.Expansion))
+                if (ImGui.Selectable("Barracks")) StartGrandCompanyPoint(barracks: true);
+                if (ImGui.Selectable("Inn")) StartInn();
+                if (ImGui.Selectable("Grand Company supply counter")) StartGrandCompanyPoint(barracks: false);
+                if (ImGui.Selectable("Flag marker")) StartFlagMarker();
+                if (ImGui.Selectable("Summoning bell")) StartPreferredSummoningBell();
+                if (ImGui.Selectable("Apartment")) StartLifestream("apartment", "apartment");
+                if (ImGui.Selectable("Personal home")) StartLifestream("home", "personal home");
+                if (ImGui.Selectable("Free Company estate")) StartLifestream("fc", "Free Company estate");
+                if (ImGui.Selectable("Triple Triad trader"))
+                    StartPoint("Triple Triad trader", 144, new(-56.1f, 1.6f, 16.6f), 4f);
+                if (ImGui.BeginMenu("Striking dummies"))
                 {
-                    if (!ImGui.BeginMenu(expansion.Key))
-                        continue;
-                    foreach (StrikingDummyDestination destination in expansion)
+                    foreach (IGrouping<string, StrikingDummyDestination> expansion in
+                             StrikingDummyCatalog.Destinations.GroupBy(item => item.Expansion))
                     {
-                        if (ImGui.Selectable($"{destination.DisplayLocation} — Lv. {destination.Levels}"))
+                        if (!ImGui.BeginMenu(expansion.Key))
+                            continue;
+                        foreach (StrikingDummyDestination destination in expansion)
                         {
-                            ImGui.CloseCurrentPopup();
-                            strikingDummies.Start(destination, out message);
+                            if (ImGui.Selectable($"{destination.DisplayLocation} — Lv. {destination.Levels}"))
+                            {
+                                ImGui.CloseCurrentPopup();
+                                strikingDummies.Start(destination, out message);
+                            }
                         }
+                        ImGui.EndMenu();
                     }
                     ImGui.EndMenu();
                 }
-                ImGui.EndMenu();
+                ImGui.EndPopup();
             }
-            ImGui.EndPopup();
+            ImGui.SameLine();
         }
 
-        ImGui.SameLine();
-        CategoryButton("Gear", "NexusGear");
-        if (ImGui.BeginPopup("NexusGear"))
+        if (overlay?.ShowGear != false || overlay?.ShowRepair != false || overlay?.ShowExtract != false ||
+            overlay?.ShowDesynth != false)
         {
-            if (ImGui.Selectable("Review and shop for upgrades")) Open("Gear & Inventory");
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Repair gear"))
-                maintenance.Start(NexusMaintenanceOperation.Repair, out message);
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Extract materia"))
-                maintenance.Start(NexusMaintenanceOperation.ExtractMateria, out message);
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Desynthesize eligible items"))
-                maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
-            if (gearActive && ImGui.Selectable("Stop gear operation"))
-                message = gear.Stop().Message;
-            ImGui.EndPopup();
+            CategoryButton("Gear", "NexusGear");
+            if (ImGui.BeginPopup("NexusGear"))
+            {
+                if (overlay?.ShowGear != false && ImGui.Selectable("Shop for upgrades")) Open("Gear & Inventory");
+                if (maintenance.HasWorkingProfile && overlay?.ShowRepair != false && ImGui.Selectable("Repair gear"))
+                    maintenance.Start(NexusMaintenanceOperation.Repair, out message);
+                if (maintenance.HasWorkingProfile && overlay?.ShowExtract != false && ImGui.Selectable("Extract materia"))
+                    maintenance.Start(NexusMaintenanceOperation.ExtractMateria, out message);
+                if (maintenance.HasWorkingProfile && overlay?.ShowDesynth != false && ImGui.Selectable("Desynthesize eligible items"))
+                    maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
+                if (gearActive && ImGui.Selectable("Stop gear operation"))
+                    message = gear.Stop().Message;
+                ImGui.EndPopup();
+            }
+            ImGui.SameLine();
         }
 
-        ImGui.SameLine();
         CategoryButton("Inventory", "NexusInventory");
         if (ImGui.BeginPopup("NexusInventory"))
         {
@@ -183,12 +224,12 @@ internal sealed class NexusOperationsOverlay : Window
                 ImGui.CloseCurrentPopup();
                 maintenance.StartConfigured(out message);
             }
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Open coffers"))
+            if (maintenance.HasWorkingProfile && overlay?.ShowCoffers != false && ImGui.Selectable("Open coffers"))
             {
                 ImGui.CloseCurrentPopup();
                 maintenance.Start(NexusMaintenanceOperation.OpenCoffers, out message);
             }
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Grand Company turn-ins"))
+            if (maintenance.HasWorkingProfile && overlay?.ShowTurnIn != false && ImGui.Selectable("Grand Company turn-ins"))
             {
                 ImGui.CloseCurrentPopup();
                 maintenance.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out message);
@@ -199,28 +240,6 @@ internal sealed class NexusOperationsOverlay : Window
                 maintenance.Start(NexusMaintenanceOperation.EntrustGlamourChest, out message);
             if (maintenance.HasWorkingProfile && ImGui.Selectable("Review protected selling"))
                 Open("Gear & Inventory");
-            if (ImGui.Selectable("Gear & Inventory page")) Open("Gear & Inventory");
-            ImGui.EndPopup();
-        }
-
-        ImGui.SameLine();
-        CategoryButton("Duty", "NexusDuty");
-        if (ImGui.BeginPopup("NexusDuty"))
-        {
-            ProgressionGoalState? goal = progression.State;
-            if (goal is null || goal.Goal.Status is VieriNexus.Domain.GoalStatus.Satisfied or VieriNexus.Domain.GoalStatus.Cancelled)
-            {
-                if (ImGui.Selectable("Start configured level goal"))
-                    message = control.ExecuteLocal("progression.start").Message;
-            }
-            else if (goal.Goal.Status is VieriNexus.Domain.GoalStatus.Paused or VieriNexus.Domain.GoalStatus.Blocked)
-            {
-                if (ImGui.Selectable("Resume with a fresh plan"))
-                    message = control.ExecuteLocal("progression.resume").Message;
-            }
-            if (progressionActive && ImGui.Selectable("Finish current duty, then stop"))
-                message = progression.StopAfterCurrentDuty().Message;
-            if (ImGui.Selectable("Progression details")) Open("Progression");
             ImGui.EndPopup();
         }
 
@@ -228,7 +247,7 @@ internal sealed class NexusOperationsOverlay : Window
         CategoryButton("Extras", "NexusExtras");
         if (ImGui.BeginPopup("NexusExtras"))
         {
-            if (maintenance.HasWorkingProfile && ImGui.Selectable("Register Triple Triad cards"))
+            if (maintenance.HasWorkingProfile && overlay?.ShowTripleTriad != false && ImGui.Selectable("Register Triple Triad cards"))
                 maintenance.Start(NexusMaintenanceOperation.RegisterTripleTriadCards, out message);
             if (maintenance.HasWorkingProfile && ImGui.Selectable("Register minions"))
                 maintenance.Start(NexusMaintenanceOperation.RegisterMinions, out message);
@@ -237,7 +256,6 @@ internal sealed class NexusOperationsOverlay : Window
             if (maintenance.HasWorkingProfile && ImGui.Selectable("Run all enabled maintenance"))
                 maintenance.StartConfigured(out message);
             ImGui.Separator();
-            if (ImGui.Selectable("Control Center")) Open("Overview");
             if (ImGui.Selectable("Nexus settings")) Open("Settings");
             ImGui.EndPopup();
         }
@@ -303,6 +321,71 @@ internal sealed class NexusOperationsOverlay : Window
             message = $"Lifestream did not accept the {destination} shortcut.";
         }
     }
+
+    private void StartInn()
+    {
+        ImGui.CloseCurrentPopup();
+        if (!enqueueInnShortcut.HasAction || !lifestreamBusy.HasFunction || !lifestreamAbort.HasAction)
+        {
+            message = "Lifestream is not loaded or does not expose its inn travel contract.";
+            return;
+        }
+        try
+        {
+            if (lifestreamBusy.InvokeFunc())
+            {
+                message = "Lifestream is already handling another trip.";
+                return;
+            }
+            // A null selection deliberately means the current character's Grand Company,
+            // matching AutoDuty's proven Goto Inn behavior (including Twin Adder/Gridania).
+            enqueueInnShortcut.InvokeAction(null);
+            quickTravelRequested = true;
+            quickTravelObservedBusy = false;
+            quickTravelDestination = "Grand Company inn";
+            quickTravelStartedAt = DateTimeOffset.UtcNow;
+            message = "Nexus asked Lifestream to travel to your Grand Company inn.";
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Warning(exception, "Nexus could not start Grand Company inn travel.");
+            message = "Lifestream did not accept the Grand Company inn request.";
+        }
+    }
+
+    private void StartPreferredSummoningBell()
+    {
+        uint destination = maintenance.CurrentProfile?.PreferredSummoningBell ?? 0;
+        switch (destination)
+        {
+            case 0:
+                StartInn();
+                return;
+            case 1:
+                StartLifestream("apartment", "apartment summoning bell");
+                return;
+            case 2:
+                StartLifestream("home", "personal-home summoning bell");
+                return;
+            case 3:
+                StartLifestream("fc", "Free Company summoning bell");
+                return;
+        }
+
+        if (SummoningBells.TryGetValue(destination, out var bell))
+        {
+            StartPoint($"{bell.Name} summoning bell", destination, bell.Position, 4f);
+            return;
+        }
+        StartInn();
+    }
+
+    private bool IsAnyOperationActive() =>
+        navigation.Status.State is not NavigationRouteExecutionState.Idle and
+            not NavigationRouteExecutionState.Completed and not NavigationRouteExecutionState.Failed ||
+        gear.Status.IsActive ||
+        progression.State?.Goal.Status is VieriNexus.Domain.GoalStatus.Active or VieriNexus.Domain.GoalStatus.Paused ||
+        maintenance.Status.IsActive || strikingDummies.Status.IsActive || quickTravelRequested;
 
     private void UpdateQuickTravel()
     {

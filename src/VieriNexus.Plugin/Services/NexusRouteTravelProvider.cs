@@ -90,9 +90,12 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         {
             if (clientState.TerritoryType == request.TerritoryId)
             {
-                if (!navigation.IsReady)
-                    return FailDispatch("vnavmesh is not ready in the current territory.");
-                StartAuthoredPath(startedAt);
+                if (navigation.IsReady)
+                    StartAuthoredPath(startedAt);
+                else
+                    SetRunning(TravelPhase.WaitingForMesh,
+                        "nexus-route-waiting-for-mesh",
+                        "Nexus reached the route territory and is waiting for vnavmesh to finish loading.");
                 return new(true, StartMessage());
             }
 
@@ -244,8 +247,26 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
                 case TravelPhase.WaitingForTargetTerritory:
                     if (clientState.TerritoryType == request!.TerritoryId && !IsLifestreamBusy() && navigation.IsReady)
                         StartAuthoredPath(now);
+                    else if (clientState.TerritoryType == request.TerritoryId && !IsLifestreamBusy())
+                    {
+                        SetRunning(TravelPhase.WaitingForMesh,
+                            "nexus-route-waiting-for-mesh",
+                            "Nexus reached the route territory and is waiting for vnavmesh to finish loading.",
+                            now: now);
+                    }
                     else if (!IsLifestreamBusy() && now - phaseStartedAt > PhaseTimeout)
                         return Fail("nexus-route-territory-timeout", "Lifestream stopped without reaching the route territory.");
+                    break;
+
+                case TravelPhase.WaitingForMesh:
+                    if (clientState.TerritoryType != request!.TerritoryId)
+                        return Fail("nexus-route-territory-changed",
+                            "The active territory changed while Nexus was waiting for vnavmesh.");
+                    if (navigation.IsReady)
+                        StartAuthoredPath(now);
+                    else if (now - phaseStartedAt > PhaseTimeout)
+                        return Fail("nexus-route-mesh-timeout",
+                            "vnavmesh did not become ready within two minutes after the zone finished loading.");
                     break;
 
                 case TravelPhase.MovingAuthoredPath:
@@ -471,6 +492,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         Idle,
         WaitingForAethernetRoot,
         WaitingForTargetTerritory,
+        WaitingForMesh,
         WaitingForInnOnly,
         MovingAuthoredPath,
     }

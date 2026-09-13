@@ -16,12 +16,15 @@ public sealed class DependencyCatalogTests
         Assert.Equal(
         [
             "allagan-market",
+            "autoduty",
             "bossmod",
             "fast-job-switcher",
             "lifestream",
             "marketbuddy",
+            "questionable",
             "textadvance",
             "vnavmesh",
+            "wrath",
         ], required);
     }
 
@@ -43,13 +46,14 @@ public sealed class DependencyCatalogTests
     }
 
     [Fact]
-    public void QuestionableAndMigrationSourcesAreNotExternalDependencies()
+    public void StockRuntimeProvidersAreDependenciesButVieriMigrationSourcesAreNot()
     {
         string[] internalNames = NexusDependencyCatalog.All.SelectMany(x => x.InternalNames).ToArray();
 
-        Assert.DoesNotContain(internalNames, x => x.Equals("Questionable", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("Questionable", internalNames);
+        Assert.Contains("AutoDuty", internalNames);
+        Assert.Contains("WrathCombo", internalNames);
         Assert.DoesNotContain(internalNames, x => x.StartsWith("Vieri", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain("AutoDuty", internalNames);
     }
 
     [Fact]

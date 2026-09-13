@@ -48,7 +48,10 @@ public sealed class AutoDutyMigrationImporter
                     name,
                     ULongArray(profileElement, "CIDs"),
                     ReadOverlay(config),
-                    ReadMaintenance(config)));
+                    ReadMaintenance(config))
+                {
+                    PreferredSummoningBell = UInt(config, "PreferredSummoningBellEnum", 0),
+                });
             }
 
             if (profiles.Count == 0)

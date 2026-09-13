@@ -443,6 +443,7 @@ public sealed class ProgressionExecutionCoordinator
     private DateTimeOffset? providerStartRequestedAt;
     private bool reloadStopPending;
     private bool cancelAfterReloadStop;
+    private bool pauseAfterStop;
     private int unsupportedQuestFallbackDepth;
 
     public ProgressionExecutionCoordinator(
@@ -600,6 +601,7 @@ public sealed class ProgressionExecutionCoordinator
 
     public ProgressionActionResult StopNow()
     {
+        pauseAfterStop = false;
         if (State is null || State.Goal.Status is GoalStatus.Cancelled or GoalStatus.Satisfied)
             return new(false, "No active Progression goal needs to be stopped.");
 
@@ -622,6 +624,8 @@ public sealed class ProgressionExecutionCoordinator
         }
 
         bool requested = TryStopProvider(task, out string message);
+        if (!requested)
+            pauseAfterStop = false;
         ReplaceTask(task with
         {
             Status = requested ? NexusTaskStatus.Cancelling : NexusTaskStatus.NeedsReconciliation,
@@ -636,6 +640,41 @@ public sealed class ProgressionExecutionCoordinator
         UpdateGoal(requested ? GoalStatus.Active : GoalStatus.Blocked,
             requested ? "Stopping the Nexus-owned activity before cancelling the goal." :
                 "Stop could not be confirmed. Do not start other automated work yet.");
+        return new(requested, message);
+    }
+
+    public ProgressionActionResult PauseNow()
+    {
+        if (State is null || State.Goal.Status is GoalStatus.Cancelled or GoalStatus.Satisfied)
+            return new(false, "No active Progression goal needs to be paused.");
+        if (State.Goal.Status == GoalStatus.Paused && State.ActiveTask is null)
+            return new(true, "Progression is already paused.");
+
+        NexusTask? task = State.ActiveTask;
+        if (task is null)
+        {
+            UpdateGoal(GoalStatus.Paused, "Progression paused. Resume will create a fresh bounded plan.");
+            return new(true, State!.Goal.StatusDetail!);
+        }
+
+        pauseAfterStop = true;
+        bool requested = TryStopProvider(task, out string message);
+        if (!requested)
+            pauseAfterStop = false;
+        ReplaceTask(task with
+        {
+            Status = requested ? NexusTaskStatus.Cancelling : NexusTaskStatus.NeedsReconciliation,
+            StatusDetail = requested ? "Pause requested; waiting for the provider to confirm inactivity." : message,
+            Failure = requested ? null : new TaskFailure(
+                FailureKind.DependencyUnavailable,
+                "provider-pause-stop-unavailable",
+                "Nexus could not confirm that the activity provider stopped for Pause.",
+                message,
+                true),
+        });
+        UpdateGoal(requested ? GoalStatus.Active : GoalStatus.Blocked,
+            requested ? "Stopping the current activity before pausing Progression." :
+                "Pause could not be confirmed. Do not start other automated work yet.");
         return new(requested, message);
     }
 
@@ -1890,16 +1929,23 @@ public sealed class ProgressionExecutionCoordinator
 
     private void CompleteCancellation(NexusTask task)
     {
+        bool pause = pauseAfterStop;
+        pauseAfterStop = false;
         ReplaceTask(task with
         {
             Status = NexusTaskStatus.Cancelled,
-            StatusDetail = "Provider inactivity confirmed; bounded Progression task cancelled.",
+            StatusDetail = pause
+                ? "Provider inactivity confirmed; bounded activity paused."
+                : "Provider inactivity confirmed; bounded Progression task cancelled.",
             Failure = new TaskFailure(FailureKind.Cancelled, "user-stop",
-                "The user stopped this Progression goal.", null, false),
+                pause ? "The user paused this Progression goal." : "The user stopped this Progression goal.", null, false),
         });
         ReleaseLease();
         State = State! with { ActiveTaskId = null, StopAfterCurrentDuty = false };
-        UpdateGoal(GoalStatus.Cancelled, "Progression goal stopped. No additional duty will be scheduled.");
+        UpdateGoal(pause ? GoalStatus.Paused : GoalStatus.Cancelled,
+            pause
+                ? "Progression paused. Resume will create a fresh bounded plan; stopped work will not replay."
+                : "Progression goal stopped. No additional duty will be scheduled.");
     }
 
     private void BeginFailureStop(

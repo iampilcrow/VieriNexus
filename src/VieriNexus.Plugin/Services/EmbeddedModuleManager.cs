@@ -47,7 +47,7 @@ internal sealed class EmbeddedModuleManager : IDisposable
 {
     private static readonly EmbeddedModuleDefinition[] Definitions =
     [
-        new("rotation", "Combat", "Nexus Rotation", "VieriRotationHelper suggestions, embedded Wrath engine, hotkeys, and the cleaned-up switch overlay.",
+        new("rotation", "Combat", "Nexus Rotation", "VieriRotationHelper suggestions, hotkeys, and the cleaned-up switch overlay follow the stock Wrath Combo engine live.",
             "rotation.zip", "VieriRotationHelper.dll", "VieriRotationHelper.Plugin", "VieriRotationHelper.Configuration", "VieriRotationHelper"),
         new("avarice", "Combat", "Nexus Positionals", "VieriAvarice positional forecast, profiles, encounter feedback, and native overlay behavior.",
             "avarice.zip", "VieriAvarice.dll", "Avarice.Avarice", "Avarice.Configuration.Config", "VieriAvarice"),

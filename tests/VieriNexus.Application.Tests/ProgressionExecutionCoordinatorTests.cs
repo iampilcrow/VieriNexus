@@ -161,6 +161,27 @@ public sealed class ProgressionExecutionCoordinatorTests
     }
 
     [Fact]
+    public void PauseStopsCurrentDutyAndResumesOnlyFromAFreshPlan()
+    {
+        FakeDutyProvider provider = new() { IsStopped = false };
+        ProgressionExecutionCoordinator coordinator = new(new MemoryStore(), new ResourceLeaseManager(), provider);
+        coordinator.Start(Draft(targetLevel: 95), Plan());
+        coordinator.Update(World(level: 90, inDuty: true));
+
+        ProgressionActionResult paused = coordinator.PauseNow();
+        Assert.True(paused.Success);
+        Assert.Equal(1, provider.StopCalls);
+
+        provider.IsStopped = true;
+        coordinator.Update(World(level: 90, inDuty: false));
+
+        Assert.Equal(GoalStatus.Paused, coordinator.State!.Goal.Status);
+        Assert.Null(coordinator.State.ActiveTaskId);
+        Assert.Single(provider.StartedTerritories);
+        Assert.Contains("will not replay", coordinator.State.Goal.StatusDetail);
+    }
+
+    [Fact]
     public void LastRunSkipsConfiguredMaintenanceAfterVerifiedDuty()
     {
         FakeDutyProvider duty = new();

@@ -713,6 +713,15 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 autoDutySetLevelingMode.InvokeAction(0);
             else
                 autoDutySetConfig.InvokeAction("leveling", "None");
+            if (autoDutySetConfig.HasAction)
+            {
+                // Stock AutoDuty keeps duty mechanics; Nexus supplies the unified controls and
+                // stock Wrath supplies rotations. These public settings prevent two overlays or
+                // an accidental BossMod-only rotation selection from competing with that model.
+                autoDutySetConfig.InvokeAction("ShowOverlay", "false");
+                autoDutySetConfig.InvokeAction("AutoManageRotationPluginState", "true");
+                autoDutySetConfig.InvokeAction("rotationPlugin", "WrathCombo");
+            }
             autoDutyRun.InvokeAction(territoryId, 1, false);
             message = $"Nexus asked {selection.Selected!.DisplayName} to run one duty, then return control for verification.";
             return true;
