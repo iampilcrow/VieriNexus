@@ -1,6 +1,6 @@
 # VieriNexus implementation status
 
-Version 0.1.0.72 closes the final shared-package cleanup trap. Nexus now detects VieriAutoDuty files that Dalamud has queued for deletion even after the fork no longer appears installed, requires the one cleanup restart before stock AutoDuty installation, and blocks the misleading same-session install that Dalamud would delete as the older shared package on startup. Version 0.1.0.71 remains the published automation handoff, simplified Current Job panel, direct stock AutoDuty settings, and teleport-safe gear-shopping release.
+Version 0.1.0.72 is published and closes the final shared-package cleanup trap. Nexus now detects VieriAutoDuty files that Dalamud has queued for deletion even after the fork no longer appears installed, requires the one cleanup restart before stock AutoDuty installation, and blocks the misleading same-session install that Dalamud would delete as the older shared package on startup. Version 0.1.0.71 remains the automation handoff, simplified Current Job panel, direct stock AutoDuty settings, and teleport-safe gear-shopping release.
 
 ## Foundation implemented
 
