@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-13 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.69`
+Current product version: `0.1.0.70`
 Current published source: `0.1.0.69`, source `d7a454b1b6cc7e8d23dde6a5868a07bfb76cbade`, website release `6b14409b8e62984338373733392e3875ac207117`, verification documentation `969bb9dde6b34dd00ead2c863ac4240af4683ca0`. Release deployment `dpl_Ca5PDoC3Ps9xxxm4ZBHef2RbH89c` and final documentation deployment `dpl_6owdpdovfwqP64uoj6HobY27W3Kz` are Ready on both canonical aliases; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `0EAB376CF88ACD808B5501E48A46B4C27CBCF17C6959DA0290CBA8EFC16EE86B` / `B4D31DBECBFBB920BAE067E65DDB885DE303B99993268FAEFD7E40075E966F8D`; Discord workflow `34764315848` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.69 simplifies Nexus's product-facing names and Home presentation, gives the long Custom Route Editor label enough navigation width at scaled UI sizes, and diagnoses the one-time stock AutoDuty connection loss caused when VieriAutoDuty unloads after stock AutoDuty starts. The safe recovery is one FFXIV restart with VieriAutoDuty disabled; Nexus continues to fail closed until the stock duty connection is visible. Version 0.1.0.68 remains the complete multi-icon combat-forecast release.
+Current workstream: version 0.1.0.70 corrects the Dependencies package-identity selector so the stock AutoDuty card can never resolve to, install, or enable VieriAutoDuty merely because both packages use the `AutoDuty` internal name. Stock AutoDuty now requires the exact `AutoDuty` package display name; the predecessor remains only a migration source. The main window defaults to 70% opacity for new configurations and exposes a 35%-100% Appearance slider without changing the separately configured operations overlay. Version 0.1.0.69 remains the simplified Home/navigation and AutoDuty handoff-diagnosis release.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -215,7 +215,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 9 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety, Progression draft and complete multi-job queue state, one-time verified queue promotion, per-source migration state, and independent embedded-module enablement.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.69`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.70`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -738,7 +738,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.69`. Dalamud API 15. Version 0.1.0.69 is the currently published production feed entry; every prior version remains an immutable historical archive.
+- Plugin project version: `0.1.0.70`. Dalamud API 15. Version 0.1.0.70 is the pending production feed entry; every prior version remains an immutable historical archive.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.

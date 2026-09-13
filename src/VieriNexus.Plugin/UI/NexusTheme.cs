@@ -12,11 +12,13 @@ internal static class NexusTheme
     internal static readonly Vector4 Amber = new(1f, .72f, .22f, 1f);
     internal static readonly Vector4 Cyan = new(.25f, .78f, .88f, 1f);
     internal static readonly Vector4 Muted = new(.58f, .60f, .65f, 1f);
-    internal static readonly Vector4 Panel = new(.065f, .070f, .082f, .98f);
-    internal static readonly Vector4 PanelRaised = new(.085f, .092f, .108f, .98f);
+    private static float backgroundOpacity = 1f;
+    internal static Vector4 Panel => new(.065f, .070f, .082f, .98f * backgroundOpacity);
+    internal static Vector4 PanelRaised => new(.085f, .092f, .108f, .98f * backgroundOpacity);
 
-    internal static void Push()
+    internal static void Push(float opacity = 1f)
     {
+        backgroundOpacity = Math.Clamp(opacity, .35f, 1f);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 8f);
         ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 6f);
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 4f);
@@ -25,7 +27,7 @@ internal static class NexusTheme
         ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8, 7));
 
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, new Vector4(.026f, .028f, .034f, .985f));
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, new Vector4(.026f, .028f, .034f, .985f * backgroundOpacity));
         ImGui.PushStyleColor(ImGuiCol.ChildBg, Panel);
         ImGui.PushStyleColor(ImGuiCol.PopupBg, new Vector4(.045f, .048f, .058f, 1f));
         ImGui.PushStyleColor(ImGuiCol.Border, new Vector4(.28f, .11f, .12f, 1f));
@@ -45,8 +47,8 @@ internal static class NexusTheme
         ImGui.PushStyleColor(ImGuiCol.SliderGrab, new Vector4(.84f, .18f, .20f, 1f));
         ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, new Vector4(1f, .30f, .31f, 1f));
         ImGui.PushStyleColor(ImGuiCol.Separator, new Vector4(.33f, .10f, .11f, 1f));
-        ImGui.PushStyleColor(ImGuiCol.TableHeaderBg, new Vector4(.09f, .095f, .11f, 1f));
-        ImGui.PushStyleColor(ImGuiCol.TableRowBgAlt, new Vector4(.08f, .083f, .096f, .55f));
+        ImGui.PushStyleColor(ImGuiCol.TableHeaderBg, new Vector4(.09f, .095f, .11f, backgroundOpacity));
+        ImGui.PushStyleColor(ImGuiCol.TableRowBgAlt, new Vector4(.08f, .083f, .096f, .55f * backgroundOpacity));
         ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(.92f, .92f, .94f, 1f));
         ImGui.PushStyleColor(ImGuiCol.TextDisabled, Muted);
     }
@@ -55,6 +57,7 @@ internal static class NexusTheme
     {
         ImGui.PopStyleColor(24);
         ImGui.PopStyleVar(7);
+        backgroundOpacity = 1f;
     }
 
     internal static void SectionTitle(string title, string? detail = null)

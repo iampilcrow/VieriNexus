@@ -44,8 +44,10 @@ internal sealed class DependencyService(
         return NexusDependencyCatalog.All.Select(definition =>
         {
             var plugin = installed
-                .Where(candidate => definition.InternalNames.Any(name =>
-                    string.Equals(candidate.InternalName, name, StringComparison.OrdinalIgnoreCase)))
+                .Where(candidate => DependencyPackageIdentityPolicy.MatchesInstalled(
+                    definition,
+                    candidate.InternalName,
+                    candidate.Name))
                 .OrderByDescending(candidate => candidate.IsLoaded)
                 .ThenByDescending(candidate => candidate.Version)
                 .FirstOrDefault();
@@ -177,8 +179,10 @@ internal sealed class DependencyService(
     {
         object pluginManager = GetDalamudService("Dalamud.Plugin.Internal.PluginManager");
         object localPlugin = EnumerateProperty(pluginManager, "InstalledPlugins")
-                                 .Where(plugin => definition.InternalNames.Any(name =>
-                                     string.Equals(ReadString(plugin, "InternalName"), name, StringComparison.OrdinalIgnoreCase)))
+                                 .Where(plugin => DependencyPackageIdentityPolicy.MatchesInstalled(
+                                     definition,
+                                     ReadString(plugin, "InternalName"),
+                                     ReadString(plugin, "Name")))
                                  .OrderByDescending(plugin => ReadBool(plugin, "IsLoaded"))
                                  .FirstOrDefault()
                              ?? throw new InvalidOperationException($"{definition.DisplayName} is not installed.");
@@ -258,10 +262,10 @@ internal sealed class DependencyService(
 
     private object? FindAvailableManifest(object pluginManager, DependencyDescriptor definition) =>
         EnumerateProperty(pluginManager, "AvailablePlugins").FirstOrDefault(manifest =>
-            definition.InternalNames.Any(name =>
-                string.Equals(ReadString(manifest, "InternalName"), name, StringComparison.OrdinalIgnoreCase)) ||
-            string.Equals(ReadString(manifest, "Name"), definition.DisplayName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(ReadString(manifest, "Name"), definition.InstallerSearch, StringComparison.OrdinalIgnoreCase));
+            DependencyPackageIdentityPolicy.MatchesAvailable(
+                definition,
+                ReadString(manifest, "InternalName"),
+                ReadString(manifest, "Name")));
 
     private object GetDalamudService(string fullName)
     {

@@ -1,6 +1,6 @@
 # VieriNexus implementation status
 
-Version 0.1.0.69 gives Nexus its simplified product-facing navigation and Home presentation: Current Job Automation, Multi-Job Automation Queue, Combat/Rotation, Custom Route Editor, and Market Helper. Home is now only the centered transparent Vieri Nexus logo, `An Automation Suite`, and `created by Valentine Vieri`. It also distinguishes the one-time AutoDuty/VieriAutoDuty shared-identity unload condition from a genuinely incompatible stock provider and gives the exact restart recovery instruction. Version 0.1.0.68 remains the complete multi-icon combat-forecast release.
+Version 0.1.0.70 makes the Dependencies page distinguish stock AutoDuty from VieriAutoDuty by the actual package name instead of their intentionally shared internal name. VieriAutoDuty can no longer satisfy, install, or receive the enable action for the stock AutoDuty dependency; when only the predecessor is present, Nexus correctly offers to install stock AutoDuty. New configurations also start the main Nexus window at 70% opacity, with a direct Appearance slider from 35% to 100%; the compact operations overlay remains independently configured. Version 0.1.0.69 remains the simplified Home/navigation and AutoDuty handoff-diagnosis release.
 
 ## Foundation implemented
 
@@ -85,7 +85,7 @@ Version 0.1.0.69 gives Nexus its simplified product-facing navigation and Home p
 
 ## Current release gate
 
-Version 0.1.0.69 needs one normal-use glance after publication: update through Dalamud and confirm the renamed navigation entries and centered Home presentation. On the current computer, restart FFXIV once with VieriAutoDuty disabled so stock AutoDuty can republish its shared connection; the Duties provider card should then turn green and report the stock runtime active.
+Version 0.1.0.70 needs one direct setup confirmation after publication: with VieriAutoDuty disabled and stock AutoDuty enabled, restart FFXIV once to clear the already-created shared-identity handoff. Dependencies must report stock AutoDuty ready and Automation's Duties provider must turn green. Future setup runs must never enable VieriAutoDuty from the stock AutoDuty card.
 
 Version 0.1.0.59 completes the VieriCodex runtime-retirement gate. Nexus imports every saved multi-job queue step and behavior setting, automatically promotes previously verified imports, persists ordered step state per character, switches through Fast Job Switcher's documented slash commands, confirms the requested job, settles the equipment change, and starts only a fresh bounded Nexus level goal. The existing Queue navigation page is the compact one-scrollbar editor/runtime surface. Stock Questionable is the sole quest runtime candidate; VieriCodex remains only as a guarded local settings source. Version 0.1.0.60 normalizes every player-facing class/job name to title case and every abbreviation to uppercase while preserving the required hidden lowercase Fast Job Switcher command. Version 0.1.0.61 completes the remaining custom-runtime handoff while retaining stock AutoDuty as the ordinary bounded duty mechanics provider.
 

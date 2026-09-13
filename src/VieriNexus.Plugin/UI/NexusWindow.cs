@@ -146,7 +146,7 @@ internal sealed class NexusWindow : Window
 
     public override void PreDraw()
     {
-        NexusTheme.Push();
+        NexusTheme.Push(plugin.Configuration.MainWindowOpacity);
         if (plugin.Configuration.SelectedPage == "Command Center")
             plugin.Configuration.SelectedPage = "Plugins";
         if (plugin.Configuration.SelectedPage == "Overview")
@@ -3862,6 +3862,14 @@ internal sealed class NexusWindow : Window
             plugin.Configuration.UiScale = scale;
             plugin.Save();
         }
+        var opacityPercent = (int)MathF.Round(plugin.Configuration.MainWindowOpacity * 100f);
+        if (ImGui.SliderInt("Window opacity", ref opacityPercent, 35, 100, "%d%%",
+                ImGuiSliderFlags.AlwaysClamp))
+        {
+            plugin.Configuration.MainWindowOpacity = opacityPercent / 100f;
+            plugin.Save();
+        }
+        TextWrapped(NexusTheme.Muted, "70% is the default. Increase it for a more solid window or decrease it to see more of the game behind Nexus.");
         var openOnLogin = plugin.Configuration.OpenOnLogin;
         if (ImGui.Checkbox("Open the Vieri Nexus Home page after entering the world", ref openOnLogin))
         {

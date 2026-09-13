@@ -12,6 +12,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
     public float UiScale { get; set; } = 1f;
+    public float MainWindowOpacity { get; set; } = .70f;
     public string SelectedPage { get; set; } = "Home";
     public bool ShowOperationsOverlay { get; set; }
     public bool LockOperationsOverlay { get; set; }
@@ -35,6 +36,7 @@ public sealed class Configuration : IPluginConfiguration
         int storedVersion = Version;
         pluginInterface = value;
         UiScale = Math.Clamp(UiScale, .8f, 1.5f);
+        MainWindowOpacity = Math.Clamp(MainWindowOpacity, .35f, 1f);
         Characters = new Dictionary<string, CharacterConfiguration>(Characters ?? [], StringComparer.Ordinal);
         LegacyImports = new Dictionary<string, LegacyImportState>(LegacyImports ?? [], StringComparer.OrdinalIgnoreCase);
         EmbeddedModules = new Dictionary<string, bool>(EmbeddedModules ?? [], StringComparer.OrdinalIgnoreCase);
