@@ -8,7 +8,7 @@ not loaded into Nexus's own assembly context.
 
 | Nexus page | Internal runtime | Replaces after local preparation |
 | --- | --- | --- |
-| Combat | Rotation suggestions, stock-Wrath presentation, switch overlay, and hotkeys | VieriRotationHelper |
+| Combat | On-screen ability suggestions and the manual rotation switch | VieriRotationHelper |
 | Combat | Positional forecasts, profiles, encounter feedback, and overlay | VieriAvarice |
 | Custom UI | Complete customized HUD, profiles, highlighting, nameplates, markers, party roles, and ready checks | VieriDelvUI |
 | Market | Owned-retainer matching, guarded repricing, pacing, confirmation, and verification | VieriAutoMarket |
@@ -35,7 +35,10 @@ open-main callbacks are captured so opening Nexus does not open every embedded
 window. Combat's complete Vieri suggestion and switch settings render inside its
 owning Nexus page; the legacy rotation settings command, window hotkey, and switch
 context menu navigate back to that page instead of creating a predecessor window.
-Stock Wrath's own engine settings remain stock-owned and open only when explicitly
+The user-facing page has only three sections: On-Screen Ability Suggestions,
+Wrath Combo, and Manual On-Screen Switch. Module state, predecessor wording,
+integration internals, and legacy settings keybinds are not exposed there. Stock
+Wrath's own engine settings remain stock-owned and open only when explicitly
 requested from the Nexus page.
 
 A module never runs beside its standalone predecessor. While the predecessor is
@@ -79,6 +82,13 @@ Mod, vnavmesh, Lifestream, and Fast Job Switcher remain external providers behin
 their narrow contracts.
 Provider updates therefore do not require rebuilding Nexus unless their public
 contract changes or a guarded compatibility check detects a real incompatibility.
+
+Stock Wrath supplies the live first action and remains the only action-replacement
+and rotation provider. Nexus's suggestion presentation also hosts a side-effect-free
+shadow evaluator that reads the current Wrath options and advances a simulated
+combat timeline for the configured remaining icons. It installs no action-replacement
+hook, commands, IPC providers, windows, movement, or auto-rotation, and never writes
+back to Wrath's configuration.
 
 Before a fresh stock AutoDuty run, Nexus clears a stale vnavmesh path at the
 outer provider boundary. Nexus never resumes an old provider instruction after

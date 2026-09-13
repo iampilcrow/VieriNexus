@@ -25,30 +25,31 @@ public sealed record Decision(uint ActionId, uint EntryAction, string Preset, st
 /// context to the suggestion overlay.</summary>
 public sealed class ReadOnlyRuntime : IDisposable
 {
-    internal static bool Active => PredictionContext.Current != null;
-    internal static bool Hosted { get; private set; }
+    // This assembly is always a read-only evaluator. It never installs Wrath's
+    // action hook, commands, IPC providers, windows, movement, or auto-rotation.
+    internal static bool Active => true;
+    internal static bool Hosted => false;
     internal static Func<uint, uint> NativeAdjust { get; private set; } = id => id;
-    private static Configuration? hostedConfiguration;
-    private static Action<string>? saveHostedConfiguration;
     private static Preset? evaluatingPreset;
     private readonly Dictionary<(uint Job, bool Aoe), Preset> selected = [];
     private readonly HashSet<Type> initializedConfigs = [];
-    private readonly WrathCombo? plugin;
+    private string? lastJson;
     private bool disposed;
 
     public ReadOnlyRuntime(IDalamudPluginInterface pluginInterface, IDalamudPlugin owner,
-        Func<uint, uint> nativeAdjust, string? configurationJson, Action<string> saveConfiguration)
+        Func<uint, uint> nativeAdjust)
     {
         NativeAdjust = nativeAdjust;
-        Hosted = true;
-        saveHostedConfiguration = saveConfiguration;
-        hostedConfiguration = DeserializeConfiguration(configurationJson);
+        ECommonsMain.Init(pluginInterface, owner, ECommons.Module.ObjectFunctions);
         try
         {
-            plugin = new WrathCombo(pluginInterface);
-            NativeAdjust = Service.ActionReplacer.OriginalHook;
+            Service.Configuration = new Configuration();
+            Service.ComboCache = new CustomComboCache();
+            WrathCombo.P = new WrathCombo(this);
+            Service.ActionReplacer = new ActionReplacer();
+            ActionWatching.Enable();
+            CustomComboFunctions.TimerSetup();
             PredictedComboState.LoadFromGameData();
-            saveHostedConfiguration(JsonConvert.SerializeObject(Service.Configuration));
         }
         catch
         {
@@ -57,32 +58,10 @@ public sealed class ReadOnlyRuntime : IDisposable
         }
     }
 
-    private static Configuration DeserializeConfiguration(string? json)
-    {
-        var configuration = new Configuration();
-        if (!string.IsNullOrWhiteSpace(json))
-            JsonConvert.PopulateObject(json, configuration,
-                new JsonSerializerSettings { ObjectCreationHandling = ObjectCreationHandling.Replace });
-        configuration.HideMessageOfTheDay = true;
-        return configuration;
-    }
-
-    internal static Configuration? TakeHostedConfiguration()
-    {
-        var configuration = hostedConfiguration;
-        hostedConfiguration = null;
-        return configuration;
-    }
-
-    internal static void SaveConfiguration(Configuration configuration)
-    {
-        if (Hosted)
-        {
-            saveHostedConfiguration?.Invoke(JsonConvert.SerializeObject(configuration));
-            return;
-        }
-        Svc.PluginInterface.SavePluginConfig(configuration);
-    }
+    // Compatibility surface for retained upstream code paths. The read-only
+    // constructor above never calls the full plugin constructor or saves data.
+    internal static Configuration? TakeHostedConfiguration() => null;
+    internal static void SaveConfiguration(Configuration configuration) { }
 
     internal static bool IsPresetEnabled(Preset preset) =>
         (int)preset < 100 || preset == evaluatingPreset || Service.Configuration.EnabledActions.Contains(preset);
@@ -108,8 +87,10 @@ public sealed class ReadOnlyRuntime : IDisposable
             if (config != null && initializedConfigs.Add(config))
             {
                 RuntimeHelpers.RunClassConstructor(config.TypeHandle);
+                lastJson = null;
             }
         }
+        ApplyConfiguration(configurationJson);
         if (job == 36)
         {
             BlueMageService.PopulateBLUSpells();
@@ -154,6 +135,34 @@ public sealed class ReadOnlyRuntime : IDisposable
             evaluatingPreset = null;
             CustomComboFunctions.OverrideTarget = null;
         }
+    }
+
+    private void ApplyConfiguration(string? configurationJson)
+    {
+        if (configurationJson == lastJson)
+            return;
+
+        var config = new Configuration();
+        Service.Configuration = config;
+        foreach (var setting in UserData.MasterList.Values)
+            setting.ResetToDefault();
+        if (!string.IsNullOrWhiteSpace(configurationJson))
+            JsonConvert.PopulateObject(configurationJson, config,
+                new JsonSerializerSettings { ObjectCreationHandling = ObjectCreationHandling.Replace });
+
+        // Suggestions may inspect Wrath's settings, but this evaluator must
+        // never replace actions, automate combat, announce, or display UI.
+        config.ActionChanging = false;
+        config.CustomActionSettings.SingleTargetDPS = false;
+        config.CustomActionSettings.AoEDPS = false;
+        config.OutputOpenerLogs = false;
+        config.EnabledOutputLog = false;
+        config.TankbusterTTS = false;
+        config.TankbusterToast = false;
+        config.AoEDamageTTS = false;
+        config.AoEDamageToast = false;
+        config.HideMessageOfTheDay = true;
+        lastJson = configurationJson;
     }
 
     public bool GuidanceUsesAoe(int enemies, bool fallback)
@@ -208,18 +217,29 @@ public sealed class ReadOnlyRuntime : IDisposable
     {
         if (disposed) return;
         disposed = true;
-        try
-        {
-            plugin?.Dispose();
-        }
-        finally
-        {
-            NativeAdjust = id => id;
-            saveHostedConfiguration = null;
-            hostedConfiguration = null;
-            Hosted = false;
-        }
+        CustomComboFunctions.TimerDispose();
+        ActionWatching.Dispose();
+        Service.ComboCache.Dispose();
+        WrathCombo.P?.ActionRetargeting.Dispose();
+        WrathCombo.P?.HTTPClient.Dispose();
+        WrathCombo.P = null;
+        NativeAdjust = id => id;
+        ECommonsMain.Dispose();
     }
 
-    public void OpenEngineSettings() => plugin?.OnOpenConfigUi();
+    public void OpenEngineSettings() { }
+}
+
+public sealed partial class WrathCombo
+{
+    // Deliberately avoids the upstream plugin constructor and every side effect
+    // it owns. These helpers are required only by rotation decision readers.
+    internal WrathCombo(ReadOnlyRuntime runtime)
+    {
+        P = this;
+        var leases = new Leasing();
+        IPCSearch = new Search(leases);
+        UIHelper = new UIHelper(leases);
+        ActionRetargeting = new ActionRetargeting();
+    }
 }

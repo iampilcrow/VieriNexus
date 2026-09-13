@@ -3944,6 +3944,12 @@ internal sealed class NexusWindow : Window
 
     private void DrawModulePage(string page)
     {
+        if (page.Equals("Combat", StringComparison.Ordinal))
+        {
+            DrawCombatPage();
+            return;
+        }
+
         IReadOnlyList<EmbeddedModuleStatus> pageModules = embeddedModules.Statuses
             .Where(item => item.Page.Equals(page, StringComparison.Ordinal))
             .ToArray();
@@ -3957,6 +3963,45 @@ internal sealed class NexusWindow : Window
         PageHeading(page, "Your proven Vieri behavior now runs inside Nexus with its own isolated settings and runtime.");
         foreach (EmbeddedModuleStatus module in pageModules)
             DrawEmbeddedModuleCard(module, migration: false);
+    }
+
+    private void DrawCombatPage()
+    {
+        PageHeading("Combat", "Configure what appears on screen while Wrath Combo handles your rotation.");
+        EmbeddedModuleStatus? rotation = embeddedModules.Statuses.FirstOrDefault(item =>
+            item.Id.Equals("rotation", StringComparison.OrdinalIgnoreCase));
+        if (rotation is null)
+        {
+            TextWrapped(NexusTheme.Red, "Combat settings are unavailable.");
+            return;
+        }
+
+        if (rotation.Health == EmbeddedModuleHealth.Running)
+        {
+            if (!embeddedModules.DrawInlineSettings(rotation.Id))
+                TextWrapped(NexusTheme.Amber, "Combat settings are temporarily unavailable.");
+            return;
+        }
+
+        BeginAutoPanel("COMBAT");
+        Vector4 color = rotation.Health == EmbeddedModuleHealth.Failed ? NexusTheme.Red : NexusTheme.Amber;
+        string message = rotation.Health switch
+        {
+            EmbeddedModuleHealth.WaitingForPredecessor => "Disable the separate VieriRotationHelper plugin, then reload plugins once.",
+            EmbeddedModuleHealth.Failed => "Combat could not start safely.",
+            EmbeddedModuleHealth.Disabled => "Combat features are turned off.",
+            _ => "Combat is getting ready.",
+        };
+        TextWrapped(color, message);
+        if (rotation.Health == EmbeddedModuleHealth.Disabled && ImGui.Button("Turn on Combat features"))
+            embeddedModules.SetEnabled(rotation.Id, true);
+        if (rotation.Health == EmbeddedModuleHealth.Failed)
+        {
+            TextWrapped(NexusTheme.Muted, rotation.Message);
+            if (ImGui.Button("Try again"))
+                embeddedModules.Retry(rotation.Id);
+        }
+        EndAutoPanel();
     }
 
     private void DrawEmbeddedModuleCard(EmbeddedModuleStatus module, bool migration)

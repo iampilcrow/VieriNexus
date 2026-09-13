@@ -23,6 +23,49 @@ internal sealed class SettingsWindow : Window
 
     public override void Draw() => DrawInline();
 
+    internal void DrawNexusInline()
+    {
+        var cfg = plugin.Configuration;
+        var stateColor = !plugin.WrathAvailable
+            ? cfg.UnavailableColor
+            : plugin.AutoRotationEnabled ? cfg.EnabledColor : cfg.DisabledColor;
+        ImGui.TextColored(stateColor, plugin.WrathAvailable
+            ? $"Rotation {(plugin.AutoRotationEnabled ? "On" : "Off")}"
+            : "Wrath Combo is unavailable");
+        if (plugin.WrathAvailable && ImGui.Button(plugin.AutoRotationEnabled ? "Turn rotation off" : "Turn rotation on"))
+            plugin.ToggleRotation();
+
+        ImGui.Spacing();
+        var show = cfg.ShowWindow;
+        if (ImGui.Checkbox("Show manual switch", ref show)) { cfg.ShowWindow = show; plugin.SaveNow(); }
+        var locked = cfg.LockWindow;
+        if (ImGui.Checkbox("Lock its position", ref locked)) { cfg.LockWindow = locked; plugin.SaveNow(); }
+        var hideUi = cfg.HideWhenGameUiHidden;
+        if (ImGui.Checkbox("Hide with the FFXIV UI", ref hideUi)) { cfg.HideWhenGameUiHidden = hideUi; plugin.SaveNow(); }
+
+        if (ImGui.TreeNode("Appearance###nexus-manual-switch-appearance"))
+        {
+            var scale = cfg.Scale;
+            ImGui.SetNextItemWidth(250);
+            if (ImGui.SliderFloat("Size", ref scale, .65f, 2f, "%.2fx")) { cfg.Scale = scale; plugin.MarkDirty(); }
+            var opacity = cfg.Opacity;
+            ImGui.SetNextItemWidth(250);
+            if (ImGui.SliderFloat("Opacity", ref opacity, .25f, 1f, "%.2f")) { cfg.Opacity = opacity; plugin.MarkDirty(); }
+            if (ImGui.Button("Reset position")) plugin.ResetWindowPosition();
+            ImGui.TreePop();
+        }
+
+        ImGui.Spacing();
+        var blockMovement = cfg.BlockAutomatedMovement;
+        if (ImGui.Checkbox("Manual Movement / Targeting Only", ref blockMovement))
+            plugin.SetMovementSafety(blockMovement);
+        ImGui.TextWrapped("Pauses automated movement and targeting while leaving Wrath available for the target you choose.");
+        var combatOnly = cfg.CombatOnlyRotation;
+        if (ImGui.Checkbox("In Combat Only", ref combatOnly))
+            plugin.SetCombatOnly(combatOnly);
+        ImGui.TextWrapped("Keeps rotation off outside combat without pausing travel or other automation.");
+    }
+
     internal void DrawInline()
     {
         var cfg = plugin.Configuration;

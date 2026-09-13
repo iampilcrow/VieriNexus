@@ -17,20 +17,13 @@ internal sealed class EmbeddedRotationProvider : IDisposable
     {
         this.wrath = wrath;
         configuration = owner.Configuration;
-        if (wrath.IsLoaded)
-        {
-            Status = "Stock Wrath Combo is the live rotation engine; Nexus is reading its adjusted actions for suggestions.";
-            return;
-        }
         try
         {
-            var imported = wrath.GetOptions(configuration);
             runtime = new WrathCombo.ReadOnlyRuntime(Plugin.PluginInterface, owner,
-                wrath.GetNativeAdjusted, imported, json =>
-                {
-                    configuration.WrathOptionsSnapshot = json;
-                    owner.Save();
-                });
+                wrath.GetNativeAdjusted);
+            Status = wrath.IsLoaded
+                ? "Wrath Combo is ready, including the forward suggestion strip."
+                : "Waiting for Wrath Combo; saved settings are available for suggestions.";
         }
         catch (Exception ex)
         {
@@ -53,7 +46,8 @@ internal sealed class EmbeddedRotationProvider : IDisposable
             }
             if (runtime == null)
                 return new(0, mode, SuggestionSource.EmbeddedVieri, false, Status);
-            var decision = runtime.Evaluate(anchor.JobId, mode == RotationMode.Aoe, null);
+            var decision = runtime.Evaluate(anchor.JobId, mode == RotationMode.Aoe,
+                wrath.GetOptions(configuration));
             EntryAction = decision.EntryAction;
             Status = $"{anchor.Job}: {decision.Preset} — {decision.Detail}";
             return new(decision.ActionId, mode, SuggestionSource.EmbeddedVieri, true,
@@ -91,7 +85,8 @@ internal sealed class EmbeddedRotationProvider : IDisposable
     {
         if (count <= 1 || runtime == null)
             return [];
-        return runtime.Forecast(anchor.JobId, mode == RotationMode.Aoe, null, lead, count)
+        return runtime.Forecast(anchor.JobId, mode == RotationMode.Aoe,
+                wrath.GetOptions(configuration), lead, count)
             .Select(decision => new RotationSuggestion(decision.ActionId, mode,
                 SuggestionSource.EmbeddedVieri, true,
                 $"Predicted from {decision.Preset} after advancing the shadow combat timeline.",

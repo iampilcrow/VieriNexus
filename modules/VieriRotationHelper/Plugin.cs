@@ -132,7 +132,8 @@ public sealed class Plugin : IDalamudPlugin
     internal void Save() => Configuration.Save();
     private void Draw()
     {
-        WindowHotkey.Update();
+        if (!nexusHosted)
+            WindowHotkey.Update();
         windows.Draw();
     }
     internal void ToggleSettings()
@@ -160,7 +161,7 @@ public sealed class Plugin : IDalamudPlugin
     internal void DrawSwitchSettings()
     {
         if (switchRuntime != null)
-            switchRuntime.DrawSettingsInline();
+            switchRuntime.DrawNexusSettingsInline();
         else
             ImGui.TextWrapped("Disable the separate VieriWrathSwitch plugin to let Nexus load and own these switch controls.");
     }

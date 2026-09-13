@@ -72,9 +72,10 @@ internal sealed class RotationCoordinator(
             lead = embeddedLead;
         }
 
-        // Keep a shared eight-action sequence for both the visible bar and
-        // positional consumers. The bar independently limits how many it draws.
-        var forecast = lead.ActionId == 0 ? [] : embedded.Forecast(anchor, effectiveMode, lead.ActionId, 8);
+        // Produce the complete configured strip. Positional consumers can read
+        // the same timeline without limiting what the visible bar can draw.
+        var forecast = lead.ActionId == 0 ? [] : embedded.Forecast(anchor, effectiveMode,
+            lead.ActionId, Math.Clamp(configuration.PredictionCount, 1, 10));
         var status = lead.Source == SuggestionSource.LiveWrath
             ? parity ? "LIVE WRATH · PARITY" : "LIVE WRATH · FORECAST DIFFERS"
             : "INDEPENDENT WRATH RULES";

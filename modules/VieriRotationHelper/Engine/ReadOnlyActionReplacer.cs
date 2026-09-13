@@ -23,6 +23,7 @@ internal sealed class ActionReplacer : IDisposable
     internal uint OriginalHook(uint actionId) => ReadOnlyRuntime.NativeAdjust(actionId);
     public void EnableActionReplacingIfRequired() { }
     public void DisableActionReplacingIfRequired() { }
+    internal void SetActionReplacing(bool enabled) { }
     public void Dispose() { }
 
     internal sealed class DisabledHook

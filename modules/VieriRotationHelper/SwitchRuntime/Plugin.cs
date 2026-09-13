@@ -129,6 +129,7 @@ public sealed class Plugin : IDalamudPlugin
             settingsWindow.IsOpen = true;
     }
     public void DrawSettingsInline() => settingsWindow.DrawInline();
+    public void DrawNexusSettingsInline() => settingsWindow.DrawNexusInline();
 
     public void ToggleRotation() => SetRotation(!AutoRotationEnabled);
 
@@ -248,7 +249,8 @@ public sealed class Plugin : IDalamudPlugin
 
         rotationControl.Update();
         RefreshWrathState(false);
-        HandleHotkey();
+        if (!embedded)
+            HandleHotkey();
         movementSafety.Update(Configuration.BlockAutomatedMovement);
         combatOnly.Update(Configuration.CombatOnlyRotation);
 
@@ -356,7 +358,7 @@ public sealed class Plugin : IDalamudPlugin
             case "combat": ToggleCombatOnly(); break;
             case "combat on": SetCombatOnly(true); break;
             case "combat off": SetCombatOnly(false); break;
-            default: settingsWindow.Toggle(); break;
+            default: OpenSettings(); break;
         }
     }
 }

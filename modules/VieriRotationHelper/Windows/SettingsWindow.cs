@@ -1,7 +1,6 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
-using Dalamud.Game.ClientState.Keys;
 
 namespace VieriRotationHelper.Windows;
 
@@ -28,110 +27,91 @@ internal sealed class SettingsWindow : Window
 
     internal void DrawNexusContents()
     {
-        if (!ImGui.BeginTabBar("###VieriCombatSuiteTabs")) return;
-        if (ImGui.BeginTabItem("Suggestions")) { DrawSuggestions(); ImGui.EndTabItem(); }
-        if (ImGui.BeginTabItem("Rotation Engine")) { DrawRotationEngine(); ImGui.EndTabItem(); }
-        if (ImGui.BeginTabItem("Switch")) { DrawSwitch(); ImGui.EndTabItem(); }
-        if (ImGui.BeginTabItem("Integrations")) { DrawIntegrations(); ImGui.EndTabItem(); }
-        if (ImGui.BeginTabItem("Keybinds")) { DrawKeybinds(); ImGui.EndTabItem(); }
-        ImGui.EndTabBar();
-    }
-
-    private void DrawKeybinds()
-    {
-        var cfg = plugin.Configuration;
-        var hotkey = plugin.WindowHotkey;
-        ImGui.TextUnformatted("Suite window keybind");
-        ImGui.TextWrapped("Record a key combination to open or close this settings window while FFXIV is focused. This does not toggle rotation, suggestions, Manual Control, or In Combat Only.");
-        ImGui.TextUnformatted($"Current: {hotkey.Name}");
-        if (hotkey.IsCapturing)
+        if (ImGui.CollapsingHeader("On-Screen Ability Suggestions###combat-ability-suggestions", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            if (ImGui.Button("Press a key combination... (Esc cancels)")) hotkey.CancelCapture();
+            ImGui.Indent();
+            DrawSuggestions();
+            ImGui.Unindent();
         }
-        else if (ImGui.Button("Record keybind")) hotkey.StartCapture();
-        ImGui.SameLine();
-        if (ImGui.Button("Clear")) hotkey.Clear();
-        var changed = ImGui.Checkbox("Enable keybind", ref cfg.WindowHotkeyEnabled);
-        changed |= ImGui.Checkbox("Require exact modifier combination", ref cfg.WindowHotkeyExactModifiers);
-        if (changed) plugin.Save();
-        ImGui.TextWrapped("Use an unused Ctrl, Shift, or Alt combination. Existing game and other plugin bindings are not replaced or blocked.");
-        if (cfg.WindowHotkey != VirtualKey.NO_KEY && !cfg.WindowHotkeyControl && !cfg.WindowHotkeyShift && !cfg.WindowHotkeyAlt)
-            ImGui.TextWrapped("Warning: an unmodified key can also trigger while typing in chat.");
-        ImGui.Separator();
-        ImGui.TextWrapped("Rotation ON/OFF (F1 by default) and the other switch shortcuts are configured in the Switch tab on this page.");
+        if (ImGui.CollapsingHeader("Wrath Combo###combat-wrath-combo"))
+        {
+            ImGui.Indent();
+            DrawRotationEngine();
+            ImGui.Unindent();
+        }
+        if (ImGui.CollapsingHeader("Manual On-Screen Switch###combat-manual-switch"))
+        {
+            ImGui.Indent();
+            DrawSwitch();
+            ImGui.Unindent();
+        }
     }
 
     private void DrawSuggestions()
     {
         var changed = false;
-        changed |= ImGui.Checkbox("Enable rotation suggestions", ref plugin.Configuration.Enabled);
-        ImGui.Separator();
-        changed |= ImGui.Checkbox("Show Single Target", ref plugin.Configuration.ShowSingleTarget);
-        changed |= ImGui.Checkbox("Show AoE", ref plugin.Configuration.ShowAoe);
-        changed |= ImGui.Checkbox("Show Dynamic (switches by nearby targets)", ref plugin.Configuration.ShowDynamic);
+        ImGui.TextWrapped("Shows the next abilities chosen by Wrath Combo.");
+        changed |= ImGui.Checkbox("Show ability suggestions", ref plugin.Configuration.Enabled);
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Bars to show");
+        changed |= ImGui.Checkbox("Single Target", ref plugin.Configuration.ShowSingleTarget);
+        ImGui.SameLine();
+        changed |= ImGui.Checkbox("Area of Effect", ref plugin.Configuration.ShowAoe);
+        ImGui.SameLine();
+        changed |= ImGui.Checkbox("Dynamic", ref plugin.Configuration.ShowDynamic);
         var aoeCount = plugin.Configuration.DynamicAoeTargetCount;
-        if (ImGui.SliderInt("Dynamic AoE at target count", ref aoeCount, 2, 8))
+        if (plugin.Configuration.ShowDynamic && ImGui.SliderInt("Use Area of Effect at", ref aoeCount, 2, 8, "%d nearby enemies"))
         {
             plugin.Configuration.DynamicAoeTargetCount = aoeCount;
             changed = true;
         }
+        ImGui.Spacing();
+        ImGui.TextUnformatted("When to show");
         changed |= ImGui.Checkbox("Show while out of combat", ref plugin.Configuration.ShowOutOfCombat);
         changed |= ImGui.Checkbox("Show without a target", ref plugin.Configuration.ShowWithoutTarget);
-        changed |= ImGui.Checkbox("Show hotkeys", ref plugin.Configuration.ShowHotkeys);
-        changed |= ImGui.Checkbox("Lock bars", ref plugin.Configuration.LockBars);
-        changed |= ImGui.Checkbox("Horizontal layout", ref plugin.Configuration.Horizontal);
-        var predictions = plugin.Configuration.PredictionCount;
-        if (ImGui.SliderInt("Actions shown", ref predictions, 1, 10))
+        if (ImGui.TreeNode("Appearance"))
         {
-            plugin.Configuration.PredictionCount = predictions;
-            changed = true;
+            changed |= ImGui.Checkbox("Show assigned hotkeys", ref plugin.Configuration.ShowHotkeys);
+            changed |= ImGui.Checkbox("Lock bars", ref plugin.Configuration.LockBars);
+            changed |= ImGui.Checkbox("Horizontal layout", ref plugin.Configuration.Horizontal);
+            var predictions = plugin.Configuration.PredictionCount;
+            if (ImGui.SliderInt("Abilities shown", ref predictions, 1, 10))
+            {
+                plugin.Configuration.PredictionCount = predictions;
+                changed = true;
+            }
+            changed |= ImGui.SliderFloat("First icon size", ref plugin.Configuration.IconSize, 32f, 96f, "%.0f px");
+            changed |= ImGui.SliderFloat("Following icon size", ref plugin.Configuration.FutureIconScale, .45f, 1f, "%.2f");
+            changed |= ImGui.SliderFloat("Spacing", ref plugin.Configuration.IconSpacing, 0f, 12f, "%.0f px");
+            changed |= ImGui.SliderFloat("Opacity", ref plugin.Configuration.Opacity, .2f, 1f, "%.2f");
+            ImGui.TreePop();
         }
-        changed |= ImGui.SliderFloat("Lead icon size", ref plugin.Configuration.IconSize, 32f, 96f, "%.0f px");
-        changed |= ImGui.SliderFloat("Future icon scale", ref plugin.Configuration.FutureIconScale, .45f, 1f, "%.2f");
-        changed |= ImGui.SliderFloat("Icon spacing", ref plugin.Configuration.IconSpacing, 0f, 12f, "%.0f");
-        changed |= ImGui.SliderFloat("Opacity", ref plugin.Configuration.Opacity, .2f, 1f, "%.2f");
-        ImGui.Separator();
-        changed |= ImGui.Checkbox("Show cooldown sweep", ref plugin.Configuration.ShowCooldownSweep);
-        changed |= ImGui.Checkbox("Show weave icon", ref plugin.Configuration.ShowWeaveIcon);
-        changed |= ImGui.Checkbox("Show positional cues", ref plugin.Configuration.ShowPositionals);
-        changed |= ImGui.Checkbox("Dim actions when target is out of range", ref plugin.Configuration.ShowRangeFade);
-        changed |= ImGui.Checkbox("Show nearby enemy count", ref plugin.Configuration.ShowEnemyCount);
-        changed |= ImGui.Checkbox("Debug state and parity", ref plugin.Configuration.DebugMode);
-        ImGui.TextWrapped("Nexus suggestions use the live decisions produced by stock Wrath Combo, with the familiar Vieri icon frames, hotkeys, positional symbols, cooldowns, and multi-action presentation.");
+        if (ImGui.TreeNode("Extra indicators"))
+        {
+            changed |= ImGui.Checkbox("Cooldown", ref plugin.Configuration.ShowCooldownSweep);
+            changed |= ImGui.Checkbox("Weave ability", ref plugin.Configuration.ShowWeaveIcon);
+            changed |= ImGui.Checkbox("Position", ref plugin.Configuration.ShowPositionals);
+            changed |= ImGui.Checkbox("Dim when out of range", ref plugin.Configuration.ShowRangeFade);
+            changed |= ImGui.Checkbox("Nearby enemy count", ref plugin.Configuration.ShowEnemyCount);
+            ImGui.TreePop();
+        }
         if (changed) plugin.Save();
     }
 
     private void DrawRotationEngine()
     {
         var color = plugin.EmbeddedEngineActive ? new Vector4(.35f, 1f, .5f, 1f) : new Vector4(1f, .65f, .2f, 1f);
-        ImGui.TextColored(color, plugin.EmbeddedEngineActive ? "Stock Wrath connection: ACTIVE" : "Stock Wrath connection: WAITING");
-        ImGui.TextWrapped(plugin.EngineStatus);
-        ImGui.Spacing();
+        ImGui.TextColored(color, plugin.EmbeddedEngineActive ? "Ready" : "Wrath Combo is not available");
+        ImGui.TextWrapped("Wrath Combo handles rotations and job-specific behavior.");
         if (plugin.EmbeddedEngineActive && ImGui.Button("Open Wrath Combo settings", new Vector2(280, 34)))
             plugin.OpenEngineSettings();
-        ImGui.TextWrapped("Stock Wrath Combo owns job presets, action replacement, Auto-Rotation, targeting, and opener logic. Nexus reads its live decisions and adds the Vieri presentation without installing a second action hook.");
     }
 
     private void DrawSwitch()
     {
-        var cfg = plugin.Configuration.Switch;
-        ImGui.TextColored(plugin.EmbeddedSwitchActive ? new Vector4(.35f, 1f, .5f, 1f) : new Vector4(1f, .65f, .2f, 1f),
-            plugin.EmbeddedSwitchActive ? "Integrated switch: ACTIVE" : "Integrated switch: waiting for the separate VieriWrathSwitch plugin to be disabled and plugins reloaded");
-        var show = cfg.ShowWindow;
-        if (ImGui.Checkbox("Show the movable switch", ref show)) { cfg.ShowWindow = show; plugin.Save(); }
-        ImGui.TextWrapped(cfg.BlockAutomatedMovement ? "Manual Movement / Targeting Only is ON." : "Manual Movement / Targeting Only is OFF.");
-        ImGui.TextWrapped(cfg.CombatOnlyRotation ? "In Combat Only is ON." : "In Combat Only is OFF.");
-        ImGui.Separator();
-        plugin.DrawSwitchSettings();
-    }
-
-    private static void DrawIntegrations()
-    {
-        ImGui.TextColored(new Vector4(.35f, 1f, .5f, 1f), "Compatibility interfaces are enabled");
-        ImGui.BulletText("Stock Wrath Combo remains the single rotation and action-hook provider");
-        ImGui.BulletText("AutoDuty and other clients continue using WrathCombo IPC directly");
-        ImGui.BulletText("Nexus owns Vieri suggestions, switch controls, and automation coordination");
-        ImGui.Spacing();
-        ImGui.TextWrapped("Keep stock Wrath Combo enabled. The separate VieriRotationHelper and VieriWrathSwitch plugins should remain disabled because their custom behavior now runs inside Nexus.");
+        if (plugin.EmbeddedSwitchActive)
+            plugin.DrawSwitchSettings();
+        else
+            ImGui.TextWrapped("The manual switch is temporarily unavailable.");
     }
 }
