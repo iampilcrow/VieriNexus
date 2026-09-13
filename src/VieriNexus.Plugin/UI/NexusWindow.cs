@@ -401,9 +401,17 @@ internal sealed class NexusWindow : Window
             ImGui.TextWrapped(status.Definition.Description);
             if (!string.IsNullOrWhiteSpace(status.Version))
                 ImGui.TextDisabled($"Version {status.Version}");
+            if (status.HasPackageConflict)
+            {
+                TextWrapped(NexusTheme.Red,
+                    "VieriAutoDuty is still installed and shares AutoDuty's package identity. Uninstall it after its settings are prepared, or Dalamud can remove stock AutoDuty on the next restart.");
+                if (ImGui.Button($"Open VieriAutoDuty to uninstall##dependency-conflict-{status.Definition.Id}", new Vector2(-1, 0)))
+                    dependencies.OpenConflictingPackage(status);
+            }
             bool working = dependencies.IsWorking(status.Definition.Id);
             var action = working ? "Working..." : status.Health switch
             {
+                DependencyHealth.Missing when status.HasPackageConflict => "Remove VieriAutoDuty first",
                 DependencyHealth.Missing => "Install and enable",
                 DependencyHealth.Disabled => "Enable now",
                 _ => "Manage in Dalamud",
@@ -2819,8 +2827,14 @@ internal sealed class NexusWindow : Window
                 $"Current Job Automation • {goal.Goal.StatusDetail}");
         else
             NexusTheme.StatusDot(NexusTheme.Muted, "No automation is running");
-        TextWrapped(NexusTheme.Muted,
-            "Starting one mode hands off safely from the other. Stock Questionable, AutoDuty, Wrath Combo, Lifestream, Boss Mod, and vnavmesh perform only their bounded mechanics; Nexus owns the plan and controls.");
+        DependencyStatus autoDuty = dependencies.Snapshot().First(item => item.Definition.Id == "autoduty");
+        bool canOpenAutoDuty = autoDuty.IsReady;
+        if (!canOpenAutoDuty)
+            ImGui.BeginDisabled();
+        if (ImGui.Button("Open AutoDuty settings"))
+            dependencies.OpenSettings(autoDuty.Definition, out progressionMessage);
+        if (!canOpenAutoDuty)
+            ImGui.EndDisabled();
         EndAutoPanel();
 
         if (!ImGui.BeginTabBar("###NexusAutomationModes"))
@@ -2866,11 +2880,9 @@ internal sealed class NexusWindow : Window
             plugin.Save();
         }
 
-        BeginAutoPanel("REACH JOB LEVEL");
+        BeginAutoPanel("CURRENT JOB AUTOMATION");
         NexusTheme.StatusDot(NexusTheme.Cyan,
             $"{character.Name} • {ClassJobDisplay.Label(character)} • Level {character.Level}");
-        TextWrapped(NexusTheme.Muted,
-            "This first goal follows the job you are currently playing. Job switching joins the queue after its ownership contract is migrated.");
 
         bool changed = false;
         int targetLevel = draftConfiguration.TargetLevel;
@@ -2928,8 +2940,6 @@ internal sealed class NexusWindow : Window
             draftConfiguration.MinimumGilReserve = Math.Clamp(gilReserve, 0, 999_999_999);
             changed = true;
         }
-        TextWrapped(NexusTheme.Muted,
-            "Nexus-owned gear planning will treat this as a hard spending floor. Providers will not make that policy decision.");
         if (changed)
         {
             progressionMessage = "Progression draft saved for this character.";
@@ -2937,8 +2947,6 @@ internal sealed class NexusWindow : Window
         }
         if (!string.IsNullOrWhiteSpace(progressionMessage))
             TextWrapped(NexusTheme.Green, progressionMessage);
-        EndAutoPanel();
-
         ReachJobLevelPlan plan = ReachJobLevelPlanner.Build(
             new ReachJobLevelGoalDraft(
                 character.Key,
@@ -2958,6 +2966,7 @@ internal sealed class NexusWindow : Window
             progressionRuntime.IsHuntingLogReady,
             progressionRuntime.HuntingLogReadinessDetail);
         DrawProgressionRuntime(plan, character, draftConfiguration);
+        EndAutoPanel();
         if (ImGui.CollapsingHeader("Provider details###ProgressionProviders"))
             DrawProgressionProviders(providers);
         if (ImGui.CollapsingHeader("Plan details###ProgressionPlan"))
@@ -3626,13 +3635,11 @@ internal sealed class NexusWindow : Window
         ProgressionDraftConfiguration draft)
     {
         ProgressionGoalState? state = progressionRuntime.State;
-        NexusTheme.SectionTitle("Goal control");
+        ImGui.Spacing();
         if (!string.IsNullOrWhiteSpace(progressionRuntime.LoadError))
         {
-            BeginAutoPanel("SAVED GOAL");
             NexusTheme.StatusDot(NexusTheme.Red, progressionRuntime.LoadError);
             TextWrapped(NexusTheme.Muted, "The saved file was left untouched for diagnosis and recovery.");
-            EndAutoPanel();
             return;
         }
 
@@ -3647,54 +3654,34 @@ internal sealed class NexusWindow : Window
                 draft.AllowMainScenario,
                 draft.AllowJobQuests,
                 draft.AllowSideQuests);
-            int eligibleMainScenarioQuests = eligibleQuestList.Count(
-                quest => quest.Kind == ProgressionQuestKind.MainScenario);
-            int eligibleClassJobRoleQuests = eligibleQuestList.Count(
-                quest => quest.Kind == ProgressionQuestKind.ClassJobRole);
-            int eligibleSideQuests = eligibleQuestList.Count(
-                quest => quest.Kind == ProgressionQuestKind.GeneralSideQuest);
             int eligibleQuests = eligibleQuestList.Count;
             int eligibleHuntingTargets = draft.AllowHuntingLog
                 ? progressionRuntime.EligibleHuntingTargets(character.ClassJobId, character.Level).Count
                 : 0;
-            BeginAutoPanel("START");
             bool hasExecutableStart = plan.IsExecutionConnected && progressionRuntime.IsGearReadinessReady &&
                 (eligibleQuests > 0 || eligibleHuntingTargets > 0 || eligibleDuties > 0);
-            NexusTheme.StatusDot(hasExecutableStart ? NexusTheme.Green : NexusTheme.Amber,
-                hasExecutableStart
-                    ? $"Ready • {eligibleMainScenarioQuests} MSQ • {eligibleClassJobRoleQuests} Class/Job/Role • {eligibleHuntingTargets} hunt target(s) • {eligibleSideQuests} side quest(s) • {eligibleDuties} duties"
-                    : !progressionRuntime.IsGearReadinessReady
-                        ? "Nexus gear shopping is unavailable"
+            if (!hasExecutableStart)
+                NexusTheme.StatusDot(NexusTheme.Amber,
+                    !progressionRuntime.IsGearReadinessReady
+                        ? "Gear shopping is unavailable"
                         : plan.IsExecutionConnected
-                            ? "No eligible activity is ready for the current job and selected methods"
-                            : "No executable progression activity is ready");
-            TextWrapped(NexusTheme.Muted,
-                "Nexus—not the provider—owns the level target, exact quest or duty selection, task history, Stop-after, verification, and replanning.");
+                            ? "No selected activity is currently available for this job"
+                            : "A required activity provider is unavailable");
             bool canStart = plan.IsValid && !plan.IsSatisfied && hasExecutableStart &&
-                plugin.Configuration.ForCharacter(character.Key.ToString()).AllowAutomation &&
-                !plugin.Configuration.ForCharacter(character.Key.ToString()).ProgressionQueue.IsRunning &&
-                !plugin.Configuration.ForCharacter(character.Key.ToString()).ProgressionQueue.IsPaused;
+                plugin.Configuration.ForCharacter(character.Key.ToString()).AllowAutomation;
             if (!canStart)
                 ImGui.BeginDisabled();
-            if (ImGui.Button("Start level goal", new Vector2(-1, 0)))
-            {
-                ProgressionActionResult result = progressionRuntime.StartConfigured(
-                    character,
-                    draft,
-                    plugin.Configuration.ForCharacter(character.Key.ToString()).AllowAutomation);
-                progressionMessage = result.Message;
-            }
+            if (ImGui.Button("Start Current Job Automation", new Vector2(-1, 0)))
+                progressionMessage = progressionQueue.StartCurrentJob(character).Message;
             if (!canStart)
                 ImGui.EndDisabled();
             if (state?.Goal.Status is GoalStatus.Satisfied or GoalStatus.Cancelled)
                 TextWrapped(state.Goal.Status == GoalStatus.Satisfied ? NexusTheme.Green : NexusTheme.Muted,
                     state.Goal.StatusDetail ?? state.Goal.Status.ToString());
-            EndAutoPanel();
             return;
         }
 
         NexusTask? activeTask = state.ActiveTask;
-        BeginAutoPanel("ACTIVE GOAL");
         Vector4 statusColor = state.Goal.Status switch
         {
             GoalStatus.Active => NexusTheme.Green,
@@ -3722,7 +3709,14 @@ internal sealed class NexusWindow : Window
         if (rotation.IsRelevant)
             TextWrapped(rotation.IsActive ? NexusTheme.Green : NexusTheme.Amber, rotation.Message);
 
-        if (state.Goal.Status == GoalStatus.Active)
+        ProgressionQueueConfiguration queue = plugin.Configuration
+            .ForCharacter(character.Key.ToString()).ProgressionQueue;
+        if (queue.IsRunning || queue.IsPaused)
+        {
+            if (ImGui.Button("Switch to Current Job Automation", new Vector2(-1, 0)))
+                progressionMessage = progressionQueue.StartCurrentJob(character).Message;
+        }
+        else if (state.Goal.Status == GoalStatus.Active)
         {
             bool disableLastRun = state.StopAfterCurrentDuty || activeTask is null;
             if (disableLastRun)
@@ -3750,7 +3744,6 @@ internal sealed class NexusWindow : Window
 
         if (!string.IsNullOrWhiteSpace(progressionMessage))
             TextWrapped(NexusTheme.Cyan, progressionMessage);
-        EndAutoPanel();
     }
 
     private void DrawProgressionProviders(ProgressionProviderSnapshot providers)

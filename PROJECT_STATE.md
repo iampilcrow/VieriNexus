@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-13 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.70`
+Current product version: `0.1.0.71`
 Current published source: `0.1.0.70`, source `72aeaf563024569e2ec52e6556499c1d404da21a`, website release `09e1bf61d6a8632a983a3ca3989e82cd8b5e406a`, verification documentation `cff22ff26a41bd8adc0721aa40a6ba74d7d8e07c`. Release deployment `dpl_8aVx7CKmDUDxiPExVVFSFvD5JNUZ` and final documentation deployment `dpl_5DHMSbsjt6XUu5PvDz6Cc9Ax7Gzy` are Ready on both canonical aliases; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `9C96C1F24F5F93BE9988918712B68816D15BD65AE670BB9242B2B1266D157036` / `18A4B0B41FFD6B65684B3C147E25A86B9A2F31F213DA912DF2F4594B83FF1D9C`; Discord workflow `34767084412` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.70 is published. Dependencies now distinguishes stock AutoDuty from VieriAutoDuty by exact package identity across discovery, installation, and enabling even though both packages use the `AutoDuty` internal name. Stock AutoDuty remains the executable duty provider and the predecessor remains only a migration source. New configurations default the main Nexus window to 70% opacity and expose a 35%-100% Appearance slider without changing the separately configured operations overlay. The already-affected live game session requires one restart with VieriAutoDuty disabled and stock AutoDuty enabled because the predecessor unload released their shared channels before this correction was installed.
+Current workstream: version 0.1.0.71 prevents the still-installed VieriAutoDuty package from evicting stock AutoDuty during Dalamud startup, adds direct stock AutoDuty settings access to Automation, flattens Current Job Automation into one user-facing configuration/control panel, and makes switching from a running or paused Multi-Job queue automatic. It also preserves active native gear shopping across teleport loading screens so the trip continues to the vendor after zoning. Version 0.1.0.70 remains the current published exact-package selector and 70%-opacity release.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -215,7 +215,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 9 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety, Progression draft and complete multi-job queue state, one-time verified queue promotion, per-source migration state, and independent embedded-module enablement.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.70`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.71`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -256,7 +256,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 
 ### `tests/VieriNexus.Application.Tests`
 
-There are 331 automated Nexus tests across the application/domain policies, including native queue import/normalization/order/method behavior, MSQ planning/execution priority, null-safe complete VieriCodex settings import, transactional recovery/rollback, command aliases including `job.switch`, public-version alignment, payload bounds, character scoping, rejected unsafe controls, provider identity handoff coverage, and Plugins-page grouping/command behavior. The five packaged engines retain their own focused regression suites, and the release package has a separate nested-archive safety/completeness verifier.
+There are 336 automated Nexus tests across the application/domain policies, including native queue import/normalization/order/method behavior, MSQ planning/execution priority, null-safe complete VieriCodex settings import, transactional recovery/rollback, command aliases including `job.switch`, public-version alignment, payload bounds, character scoping, rejected unsafe controls, provider identity handoff coverage, and Plugins-page grouping/command behavior. The five packaged engines retain their own focused regression suites, and the release package has a separate nested-archive safety/completeness verifier.
 
 - `DependencyCatalogTests.cs`
 - `NavigationRouteMigrationImporterTests.cs`
@@ -738,7 +738,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.70`. Dalamud API 15. Version 0.1.0.70 is the current production feed entry; every prior version remains an immutable historical archive.
+- Plugin project version: `0.1.0.71`. Dalamud API 15. Version 0.1.0.71 is the pending production feed entry; every prior version remains an immutable historical archive.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.

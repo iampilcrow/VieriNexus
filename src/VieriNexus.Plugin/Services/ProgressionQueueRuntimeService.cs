@@ -21,6 +21,7 @@ internal sealed class ProgressionQueueRuntimeService
     private DateTimeOffset switchDeadlineUtc;
     private uint requestedClassJobId;
     private bool sessionReconciled;
+    private bool startCurrentJobWhenSafe;
 
     internal ProgressionQueueRuntimeService(
         Configuration configuration,
@@ -45,6 +46,7 @@ internal sealed class ProgressionQueueRuntimeService
     internal IReadOnlyList<NexusClassJob> CombatJobs => jobSwitcher.CombatJobs();
     internal int Level(uint classJobId) => jobSwitcher.Level(classJobId);
     internal string JobLabel(uint classJobId) => jobSwitcher.Label(classJobId);
+    internal string CurrentJobHandoffMessage { get; private set; } = string.Empty;
 
     internal ProgressionQueueConfiguration? Queue(CharacterSnapshot? character) =>
         character is { Key.IsKnown: true }
@@ -116,6 +118,43 @@ internal sealed class ProgressionQueueRuntimeService
         return new(true, queue.StatusDetail);
     }
 
+    internal ProgressionActionResult StartCurrentJob(CharacterSnapshot? character)
+    {
+        if (character is null || !character.Key.IsKnown)
+            return new(false, "Log in before starting Current Job Automation.");
+        CharacterConfiguration owner = configuration.ForCharacter(character.Key.ToString());
+        ProgressionQueueConfiguration queue = owner.ProgressionQueue;
+        ProgressionQueuePolicy.Normalize(queue);
+
+        bool queueWasActive = queue.IsRunning || queue.IsPaused;
+        if (queueWasActive)
+        {
+            ProgressionActionResult stopped = Stop(character);
+            if (!stopped.Success)
+                return stopped;
+        }
+
+        if (!queueWasActive &&
+            progression.State?.Goal.Status is GoalStatus.Active or GoalStatus.Paused or GoalStatus.Blocked)
+        {
+            ProgressionActionResult stopped = progression.StopNow();
+            if (!stopped.Success)
+                return stopped;
+        }
+
+        if (progression.State?.Goal.Status is GoalStatus.Active or GoalStatus.Paused or GoalStatus.Blocked)
+        {
+            startCurrentJobWhenSafe = true;
+            CurrentJobHandoffMessage =
+                "Stopping Multi-Job Automation; Current Job Automation will start automatically as soon as the active provider confirms it is idle.";
+            return new(true, CurrentJobHandoffMessage);
+        }
+
+        ProgressionActionResult started = progression.StartConfigured(character, owner.Progression, owner.AllowAutomation);
+        CurrentJobHandoffMessage = started.Message;
+        return started;
+    }
+
     internal void Reset(CharacterSnapshot? character)
     {
         ProgressionQueueConfiguration? queue = Queue(character);
@@ -144,6 +183,7 @@ internal sealed class ProgressionQueueRuntimeService
             characterKey = key;
             requestedClassJobId = 0;
             sessionReconciled = false;
+            startCurrentJobWhenSafe = false;
         }
 
         ProgressionQueueConfiguration queue = configuration.ForCharacter(key).ProgressionQueue;
@@ -164,6 +204,18 @@ internal sealed class ProgressionQueueRuntimeService
                 queue.UpdatedAtUtc = DateTimeOffset.UtcNow;
                 save();
             }
+        }
+        if (startCurrentJobWhenSafe)
+        {
+            if (progression.State?.Goal.Status is GoalStatus.Active or GoalStatus.Paused or GoalStatus.Blocked)
+                return;
+            startCurrentJobWhenSafe = false;
+            ProgressionActionResult started = progression.StartConfigured(
+                character,
+                configuration.ForCharacter(key).Progression,
+                configuration.ForCharacter(key).AllowAutomation);
+            CurrentJobHandoffMessage = started.Message;
+            return;
         }
         if (!queue.IsRunning || queue.IsPaused || DateTimeOffset.UtcNow < nextActionAtUtc)
             return;

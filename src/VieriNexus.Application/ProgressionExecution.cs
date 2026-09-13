@@ -1032,6 +1032,19 @@ public sealed class ProgressionExecutionCoordinator
         }
 
         ProgressionGearProviderObservation observation = gearProvider.ObserveGearReadiness();
+        if (!world.IsAvailable && (!observation.IsAvailable || observation.IsBusy is null))
+        {
+            if (task.StatusDetail != "Traveling to the gear vendor; waiting for the destination to finish loading.")
+            {
+                ReplaceTask(task with
+                {
+                    Status = NexusTaskStatus.Running,
+                    StatusDetail = "Traveling to the gear vendor; waiting for the destination to finish loading.",
+                });
+                Save();
+            }
+            return;
+        }
         if (!observation.IsAvailable || observation.IsBusy is null)
         {
             BeginFailureStop(task, FailureKind.DependencyUnavailable, "gear-provider-unavailable",

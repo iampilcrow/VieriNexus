@@ -22,6 +22,9 @@ public sealed class DependencyPackageIdentityPolicyTests
             AutoDuty,
             "AutoDuty",
             "VieriAutoDuty"));
+        Assert.True(DependencyPackageIdentityPolicy.IsBlockingLegacyCollision(
+            AutoDuty,
+            "VieriAutoDuty"));
     }
 
     [Fact]

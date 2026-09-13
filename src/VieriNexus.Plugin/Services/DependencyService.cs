@@ -17,9 +17,11 @@ internal enum DependencyHealth
 internal sealed record DependencyStatus(
     DependencyDescriptor Definition,
     DependencyHealth Health,
-    string? Version)
+    string? Version,
+    string? ConflictingPackage = null)
 {
     internal bool IsReady => Health == DependencyHealth.Healthy;
+    internal bool HasPackageConflict => !string.IsNullOrWhiteSpace(ConflictingPackage);
 }
 
 internal sealed record PluginPresence(
@@ -51,10 +53,14 @@ internal sealed class DependencyService(
                 .OrderByDescending(candidate => candidate.IsLoaded)
                 .ThenByDescending(candidate => candidate.Version)
                 .FirstOrDefault();
+            string? conflictingPackage = definition.Id == "autoduty"
+                ? installed.FirstOrDefault(candidate =>
+                    DependencyPackageIdentityPolicy.IsBlockingLegacyCollision(definition, candidate.Name))?.Name
+                : null;
             var health = plugin is null
                 ? DependencyHealth.Missing
                 : plugin.IsLoaded ? DependencyHealth.Healthy : DependencyHealth.Disabled;
-            return new DependencyStatus(definition, health, plugin?.Version?.ToString());
+            return new DependencyStatus(definition, health, plugin?.Version?.ToString(), conflictingPackage);
         }).ToArray();
     }
 
@@ -91,6 +97,48 @@ internal sealed class DependencyService(
             dependency.Definition.InstallerSearch ?? dependency.Definition.DisplayName);
     }
 
+    internal void OpenConflictingPackage(DependencyStatus dependency) =>
+        pluginInterface.OpenPluginInstallerTo(
+            PluginInstallerOpenKind.InstalledPlugins,
+            dependency.ConflictingPackage ?? dependency.Definition.DisplayName);
+
+    internal bool OpenSettings(DependencyDescriptor definition, out string message)
+    {
+        IExposedPlugin? plugin = pluginInterface.InstalledPlugins
+            .Where(candidate => DependencyPackageIdentityPolicy.MatchesInstalled(
+                definition,
+                candidate.InternalName,
+                candidate.Name))
+            .OrderByDescending(candidate => candidate.IsLoaded)
+            .FirstOrDefault();
+        if (plugin is not { IsLoaded: true })
+        {
+            message = $"{definition.DisplayName} must be installed and enabled before its settings can open.";
+            return false;
+        }
+
+        try
+        {
+            if (plugin.HasConfigUi)
+                plugin.OpenConfigUi();
+            else if (plugin.HasMainUi)
+                plugin.OpenMainUi();
+            else
+            {
+                message = $"{definition.DisplayName} does not expose a settings window.";
+                return false;
+            }
+            message = $"Opened {definition.DisplayName} settings.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "Could not open settings for {Dependency}", definition.Id);
+            message = $"Nexus could not open {definition.DisplayName} settings. Open it from Dalamud Plugins.";
+            return false;
+        }
+    }
+
     internal void OpenPluginInstaller() =>
         pluginInterface.OpenPluginInstallerTo(PluginInstallerOpenKind.AllPlugins);
 
@@ -105,6 +153,15 @@ internal sealed class DependencyService(
 
     internal void InstallOrEnable(DependencyStatus dependency)
     {
+        if (dependency.HasPackageConflict && dependency.Health == DependencyHealth.Missing)
+        {
+            ActionSucceeded = false;
+            ActionMessage =
+                "Uninstall VieriAutoDuty first. It shares AutoDuty's internal package identity, so leaving it installed causes Dalamud to remove stock AutoDuty on restart.";
+            OpenConflictingPackage(dependency);
+            return;
+        }
+
         lock (actionLock)
         {
             if (activeActionId is not null)

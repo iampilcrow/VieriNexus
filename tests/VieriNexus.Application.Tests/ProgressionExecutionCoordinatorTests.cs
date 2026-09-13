@@ -41,6 +41,32 @@ public sealed class ProgressionExecutionCoordinatorTests
     }
 
     [Fact]
+    public void GearVendorTeleportWaitsThroughUnavailableWorldWithoutCancellingTransaction()
+    {
+        FakeDutyProvider duty = new();
+        FakeGearProvider gear = new();
+        ProgressionExecutionCoordinator coordinator = new(
+            new MemoryStore(), new ResourceLeaseManager(), duty, gear);
+        coordinator.Start(Draft() with { CurrentItemLevel = 640, CurrentGil = 1_500_000 }, Plan());
+
+        gear.IsBusy = true;
+        gear.Available = false;
+        coordinator.Update(World(90, false) with { IsAvailable = false, ItemLevel = 640, Gil = 1_500_000 });
+
+        Assert.Equal(GoalStatus.Active, coordinator.State!.Goal.Status);
+        Assert.NotNull(coordinator.State.ActiveTask);
+        Assert.Equal(NexusTaskStatus.Running, coordinator.State.ActiveTask.Status);
+        Assert.Contains("destination", coordinator.State.ActiveTask.StatusDetail);
+        Assert.Equal(0, gear.StopCalls);
+        Assert.Empty(duty.StartedTerritories);
+
+        gear.Available = true;
+        coordinator.Update(World(90, false) with { ItemLevel = 640, Gil = 1_500_000 });
+        Assert.Equal(GoalStatus.Active, coordinator.State.Goal.Status);
+        Assert.NotNull(coordinator.State.ActiveTask);
+    }
+
+    [Fact]
     public void GearVerificationBlocksDutyWhenProtectedGilFloorIsViolated()
     {
         FakeDutyProvider duty = new();

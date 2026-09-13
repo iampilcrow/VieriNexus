@@ -34,6 +34,13 @@ public static class DependencyPackageIdentityPolicy
                string.Equals(displayName, definition.InstallerSearch, StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool IsBlockingLegacyCollision(DependencyDescriptor definition, string? displayName)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        return IsStockAutoDuty(definition) &&
+               string.Equals(displayName, "VieriAutoDuty", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsStockAutoDuty(DependencyDescriptor definition) =>
         string.Equals(definition.Id, "autoduty", StringComparison.OrdinalIgnoreCase);
 }
