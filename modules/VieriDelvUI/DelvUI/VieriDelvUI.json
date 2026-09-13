@@ -1,0 +1,9 @@
+{
+  "Name": "VieriDelvUI",
+  "Author": "Valentina Vieri",
+  "Punchline": "A private, upstream-compatible Vieri customization of DelvUI.",
+  "Description": "Valentina Vieri's highly configurable FFXIV HUD replacement, based on the open-source DelvUI project and maintained as an upstream-compatible customization while preserving existing DelvUI profiles.",
+  "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
+  "RepoUrl": "https://github.com/iampilcrow/VieriDelvUI",
+  "Tags": ["UI", "HUD", "Vieri"]
+}

@@ -1,0 +1,47 @@
+name: Check DelvUI upstream
+
+on:
+  push:
+    branches:
+      - vieri
+  workflow_dispatch:
+  schedule:
+    - cron: "17 13 * * 1"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Vieri branch
+        uses: actions/checkout@v4
+        with:
+          ref: vieri
+          fetch-depth: 0
+
+      - name: Compare with official DelvUI
+        id: compare
+        shell: bash
+        run: |
+          git remote add upstream https://github.com/DelvUI/DelvUI.git
+          git fetch --no-tags upstream develop
+          echo "behind=$(git rev-list --count HEAD..upstream/develop)" >> "$GITHUB_OUTPUT"
+
+      - name: Open an upstream update issue
+        if: steps.compare.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEHIND: ${{ steps.compare.outputs.behind }}
+        shell: bash
+        run: |
+          gh label create upstream-update --color 6f42c1 --description "Official upstream changes are waiting for review" --force
+          existing="$(gh issue list --state open --label upstream-update --json number --jq '.[0].number // empty')"
+          if [ -z "$existing" ]; then
+            gh issue create \
+              --title "Review DelvUI upstream updates" \
+              --label upstream-update \
+              --body "The private vieri branch is ${BEHIND} commit(s) behind DelvUI/develop. Run scripts/sync-upstream.ps1 locally, resolve any conflicts, test, and push only after review."
+          fi

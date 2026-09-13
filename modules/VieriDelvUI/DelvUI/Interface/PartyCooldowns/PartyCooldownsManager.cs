@@ -1,0 +1,429 @@
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Hooking;
+using Dalamud.Plugin.Services;
+using DelvUI.Config;
+using DelvUI.Helpers;
+using DelvUI.Interface.Party;
+using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Character;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using Dalamud.Bindings.ImGui;
+using System;
+using System.Collections.Generic;
+using System.Numerics;
+using Dalamud.Game.DutyState;
+using FFXIVClientStructs.FFXIV.Client.Network;
+using static FFXIVClientStructs.FFXIV.Client.Game.Character.ActionEffectHandler;
+
+namespace DelvUI.Interface.PartyCooldowns
+{
+    public unsafe class PartyCooldownsManager
+    {
+        #region Singleton
+        public static PartyCooldownsManager Instance { get; private set; } = null!;
+        private PartyCooldownsConfig _config = null!;
+        private PartyCooldownsDataConfig _dataConfig = null!;
+
+        private PartyCooldownsManager()
+        {
+            try
+            {
+                _onActionUsedHook = Plugin.GameInteropProvider.HookFromAddress<Delegates.Receive>(
+                    MemberFunctionPointers.Receive,
+                    OnActionUsed
+                );
+                _onActionUsedHook?.Enable();
+            }
+            catch
+            {
+                Plugin.Logger.Error("PartyCooldowns OnActionUsed Hook failed!!!");
+            }
+
+            try
+            {
+                _actorControlHook = Plugin.GameInteropProvider.HookFromAddress(
+                    (nint)PacketDispatcher.MemberFunctionPointers.HandleActorControlPacket,
+                    new PacketDispatcher.Delegates.HandleActorControlPacket(OnActorControl));
+                _actorControlHook?.Enable();
+            }
+            catch
+            {
+                Plugin.Logger.Error("PartyCooldowns OnActorControl Hook failed!!!");
+            }
+
+            PartyManager.Instance.MembersChangedEvent += OnMembersChanged;
+            ConfigurationManager.Instance.ResetEvent += OnConfigReset;
+            Plugin.JobChangedEvent += OnJobChanged;
+            Plugin.ClientState.TerritoryChanged += OnTerritoryChanged;
+
+            ConfigReset(ConfigurationManager.Instance, false);
+            UpdatePreview();
+        }
+
+        public static void Initialize()
+        {
+            Instance = new PartyCooldownsManager();
+            Plugin.DutyState.DutyWiped += ResetCooldowns;
+            Plugin.DutyState.DutyStarted += ResetCooldowns;
+            Plugin.DutyState.DutyRecommenced += ResetCooldowns;
+        }
+
+        ~PartyCooldownsManager()
+        {
+            Dispose(false);
+        }
+
+        public void Dispose()
+        {
+            Plugin.DutyState.DutyWiped -= ResetCooldowns;
+            Plugin.DutyState.DutyStarted -= ResetCooldowns;
+            Plugin.DutyState.DutyRecommenced -= ResetCooldowns;
+
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected void Dispose(bool disposing)
+        {
+            if (!disposing)
+            {
+                return;
+            }
+
+            _onActionUsedHook?.Disable();
+            _onActionUsedHook?.Dispose();
+
+            _actorControlHook?.Disable();
+            _actorControlHook?.Dispose();
+
+            PartyManager.Instance.MembersChangedEvent -= OnMembersChanged;
+            Plugin.JobChangedEvent -= OnJobChanged;
+            _config.ValueChangeEvent -= OnConfigPropertyChanged;
+            _dataConfig.CooldownsDataEnabledChangedEvent -= OnCooldownEnabledChanged;
+            Plugin.ClientState.TerritoryChanged -= OnTerritoryChanged;
+
+            Instance = null!;
+        }
+
+        private void OnConfigReset(ConfigurationManager sender)
+        {
+            ConfigReset(sender);
+        }
+
+        private void ConfigReset(ConfigurationManager sender, bool forceUpdate = true)
+        {
+            if (_config != null)
+            {
+                _config.ValueChangeEvent -= OnConfigPropertyChanged;
+            }
+
+            _config = sender.GetConfigObject<PartyCooldownsConfig>();
+            _config.ValueChangeEvent += OnConfigPropertyChanged;
+
+            if (_dataConfig != null)
+            {
+                _dataConfig.CooldownsDataEnabledChangedEvent -= OnCooldownEnabledChanged;
+            }
+
+            _dataConfig = sender.GetConfigObject<PartyCooldownsDataConfig>();
+            _dataConfig.CooldownsDataEnabledChangedEvent += OnCooldownEnabledChanged;
+            _dataConfig.UpdateDataIfNeeded();
+
+            if (forceUpdate)
+            {
+                ForcedUpdate();
+            }
+        }
+
+        #endregion Singleton
+
+        private Hook<Delegates.Receive>? _onActionUsedHook;
+
+        private Hook<PacketDispatcher.Delegates.HandleActorControlPacket>? _actorControlHook;
+
+        private Dictionary<uint, Dictionary<uint, PartyCooldown>>? _oldMap;
+        private Dictionary<uint, Dictionary<uint, PartyCooldown>> _cooldownsMap = new Dictionary<uint, Dictionary<uint, PartyCooldown>>();
+        public IReadOnlyDictionary<uint, Dictionary<uint, PartyCooldown>> CooldownsMap => _cooldownsMap;
+
+        private Dictionary<uint, double> _technicalStepMap = new Dictionary<uint, double>();
+
+        public delegate void PartyCooldownsChangedEventHandler(PartyCooldownsManager sender);
+        public event PartyCooldownsChangedEventHandler? CooldownsChangedEvent;
+
+        private bool _wasInDuty = false;
+
+        private void OnActorControl(uint entityId, uint type, uint buffID, uint direct, uint actionId, uint sourceId, uint arg7, uint arg8, uint arg9, uint arg10, GameObjectId targetId, bool isRecorded)
+        {
+            _actorControlHook?.Original(entityId, type, buffID, direct, actionId, sourceId, arg7, arg8, arg9, arg10, targetId, isRecorded);
+
+            // detect wipe fadeouts (not 100% reliable but good enough), Dalamud DutyState doesn't check 0x4000000F yet.
+            if (type == 0x4000000F)
+            {
+                ResetCooldowns();
+            }
+        }
+
+        private static void ResetCooldowns(IDutyStateEventArgs args)
+        {
+            ResetCooldowns();
+        }
+
+        private static void ResetCooldowns()
+        {
+            if (Instance == null) { return; }
+
+            Instance._technicalStepMap.Clear();
+
+            foreach (uint actorId in Instance._cooldownsMap.Keys)
+            {
+                foreach (PartyCooldown cooldown in Instance._cooldownsMap[actorId].Values)
+                {
+                    cooldown.LastTimeUsed = 0;
+                }
+            }
+        }
+
+        private unsafe void OnActionUsed(uint actorId, Character* casterPtr, Vector3* targetPos, Header* header, TargetEffects* effects, GameObjectId* targetEntityIds)
+        {
+            _onActionUsedHook?.Original(actorId, casterPtr, targetPos, header, effects, targetEntityIds);
+
+            // check if its an action
+            if ((ActionType)header->ActionType != ActionType.Action ) { return; }
+
+            // check if its a member in the party
+            if (!_cooldownsMap.ContainsKey(actorId))
+            {
+                // check if its a party member's pet
+                IGameObject? actor = Plugin.ObjectTable.SearchById(actorId);
+
+                if (actor is IBattleNpc battleNpc && _cooldownsMap.ContainsKey(battleNpc.OwnerId))
+                {
+                    actorId = battleNpc.OwnerId;
+                }
+                else
+                {
+                    actorId = 0;
+                }
+            }
+
+            if (actorId <= 0) { return; }
+
+            uint actionID = header->ActionId;
+
+            // special case for starry muse > set id to scenic muse
+            if (actionID == 34675)
+            {
+                actionID = 35349;
+            }
+
+            // special case for technical step / finish
+            // we detect when technical step is pressed and save the time
+            // so we can properly calculate the cooldown once finish is pressed
+            if (actionID == 16193 || actionID == 16194 || actionID == 16195 || actionID == 16196)
+            {
+                actionID = 16004;
+            }
+
+            if (actionID == 15998)
+            {
+                _technicalStepMap[actorId] = ImGui.GetTime();
+            }
+            else
+            {
+                // check if its an action we track
+                if (_cooldownsMap[actorId].TryGetValue(actionID, out PartyCooldown? cooldown) && cooldown != null)
+                {
+                    // if its technical finish, we set the cooldown start time to
+                    // the time when step was pressed
+                    if (_technicalStepMap.TryGetValue(actorId, out double stepStartTime) && actionID == 16004)
+                    {
+                        cooldown.OverridenCooldownStartTime = stepStartTime;
+                        _technicalStepMap.Remove(actorId);
+                    }
+
+                    double now = ImGui.GetTime();
+                    cooldown.LastTimeUsed = now;
+                    cooldown.IgnoreNextUse = false;
+
+                    foreach (uint id in cooldown.Data.SharedActionIds)
+                    {
+                        if (_cooldownsMap[actorId].TryGetValue(id, out PartyCooldown? sharedCooldown) && sharedCooldown != null)
+                        {
+                            sharedCooldown.LastTimeUsed = now;
+                            sharedCooldown.IgnoreNextUse = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        public void ForcedUpdate()
+        {
+            OnMembersChanged(PartyManager.Instance);
+        }
+
+        private void OnMembersChanged(PartyManager sender)
+        {
+            Plugin.Framework.RunOnFrameworkThread(() =>
+            {
+                if (sender.Previewing || _config.Preview) { return; }
+
+                _cooldownsMap.Clear();
+
+                if (_config.ShowOnlyInDuties && !Plugin.Condition[ConditionFlag.BoundByDuty])
+                {
+                    CooldownsChangedEvent?.Invoke(this);
+                    return;
+                }
+
+                // show when solo
+                if (sender.IsSoloParty() || sender.MemberCount == 0)
+                {
+                    var player = Plugin.ObjectTable.LocalPlayer;
+                    if (_config.ShowWhenSolo && player != null)
+                    {
+                        _cooldownsMap.Add((uint)player.GameObjectId, CooldownsForMember((uint)player.GameObjectId, player.ClassJob.RowId, player.Level, null));
+                    }
+                }
+                else if (!_config.ShowOnlyInDuties || Plugin.Condition[ConditionFlag.BoundByDuty])
+                {
+                    // add new members
+                    foreach (IPartyFramesMember member in sender.GroupMembers)
+                    {
+                        if (member.ObjectId > 0)
+                        {
+                            _cooldownsMap.Add(member.ObjectId, CooldownsForMember(member));
+                        }
+                    }
+                }
+
+                CooldownsChangedEvent?.Invoke(this);
+            });
+        }
+
+        private Dictionary<uint, PartyCooldown> CooldownsForMember(IPartyFramesMember member)
+        {
+            return CooldownsForMember(member.ObjectId, member.JobId, member.Level, member);
+        }
+
+        private Dictionary<uint, PartyCooldown> CooldownsForMember(uint objectId, uint jobId, uint level, IPartyFramesMember? member)
+        {
+            Dictionary<uint, PartyCooldown> cooldowns = new Dictionary<uint, PartyCooldown>();
+
+            foreach (PartyCooldownData data in _dataConfig.Cooldowns)
+            {
+                if (data.EnabledV2 != PartyCooldownEnabled.Disabled &&
+                    level >= data.RequiredLevel &&
+                    (data.DisabledAfterLevel == 0 || level < data.DisabledAfterLevel) &&
+                    data.IsUsableBy(jobId) &&
+                    !data.ExcludedJobIds.Contains(jobId))
+                {
+                    cooldowns.Add(data.ActionId, new PartyCooldown(data, objectId, level, member));
+                }
+            }
+
+            return cooldowns;
+        }
+
+        #region events
+        private void OnConfigPropertyChanged(object sender, OnChangeBaseArgs args)
+        {
+            if (args.PropertyName == "Preview")
+            {
+                UpdatePreview();
+            }
+            else if (args.PropertyName == "ShowWhenSolo" && PartyManager.Instance?.MemberCount == 0)
+            {
+                OnMembersChanged(PartyManager.Instance);
+            }
+            else if (args.PropertyName == "ShowOnlyInDuties" && PartyManager.Instance != null)
+            {
+                OnMembersChanged(PartyManager.Instance);
+            }
+        }
+
+        private void OnJobChanged(uint jobId)
+        {
+            ForcedUpdate();
+        }
+
+        private void OnCooldownEnabledChanged(PartyCooldownsDataConfig config)
+        {
+            ForcedUpdate();
+        }
+
+        private void OnTerritoryChanged(uint territoryId)
+        {
+            bool isInDuty = Plugin.Condition[ConditionFlag.BoundByDuty];
+            if (_config.ShowOnlyInDuties && _wasInDuty != isInDuty)
+            {
+                ForcedUpdate();
+            }
+
+            _wasInDuty = isInDuty;
+        }
+
+        public void UpdatePreview()
+        {
+            if (!_config.Preview)
+            {
+                if (_oldMap != null)
+                {
+                    _cooldownsMap = _oldMap;
+                }
+                else
+                {
+                    _cooldownsMap.Clear();
+                }
+
+                if (PartyManager.Instance.Previewing)
+                {
+                    CooldownsChangedEvent?.Invoke(this);
+                }
+                else
+                {
+                    OnMembersChanged(PartyManager.Instance);
+                }
+                return;
+            }
+
+            if (PartyManager.Instance?.Previewing == false)
+            {
+                _oldMap = _cooldownsMap;
+            }
+
+            _cooldownsMap.Clear();
+            Random RNG = new Random((int)ImGui.GetTime());
+
+            for (uint i = 1; i < 9; i++)
+            {
+                Dictionary<uint, PartyCooldown> cooldowns = new Dictionary<uint, PartyCooldown>();
+
+                JobRoles role = i < 3 ? JobRoles.Tank : (i < 5 ? JobRoles.Healer : JobRoles.Unknown);
+                role = role == JobRoles.Unknown ? JobRoles.DPSMelee + RNG.Next(3) : role;
+                int jobCount = JobsHelper.JobsByRole[role].Count;
+                int jobIndex = RNG.Next(jobCount);
+                uint jobId = JobsHelper.JobsByRole[role][jobIndex];
+
+                _cooldownsMap.Add(i, CooldownsForMember(i, jobId, 90, null));
+
+                foreach (PartyCooldown cooldown in _cooldownsMap[i].Values)
+                {
+                    int rng = RNG.Next(100);
+                    if (rng > 80)
+                    {
+                        cooldown.LastTimeUsed = ImGui.GetTime() - 30;
+                    }
+                    else if (rng > 50)
+                    {
+                        cooldown.LastTimeUsed = ImGui.GetTime() + 1;
+                    }
+                }
+            }
+
+            CooldownsChangedEvent?.Invoke(this);
+        }
+        #endregion
+    }
+}
