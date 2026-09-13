@@ -1,0 +1,11 @@
+{
+  "Author": "Valentina Vieri",
+  "Name": "VieriLink",
+  "InternalName": "VieriLink",
+  "Punchline": "Private Discord status, notifications, and remote control for VieriAutoDuty.",
+  "Description": "Connects one FFXIV character to one private Discord channel. Maintains a configurable live VieriAutoDuty status message, sends selected notifications, and accepts allowlisted remote commands with acknowledgements and an audit trail. Requires VieriAutoDuty for automation controls.",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "IconUrl": "https://www.thedailypilcrow.com/dalamud/assets/VieriLogo.png",
+  "Tags": ["discord", "remote", "status", "automation"]
+}
