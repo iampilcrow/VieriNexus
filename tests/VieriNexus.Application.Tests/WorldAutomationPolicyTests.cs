@@ -2,6 +2,25 @@ namespace VieriNexus.Application.Tests;
 
 public sealed class WorldAutomationPolicyTests
 {
+    [Theory]
+    [InlineData((byte)7)]
+    [InlineData((byte)8)]
+    [InlineData((byte)9)]
+    [InlineData((byte)20)]
+    public void RecognizesEveryAchievementTypeAutomatedByVieriCodex(byte type)
+    {
+        Assert.True(WorldAutomationPolicy.CanAutomateAchievementType(type));
+    }
+
+    [Theory]
+    [InlineData((byte)1)]
+    [InlineData((byte)14)]
+    [InlineData((byte)19)]
+    public void LeavesManualAndDutyFinderOnlyAchievementTypesGuided(byte type)
+    {
+        Assert.False(WorldAutomationPolicy.CanAutomateAchievementType(type));
+    }
+
     [Fact]
     public void SelectsUnlockingOrderBeforeExplorationAndAchievements()
     {

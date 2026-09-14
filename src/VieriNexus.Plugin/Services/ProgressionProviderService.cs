@@ -27,6 +27,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly DependencyService dependencies;
     private readonly IDataManager dataManager;
     private readonly IClientState clientState;
+    private readonly IPlayerState playerState;
     private readonly HashSet<uint> aetherCurrentQuestIds;
     private readonly ICallGateSubscriber<bool> questionableIsRunning;
     private readonly QuestionableCompatibilityService questionableCompatibility;
@@ -64,6 +65,11 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private string? eligibleAetherCurrentQuestCacheProvider;
     private int eligibleAetherCurrentQuestCacheLevel;
     private IReadOnlyList<ProgressionQuestCandidate> eligibleAetherCurrentQuestCache = [];
+    private long eligibleAchievementQuestCacheExpiresAt;
+    private uint eligibleAchievementQuestCacheClassJob;
+    private int eligibleAchievementQuestCacheLevel;
+    private string? eligibleAchievementQuestCacheProvider;
+    private IReadOnlyList<ProgressionQuestCandidate> eligibleAchievementQuestCache = [];
     private readonly Dictionary<string, HashSet<string>> unsupportedQuestIdsByProvider = [];
     private long nexusGearStartedSequence;
     private long nexusGearCompletedSequence;
@@ -87,6 +93,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         this.dependencies = dependencies;
         this.dataManager = dataManager;
         this.clientState = clientState;
+        this.playerState = playerState;
         this.navigationStop = navigationStop;
         aetherCurrentQuestIds = dataManager.GetExcelSheet<AetherCurrentCompFlgSet>()
             .Where(row => row.RowId > 0)
@@ -421,6 +428,80 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         return eligibleAetherCurrentQuestCache;
     }
 
+    internal IReadOnlyList<ProgressionQuestCandidate> EligibleAchievementQuests(
+        IReadOnlyCollection<uint> relatedQuestIds,
+        int currentLevel)
+    {
+        ProgressionProviderSelection selection = Snapshot().Questing;
+        uint classJobId = playerState.ClassJob.RowId;
+        if (!selection.IsReady || classJobId == 0 || relatedQuestIds.Count == 0)
+            return [];
+
+        long now = Environment.TickCount64;
+        string selectedProvider = selection.Selected!.Id.Value;
+        if (eligibleAchievementQuestCacheClassJob == classJobId &&
+            eligibleAchievementQuestCacheLevel == currentLevel &&
+            eligibleAchievementQuestCacheProvider == selectedProvider &&
+            now < eligibleAchievementQuestCacheExpiresAt)
+            return eligibleAchievementQuestCache;
+
+        HashSet<uint> requested = relatedQuestIds
+            .Where(id => id != 0)
+            .Select(id => id & 0xFFFF)
+            .ToHashSet();
+        HashSet<string> unsupported = unsupportedQuestIdsByProvider.GetValueOrDefault(selectedProvider) ?? [];
+        List<ProgressionQuestCandidate> candidates = [];
+        foreach (Quest quest in dataManager.GetExcelSheet<Quest>()
+                     .Where(row => row.RowId > 0 && requested.Contains(row.RowId & 0xFFFF))
+                     .Where(row => row.ClassJobLevel[0] <= currentLevel && QuestAllowsClassJob(row, classJobId))
+                     .OrderBy(row => row.ClassJobLevel[0])
+                     .ThenBy(row => row.SortKey)
+                     .ThenBy(row => row.RowId))
+        {
+            string questId = (quest.RowId & 0xFFFF).ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+            if (unsupported.Contains(questId))
+                continue;
+            try
+            {
+                if (questionableIsQuestComplete.InvokeFunc(questId))
+                    continue;
+                bool accepted = questionableIsQuestAccepted.InvokeFunc(questId);
+                bool ready = questionableIsReadyToAcceptQuest.InvokeFunc(questId);
+                bool locked = questionableIsQuestLocked.InvokeFunc(questId);
+                if (!accepted && (!ready || locked))
+                    continue;
+
+                string name = quest.Name.ExtractText();
+                if (string.IsNullOrWhiteSpace(name))
+                    name = $"Quest {questId}";
+                candidates.Add(new ProgressionQuestCandidate(
+                    questId,
+                    name,
+                    quest.ClassJobLevel[0],
+                    accepted,
+                    ProgressionQuestKind.Achievement,
+                    quest.IssuerLocation.ValueNullable?.Territory.RowId ?? 0));
+            }
+            catch
+            {
+                // One temporarily unreadable achievement quest must not hide other exact work.
+            }
+        }
+
+        eligibleAchievementQuestCacheClassJob = classJobId;
+        eligibleAchievementQuestCacheLevel = currentLevel;
+        eligibleAchievementQuestCacheProvider = selectedProvider;
+        eligibleAchievementQuestCacheExpiresAt = now + 30_000;
+        eligibleAchievementQuestCache = candidates
+            .DistinctBy(candidate => candidate.QuestId)
+            .OrderByDescending(candidate => candidate.IsAccepted)
+            .ThenBy(candidate => candidate.RequiredLevel)
+            .ThenBy(candidate => candidate.QuestId, StringComparer.Ordinal)
+            .ToArray();
+        return eligibleAchievementQuestCache;
+    }
+
     private ProgressionQuestKind? ClassifyQuest(
         Quest quest,
         uint classJobId,
@@ -528,6 +609,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             {
                 eligibleQuestCacheExpiresAt = 0;
                 eligibleAetherCurrentQuestCacheExpiresAt = 0;
+                eligibleAchievementQuestCacheExpiresAt = 0;
             }
             return new(true, running, current, complete,
                 complete
@@ -564,6 +646,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 ProgressionQuestKind.GeneralSideQuest => "general side quest",
                 ProgressionQuestKind.AetherCurrent => "Aether Current quest",
                 ProgressionQuestKind.MainScenario => "Main Scenario quest",
+                ProgressionQuestKind.Achievement => "achievement quest",
                 _ => "Class / Job / Role quest",
             };
             if (accepted)
@@ -575,6 +658,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             rejected.Add(quest.QuestId);
             eligibleQuestCacheExpiresAt = 0;
             eligibleAetherCurrentQuestCacheExpiresAt = 0;
+            eligibleAchievementQuestCacheExpiresAt = 0;
             return new(false, true,
                 $"{selection.Selected.DisplayName} has no path for {quest.Name}; Nexus skipped it and will choose another eligible activity.");
         }

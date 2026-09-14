@@ -60,12 +60,14 @@ internal sealed class ProgressAtlasActionService
 
     private readonly ProgressAtlasService atlas;
     private readonly ProgressionProviderService questProvider;
+    private readonly NexusHuntingLogService hunting;
     private readonly NexusRouteTravelProvider travel;
     private readonly ResourceLeaseManager leases;
     private readonly IClientState clientState;
     private readonly ICondition condition;
     private readonly IObjectTable objectTable;
     private readonly ITargetManager targetManager;
+    private readonly uint[] achievementQuestIds;
     private ResourceLeaseHandle? lease;
     private Objective? objective;
     private Phase phase;
@@ -79,10 +81,13 @@ internal sealed class ProgressAtlasActionService
     private ProgressAtlasActionKind? actionKind;
     private ProgressAtlasActionOutcome outcome;
     private string message = "No Progress Atlas action is running.";
+    private DateTimeOffset achievementAvailabilityCachedAt = DateTimeOffset.MinValue;
+    private int cachedRemainingSupportedAchievements;
 
     internal ProgressAtlasActionService(
         ProgressAtlasService atlas,
         ProgressionProviderService questProvider,
+        NexusHuntingLogService hunting,
         NexusRouteTravelProvider travel,
         ResourceLeaseManager leases,
         IClientState clientState,
@@ -92,12 +97,19 @@ internal sealed class ProgressAtlasActionService
     {
         this.atlas = atlas;
         this.questProvider = questProvider;
+        this.hunting = hunting;
         this.travel = travel;
         this.leases = leases;
         this.clientState = clientState;
         this.condition = condition;
         this.objectTable = objectTable;
         this.targetManager = targetManager;
+        achievementQuestIds = atlas.AchievementTargets
+            .Where(target => target.Type == 9)
+            .SelectMany(target => target.RelatedRows)
+            .Where(value => value != 0)
+            .Distinct()
+            .ToArray();
     }
 
     internal ProgressAtlasActionStatus Status => new(
@@ -127,8 +139,21 @@ internal sealed class ProgressAtlasActionService
         !ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId) &&
         target.Positions.Count > 0 && IsTerritoryAccessible(target.TerritoryId));
 
-    internal int RemainingSupportedAchievements => atlas.AchievementTargets.Count(target =>
-        !ProgressAtlasService.IsAchievementComplete(target.Id) && HasRunnableAchievementStep(target));
+    internal int RemainingSupportedAchievements
+    {
+        get
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            if (now - achievementAvailabilityCachedAt < TimeSpan.FromSeconds(1))
+                return cachedRemainingSupportedAchievements;
+            IReadOnlyList<ProgressionQuestCandidate> achievementQuests = EligibleAchievementQuests();
+            cachedRemainingSupportedAchievements = atlas.AchievementTargets.Count(target =>
+                !ProgressAtlasService.IsAchievementComplete(target.Id) &&
+                HasRunnableAchievementStep(target, achievementQuests));
+            achievementAvailabilityCachedAt = now;
+            return cachedRemainingSupportedAchievements;
+        }
+    }
 
     internal bool CanReachTerritory(uint territoryId) => IsTerritoryAccessible(territoryId);
 
@@ -303,83 +328,71 @@ internal sealed class ProgressAtlasActionService
 
     internal bool StartNextSupportedAchievement(out string result)
     {
+        IReadOnlyList<ProgressionQuestCandidate> achievementQuests = EligibleAchievementQuests();
         foreach (ProgressAtlasService.AchievementAtlasTarget achievement in atlas.AchievementTargets
                      .Where(target => !ProgressAtlasService.IsAchievementComplete(target.Id))
+                     .Where(target => WorldAutomationPolicy.CanAutomateAchievementType(target.Type))
                      .OrderBy(target => target.AutomationPriority)
                      .ThenBy(target => target.Id))
         {
-            if (achievement.Type == 8)
-            {
-                ProgressAtlasService.MapDiscoveryRegion? region = atlas.ExplorationTargets
-                    .Where(target => target.MapId == achievement.Key)
-                    .Where(target => !ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId))
-                    .Where(target => target.Positions.Count > 0 && IsTerritoryAccessible(target.TerritoryId))
-                    .OrderByDescending(target => target.TerritoryId == clientState.TerritoryType)
-                    .ThenBy(target => target.DiscoveryId)
-                    .FirstOrDefault();
-                if (region is not null)
-                {
-                    Vector3 position = region.Positions
-                        .OrderBy(point => DistanceFromPlayer(region.TerritoryId, point))
-                        .First();
-                    return StartAchievement(
-                        achievement,
-                        new Objective(
-                            AtlasActionKind.Exploration,
-                            $"Pursue {achievement.Name}",
-                            region.TerritoryId,
-                            position,
-                            0,
-                            0,
-                            region.MapId,
-                            region.DiscoveryId,
-                            3.5f),
-                        out result);
-                }
-            }
-            else if (achievement.Type == 20 && achievement.TerritoryId > 0)
-            {
-                ProgressAtlasService.AetherCurrentAtlasTarget? field = atlas.AetherCurrentTargets
-                    .Where(target => target.TerritoryId == achievement.TerritoryId)
-                    .Where(target => !ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId))
-                    .Where(target => IsTerritoryAccessible(target.TerritoryId))
-                    .OrderBy(target => DistanceFromPlayer(target.TerritoryId, target.Position))
-                    .ThenBy(target => target.AetherCurrentId)
-                    .FirstOrDefault();
-                if (field is not null)
-                {
-                    return StartAchievement(
-                        achievement,
-                        new Objective(
-                            AtlasActionKind.FieldAetherCurrent,
-                            $"Pursue {achievement.Name}",
-                            field.TerritoryId,
-                            field.Position,
-                            field.DataId,
-                            field.AetherCurrentId,
-                            0,
-                            0,
-                            2.5f),
-                        out result);
-                }
-
-                ProgressionQuestCandidate? quest = questProvider
-                    .EligibleAetherCurrentQuests(
-                        atlas.AetherCurrentQuestTargets,
-                        objectTable.LocalPlayer?.Level ?? 0)
-                    .Where(candidate => candidate.TerritoryId == achievement.TerritoryId)
-                    .FirstOrDefault();
-                if (quest is not null)
-                    return StartAchievementQuest(achievement, quest, out result);
-            }
+            if (HasRunnableAchievementStep(achievement, achievementQuests))
+                return StartAchievementStep(achievement, achievementQuests, out result);
         }
 
-        result = "No directly runnable incomplete achievement is available. Manual, group, crafting, gathering, PvP, collection, and time-gated achievements remain tracked in Progress Atlas.";
+        result = "No automatically runnable incomplete achievement is currently available. Manual, group, crafting, gathering, PvP, collection, and time-gated achievements remain tracked in Progress Atlas.";
         return false;
+    }
+
+    internal bool CanPursueAchievement(ProgressAtlasService.AchievementAtlasTarget achievement)
+        => !ProgressAtlasService.IsAchievementComplete(achievement.Id) &&
+           WorldAutomationPolicy.CanAutomateAchievementType(achievement.Type);
+
+    internal bool StartAchievementTarget(
+        ProgressAtlasService.AchievementAtlasTarget achievement,
+        out string result)
+    {
+        if (ProgressAtlasService.IsAchievementComplete(achievement.Id))
+        {
+            result = $"{achievement.Name} is already complete.";
+            return false;
+        }
+        if (!WorldAutomationPolicy.CanAutomateAchievementType(achievement.Type))
+        {
+            result = $"{achievement.Name} is tracked in Progress Atlas but requires guided or manual play.";
+            return false;
+        }
+
+        IReadOnlyList<ProgressionQuestCandidate> achievementQuests = EligibleAchievementQuests();
+        if (!HasRunnableAchievementStep(achievement, achievementQuests))
+        {
+            result = $"No runnable step for {achievement.Name} is available yet. A prerequisite, provider, or travel unlock may still be required.";
+            return false;
+        }
+        return StartAchievementStep(achievement, achievementQuests, out result);
     }
 
     internal bool Stop(out string result)
     {
+        if (phase == Phase.HuntingStopping)
+        {
+            result = "Stop is already requested; Nexus is waiting for Hunting Log activity to become inactive.";
+            message = result;
+            return true;
+        }
+        if (phase == Phase.Hunting)
+        {
+            if (!hunting.TryStopHunt(out result))
+            {
+                message = $"Stop has not been confirmed: {result}";
+                return false;
+            }
+            pendingStopReason = "Achievement Hunting Log work stopped. Nothing will replay automatically.";
+            pendingStopOutcome = ProgressAtlasActionOutcome.Stopped;
+            phase = Phase.HuntingStopping;
+            message = "Stop requested; Nexus is retaining ownership until Hunting Log activity is inactive.";
+            result = message;
+            return true;
+        }
         if (phase == Phase.QuestStopping)
         {
             result = "Stop is already requested; Nexus is waiting for the quest provider to confirm inactivity.";
@@ -425,11 +438,16 @@ internal sealed class ProgressAtlasActionService
             UpdateQuestStopping();
             return;
         }
-        TimeSpan timeout = phase == Phase.Questing ? QuestOverallTimeout : OverallTimeout;
+        if (phase == Phase.HuntingStopping)
+        {
+            UpdateHuntStopping();
+            return;
+        }
+        TimeSpan timeout = phase is Phase.Questing or Phase.Hunting ? QuestOverallTimeout : OverallTimeout;
         if (now - startedAt >= timeout)
         {
-            Fail(phase == Phase.Questing
-                ? "The Aether Current quest exceeded its one-hour safety limit."
+            Fail(phase is Phase.Questing or Phase.Hunting
+                ? "The achievement activity exceeded its one-hour safety limit."
                 : "The Progress Atlas action exceeded its 20-minute safety limit.");
             return;
         }
@@ -438,7 +456,7 @@ internal sealed class ProgressAtlasActionService
             Fail("Progress Atlas ownership expired; Nexus stopped the action.");
             return;
         }
-        if (phase != Phase.Questing && condition[ConditionFlag.InCombat])
+        if (phase is not (Phase.Questing or Phase.Hunting) && condition[ConditionFlag.InCombat])
         {
             Fail("Combat began during the Progress Atlas action; Nexus stopped travel and interaction.");
             return;
@@ -457,6 +475,8 @@ internal sealed class ProgressAtlasActionService
                 UpdateInteraction(now);
             else if (phase == Phase.Questing)
                 UpdateQuest();
+            else if (phase == Phase.Hunting)
+                UpdateHunt();
             else
                 UpdateVerification(now);
         }
@@ -538,7 +558,10 @@ internal sealed class ProgressAtlasActionService
         return true;
     }
 
-    private bool StartQuest(ProgressionQuestCandidate quest, out string result)
+    private bool StartQuest(
+        ProgressionQuestCandidate quest,
+        out string result,
+        AtlasActionKind kind = AtlasActionKind.AetherCurrentQuest)
     {
         if (phase != Phase.Idle)
         {
@@ -548,7 +571,7 @@ internal sealed class ProgressAtlasActionService
         if (condition[ConditionFlag.InCombat] || condition[ConditionFlag.BoundByDuty] ||
             condition[ConditionFlag.BoundByDuty56] || condition[ConditionFlag.BoundByDuty95])
         {
-            result = "Aether Current quests cannot start during combat or a duty.";
+            result = "Achievement and Aether Current quests cannot start during combat or a duty.";
             return false;
         }
 
@@ -563,18 +586,20 @@ internal sealed class ProgressAtlasActionService
         }
 
         objective = new Objective(
-            AtlasActionKind.AetherCurrentQuest,
+            kind,
             title,
             quest.TerritoryId,
             Vector3.Zero,
             0,
-            quest.AetherCurrentId,
+            kind == AtlasActionKind.AetherCurrentQuest ? quest.AetherCurrentId : 0,
             0,
             0,
             0,
             quest);
         operationId = Guid.NewGuid();
-        actionKind = ProgressAtlasActionKind.AetherCurrentQuest;
+        actionKind = kind == AtlasActionKind.AetherCurrentQuest
+            ? ProgressAtlasActionKind.AetherCurrentQuest
+            : ProgressAtlasActionKind.Achievement;
         outcome = ProgressAtlasActionOutcome.Active;
         ProgressionQuestStartResult start = questProvider.TryStartQuest(quest);
         if (!start.Success)
@@ -608,7 +633,8 @@ internal sealed class ProgressAtlasActionService
 
         bool matching = string.Equals(observation.CurrentQuestId, quest.QuestId, StringComparison.Ordinal);
         providerStartObserved |= observation.IsRunning == true && matching;
-        bool currentUnlocked = ProgressAtlasService.IsAetherCurrentUnlocked(quest.AetherCurrentId);
+        bool currentUnlocked = objective.Kind == AtlasActionKind.AetherCurrentQuest &&
+                               ProgressAtlasService.IsAetherCurrentUnlocked(quest.AetherCurrentId);
         if ((observation.IsComplete == true || currentUnlocked) && observation.IsRunning == false)
         {
             Complete();
@@ -621,12 +647,16 @@ internal sealed class ProgressAtlasActionService
         }
         if (observation.IsRunning == true)
         {
-            message = $"{quest.Name} is running; Nexus is waiting for exact quest and Aether Current confirmation.";
+            message = objective.Kind == AtlasActionKind.AetherCurrentQuest
+                ? $"{quest.Name} is running; Nexus is waiting for exact quest and Aether Current confirmation."
+                : $"{quest.Name} is running; Nexus is waiting for exact quest completion confirmation.";
             return;
         }
         if (providerStartObserved)
         {
-            Fail($"{quest.Name} stopped before its Aether Current was verified.");
+            Fail(objective.Kind == AtlasActionKind.AetherCurrentQuest
+                ? $"{quest.Name} stopped before its Aether Current was verified."
+                : $"{quest.Name} stopped before exact quest completion was verified.");
             return;
         }
         if (DateTimeOffset.UtcNow - phaseStartedAt >= ProviderStartTimeout)
@@ -659,6 +689,64 @@ internal sealed class ProgressAtlasActionService
             ? ProgressAtlasActionOutcome.Stopped
             : pendingStopOutcome;
         pendingStopOutcome = ProgressAtlasActionOutcome.None;
+        message = stopped;
+    }
+
+    private void UpdateHunt()
+    {
+        ProgressionHuntingTargetCandidate hunt = objective!.Hunt
+            ?? throw new InvalidDataException("The active achievement is missing its exact Hunting Log target.");
+        ProgressionHuntingProviderObservation observation = hunting.ObserveHunt(hunt);
+        if (!observation.IsAvailable || observation.IsBusy is null)
+        {
+            Fail("The Hunting Log provider became unavailable; Nexus requested Stop and retained ownership.");
+            return;
+        }
+        if (observation.HasFailed && observation.IsBusy == false)
+        {
+            FinishFailure(observation.Detail);
+            return;
+        }
+        if (observation.IsBusy == true)
+        {
+            message = observation.Detail;
+            return;
+        }
+        if (observation.IsComplete)
+        {
+            Complete();
+            return;
+        }
+        FinishFailure($"Hunting Log work ended without exact completion confirmation for {hunt.TargetName}.");
+    }
+
+    private void UpdateHuntStopping()
+    {
+        ProgressionHuntingTargetCandidate hunt = objective!.Hunt
+            ?? throw new InvalidDataException("The stopping achievement is missing its exact Hunting Log target.");
+        ProgressionHuntingProviderObservation observation = hunting.ObserveHunt(hunt);
+        if (!observation.IsAvailable || observation.IsBusy is null)
+        {
+            message = "Stop was requested; Nexus is retaining ownership until Hunting Log activity is observable and inactive.";
+            return;
+        }
+        if (observation.IsBusy == true)
+        {
+            message = "Stop was requested; waiting for Hunting Log activity to become inactive.";
+            return;
+        }
+
+        string stopped = pendingStopReason ?? "Achievement Hunting Log work stopped.";
+        ProgressAtlasActionOutcome stoppedOutcome = pendingStopOutcome == ProgressAtlasActionOutcome.None
+            ? ProgressAtlasActionOutcome.Stopped
+            : pendingStopOutcome;
+        ReleaseLease();
+        objective = null;
+        phase = Phase.Idle;
+        providerStartObserved = false;
+        pendingStopReason = null;
+        pendingStopOutcome = ProgressAtlasActionOutcome.None;
+        outcome = stoppedOutcome;
         message = stopped;
     }
 
@@ -774,6 +862,19 @@ internal sealed class ProgressAtlasActionService
 
     private void Fail(string reason)
     {
+        if (phase == Phase.Hunting)
+        {
+            if (!hunting.TryStopHunt(out string stopMessage))
+            {
+                message = $"{reason} Stop is not yet confirmed: {stopMessage}";
+                return;
+            }
+            pendingStopReason = reason;
+            pendingStopOutcome = ProgressAtlasActionOutcome.Failed;
+            phase = Phase.HuntingStopping;
+            message = $"{reason} Stop was requested; Nexus is retaining ownership until Hunting Log activity is inactive.";
+            return;
+        }
         if (phase == Phase.Questing)
         {
             if (!questProvider.TryStopQuest(out string stopMessage))
@@ -799,6 +900,96 @@ internal sealed class ProgressAtlasActionService
         message = reason;
     }
 
+    private void FinishFailure(string reason)
+    {
+        ReleaseLease();
+        objective = null;
+        phase = Phase.Idle;
+        providerStartObserved = false;
+        pendingStopReason = null;
+        pendingStopOutcome = ProgressAtlasActionOutcome.None;
+        outcome = ProgressAtlasActionOutcome.Failed;
+        message = reason;
+    }
+
+    private bool StartAchievementStep(
+        ProgressAtlasService.AchievementAtlasTarget achievement,
+        IReadOnlyList<ProgressionQuestCandidate> achievementQuests,
+        out string result)
+    {
+        if (achievement.Type == 8)
+        {
+            ProgressAtlasService.MapDiscoveryRegion region = atlas.ExplorationTargets
+                .Where(target => target.MapId == achievement.Key)
+                .Where(target => !ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId))
+                .Where(target => target.Positions.Count > 0 && IsTerritoryAccessible(target.TerritoryId))
+                .OrderByDescending(target => target.TerritoryId == clientState.TerritoryType)
+                .ThenBy(target => target.DiscoveryId)
+                .First();
+            Vector3 position = region.Positions
+                .OrderBy(point => DistanceFromPlayer(region.TerritoryId, point))
+                .First();
+            return StartAchievement(
+                achievement,
+                new Objective(
+                    AtlasActionKind.Exploration,
+                    $"Pursue {achievement.Name}",
+                    region.TerritoryId,
+                    position,
+                    0,
+                    0,
+                    region.MapId,
+                    region.DiscoveryId,
+                    3.5f),
+                out result);
+        }
+        if (achievement.Type == 20)
+        {
+            ProgressAtlasService.AetherCurrentAtlasTarget? field = atlas.AetherCurrentTargets
+                .Where(target => target.TerritoryId == achievement.TerritoryId)
+                .Where(target => !ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId))
+                .Where(target => IsTerritoryAccessible(target.TerritoryId))
+                .OrderBy(target => DistanceFromPlayer(target.TerritoryId, target.Position))
+                .ThenBy(target => target.AetherCurrentId)
+                .FirstOrDefault();
+            if (field is not null)
+            {
+                return StartAchievement(
+                    achievement,
+                    new Objective(
+                        AtlasActionKind.FieldAetherCurrent,
+                        $"Pursue {achievement.Name}",
+                        field.TerritoryId,
+                        field.Position,
+                        field.DataId,
+                        field.AetherCurrentId,
+                        0,
+                        0,
+                        2.5f),
+                    out result);
+            }
+
+            ProgressionQuestCandidate quest = questProvider
+                .EligibleAetherCurrentQuests(
+                    atlas.AetherCurrentQuestTargets,
+                    objectTable.LocalPlayer?.Level ?? 0)
+                .First(candidate => candidate.TerritoryId == achievement.TerritoryId);
+            return StartAchievementQuest(achievement, quest, out result);
+        }
+        if (achievement.Type == 9)
+        {
+            HashSet<uint> related = achievement.RelatedRows
+                .Select(value => value & 0xFFFF)
+                .ToHashSet();
+            ProgressionQuestCandidate quest = achievementQuests.First(candidate =>
+                uint.TryParse(candidate.QuestId, out uint questId) && related.Contains(questId));
+            return StartAchievementQuest(achievement, quest, out result);
+        }
+
+        ProgressionHuntingTargetCandidate hunt = hunting.EligibleAchievementTarget(achievement.Key)!;
+        return StartAchievementHunt(achievement, hunt, out result);
+    }
+
     private bool StartAchievement(
         ProgressAtlasService.AchievementAtlasTarget achievement,
         Objective selected,
@@ -818,7 +1009,7 @@ internal sealed class ProgressAtlasActionService
         ProgressionQuestCandidate quest,
         out string result)
     {
-        bool started = StartQuest(quest, out result);
+        bool started = StartQuest(quest, out result, AtlasActionKind.Quest);
         if (!started)
             return false;
         actionKind = ProgressAtlasActionKind.Achievement;
@@ -827,8 +1018,69 @@ internal sealed class ProgressAtlasActionService
         return true;
     }
 
-    private bool HasRunnableAchievementStep(ProgressAtlasService.AchievementAtlasTarget achievement)
+    private bool StartAchievementHunt(
+        ProgressAtlasService.AchievementAtlasTarget achievement,
+        ProgressionHuntingTargetCandidate hunt,
+        out string result)
     {
+        if (phase != Phase.Idle)
+        {
+            result = "Stop the current Progress Atlas action before starting another one.";
+            return false;
+        }
+        if (condition[ConditionFlag.InCombat] || condition[ConditionFlag.BoundByDuty] ||
+            condition[ConditionFlag.BoundByDuty56] || condition[ConditionFlag.BoundByDuty95])
+        {
+            result = "Achievement Hunting Log work cannot start during combat or a duty.";
+            return false;
+        }
+
+        string title = $"Pursue {achievement.Name}: {hunt.TargetName}";
+        LeaseOwner owner = new(GoalId.New(), TaskId.New(), AttemptId.New(), 60, $"Progress Atlas: {title}");
+        if (!leases.TryAcquire(owner, QuestResources, LeaseLifetime, out lease, out ResourceLeaseSnapshot? blocking))
+        {
+            result = blocking is null
+                ? "Another Nexus action owns a required resource."
+                : $"Wait for {blocking.Owner.Reason} to finish.";
+            return false;
+        }
+
+        objective = new Objective(
+            AtlasActionKind.HuntingLog,
+            title,
+            0,
+            Vector3.Zero,
+            0,
+            0,
+            0,
+            0,
+            0,
+            Hunt: hunt);
+        operationId = Guid.NewGuid();
+        actionKind = ProgressAtlasActionKind.Achievement;
+        outcome = ProgressAtlasActionOutcome.Active;
+        if (!hunting.TryStartHunt(hunt, out result))
+        {
+            ReleaseLease();
+            objective = null;
+            outcome = ProgressAtlasActionOutcome.Failed;
+            return false;
+        }
+
+        startedAt = DateTimeOffset.UtcNow;
+        phaseStartedAt = startedAt;
+        phase = Phase.Hunting;
+        message = $"Nexus started the next exact Hunting Log step for {achievement.Name}: {hunt.TargetName}.";
+        result = message;
+        return true;
+    }
+
+    private bool HasRunnableAchievementStep(
+        ProgressAtlasService.AchievementAtlasTarget achievement,
+        IReadOnlyList<ProgressionQuestCandidate> achievementQuests)
+    {
+        if (!WorldAutomationPolicy.CanAutomateAchievementType(achievement.Type))
+            return false;
         if (achievement.Type == 8)
         {
             return atlas.ExplorationTargets.Any(target =>
@@ -836,6 +1088,16 @@ internal sealed class ProgressAtlasActionService
                 !ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId) &&
                 target.Positions.Count > 0 && IsTerritoryAccessible(target.TerritoryId));
         }
+        if (achievement.Type == 9)
+        {
+            HashSet<uint> related = achievement.RelatedRows
+                .Select(value => value & 0xFFFF)
+                .ToHashSet();
+            return achievementQuests.Any(candidate =>
+                uint.TryParse(candidate.QuestId, out uint questId) && related.Contains(questId));
+        }
+        if (achievement.Type == 7)
+            return hunting.EligibleAchievementTarget(achievement.Key) is not null;
         if (achievement.Type != 20 || achievement.TerritoryId == 0)
             return false;
         if (atlas.AetherCurrentTargets.Any(target =>
@@ -848,6 +1110,11 @@ internal sealed class ProgressAtlasActionService
                 objectTable.LocalPlayer?.Level ?? 0)
             .Any(candidate => candidate.TerritoryId == achievement.TerritoryId);
     }
+
+    private IReadOnlyList<ProgressionQuestCandidate> EligibleAchievementQuests()
+        => questProvider.EligibleAchievementQuests(
+            achievementQuestIds,
+            objectTable.LocalPlayer?.Level ?? 0);
 
     private void ReleaseLease()
     {
@@ -865,14 +1132,17 @@ internal sealed class ProgressAtlasActionService
         uint MapId,
         byte DiscoveryId,
         float Tolerance,
-        ProgressionQuestCandidate? Quest = null);
+        ProgressionQuestCandidate? Quest = null,
+        ProgressionHuntingTargetCandidate? Hunt = null);
 
     private enum AtlasActionKind
     {
         Aetheryte,
         FieldAetherCurrent,
         AetherCurrentQuest,
+        Quest,
         Exploration,
+        HuntingLog,
     }
 
     private enum Phase
@@ -883,5 +1153,7 @@ internal sealed class ProgressAtlasActionService
         Verifying,
         Questing,
         QuestStopping,
+        Hunting,
+        HuntingStopping,
     }
 }

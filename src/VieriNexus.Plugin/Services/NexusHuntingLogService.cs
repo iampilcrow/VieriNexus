@@ -111,16 +111,7 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
         if (!IsReady || !clientState.IsLoggedIn || objectTable.LocalPlayer is null)
             return [];
 
-        int grandCompanyRank = CurrentGrandCompanyRank();
-        HuntingLogTargetProgress[] eligible = atlas.HuntingTargets
-            .Where(target => target.IsCurrentRank && !target.IsComplete)
-            .Where(target => currentLevel >= RequiredLevel(target))
-            .Where(target => target.LogKey < 10_000 || grandCompanyRank >= RequiredGrandCompanyRank(target.Rank))
-            .Where(target =>
-                target.HasOpenWorldLocation && IsOpenWorldProviderReady(out _) ||
-                target.Locations.Any(location => !location.IsOpenWorld && location.DutyTerritoryId != 0 &&
-                    dutyProvider.EligibleDutyForTerritory(location.DutyTerritoryId, currentLevel) is not null))
-            .ToArray();
+        HuntingLogTargetProgress[] eligible = EligibleProgress(currentLevel).ToArray();
         HuntingLogTargetProgress? selected = HuntingLogCandidatePolicy.SelectNext(
             eligible,
             clientState.TerritoryType,
@@ -128,6 +119,32 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
         return selected is null
             ? []
             : [ToCandidate(selected)];
+    }
+
+    internal ProgressionHuntingTargetCandidate? EligibleAchievementTarget(uint achievementLogIndex)
+    {
+        if (!IsReady || !clientState.IsLoggedIn || objectTable.LocalPlayer is null)
+            return null;
+
+        HuntingLogTargetProgress? selected = HuntingLogCandidatePolicy.SelectNext(
+            EligibleProgress(objectTable.LocalPlayer.Level)
+                .Where(target => AchievementLogIndex(target.LogKey) == achievementLogIndex),
+            clientState.TerritoryType,
+            new HashSet<(uint, int, int, int)>());
+        return selected is null ? null : ToCandidate(selected);
+    }
+
+    private IEnumerable<HuntingLogTargetProgress> EligibleProgress(int currentLevel)
+    {
+        int grandCompanyRank = CurrentGrandCompanyRank();
+        return atlas.HuntingTargets
+            .Where(target => target.IsCurrentRank && !target.IsComplete)
+            .Where(target => currentLevel >= RequiredLevel(target))
+            .Where(target => target.LogKey < 10_000 || grandCompanyRank >= RequiredGrandCompanyRank(target.Rank))
+            .Where(target =>
+                target.HasOpenWorldLocation && IsOpenWorldProviderReady(out _) ||
+                target.Locations.Any(location => !location.IsOpenWorld && location.DutyTerritoryId != 0 &&
+                    dutyProvider.EligibleDutyForTerritory(location.DutyTerritoryId, currentLevel) is not null));
     }
 
     public ProgressionHuntingProviderObservation ObserveHunt(ProgressionHuntingTargetCandidate target)
@@ -794,6 +811,21 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
     private static int RequiredLevel(HuntingLogTargetProgress target) => target.LogKey >= 10_000
         ? 20 + target.Rank * 10
         : target.Rank == 0 ? 1 : target.Rank * 10;
+
+    private static uint AchievementLogIndex(uint logKey) => logKey switch
+    {
+        >= 10_001 and <= 10_003 => logKey - 9_993,
+        1 => 0,
+        2 => 1,
+        3 => 2,
+        4 => 3,
+        5 => 4,
+        6 => 5,
+        7 => 6,
+        26 => 7,
+        29 => 11,
+        _ => uint.MaxValue,
+    };
 
     private static int RequiredGrandCompanyRank(int rank) => rank switch
     {

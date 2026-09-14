@@ -1,10 +1,10 @@
 # PROJECT STATE
 
-Working snapshot: 2026-09-13 (America/New_York)
+Working snapshot: 2026-09-14 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.75`
+Current product version: `0.1.0.76`
 Current published source: `0.1.0.75`, source `0bbf2edfd527f576ee0a06d0e4463d6e50898441`, website release `27e54f53746b0519bab13f4370750c9462a63470`, verification documentation `1b668e4`. Release deployment `dpl_AN1rt4oxBJB66Sh35V1B5hsMTekW` and final documentation deployment `dpl_BSSfTYDS1x12BGJy94LC4awHtcyo` are Ready; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `94996DD532B1D4AA0005A1876AD3E1229AF9314514E92044BC5B92DC4A26A8F3` / `07D805D5E12F7362936E7C2D0300D868CD52409D8E51047889D4A2C68AAFA0ED`; Discord workflow `34803658042` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.75 is published and restores the missing VieriCodex world-completion lanes as real Automation rather than Atlas-only buttons. **Automation > World Progression** continuously selects, executes, verifies, and replans Aetheryte/Aethernet attunement, flying unlocks (field and quest currents), world exploration, and directly runnable achievement steps. Job and world modes hand off instead of competing. The next focused gate is ordinary in-game confirmation that one selected category starts an available target and advances after exact completion.
+Current workstream: version 0.1.0.76 is prepared to complete the remaining VieriCodex achievement-execution parity inside **Automation > World Progression**. Achievement scheduling now covers exact stock-Questionable quest chains and Nexus-owned class/Grand Company Hunting Logs in addition to exploration and flying steps. Each underlying action retains its existing lease, Stop, provider-inactivity, and exact live-completion boundary. Genuinely manual/group/crafting/gathering/PvP/collection/duty-finder-only/time-gated objectives remain guided because neither Nexus nor VieriCodex can truthfully execute them unattended.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -215,7 +215,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 10 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety, Progression draft, complete multi-job queue state, saved Atlas/World Progression selections, one-time verified queue promotion, per-source migration state, and independent embedded-module enablement.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.75`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.76`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -259,7 +259,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 
 ### `tests/VieriNexus.Application.Tests`
 
-There are 336 automated Nexus tests across the application/domain policies, including native queue import/normalization/order/method behavior, MSQ planning/execution priority, null-safe complete VieriCodex settings import, transactional recovery/rollback, command aliases including `job.switch`, public-version alignment, payload bounds, character scoping, rejected unsafe controls, provider identity handoff coverage, and Plugins-page grouping/command behavior. The five packaged engines retain their own focused regression suites, and the release package has a separate nested-archive safety/completeness verifier.
+There are 351 automated Nexus tests across the application/domain policies, including native queue import/normalization/order/method behavior, MSQ planning/execution priority, world-automation and achievement-type selection, null-safe complete VieriCodex settings import, transactional recovery/rollback, command aliases including `job.switch`, public-version alignment, payload bounds, character scoping, rejected unsafe controls, provider identity handoff coverage, and Plugins-page grouping/command behavior. The five packaged engines retain their own focused regression suites, and the release package has a separate nested-archive safety/completeness verifier.
 
 - `DependencyCatalogTests.cs`
 - `NavigationRouteMigrationImporterTests.cs`
@@ -586,13 +586,13 @@ Home, Control Center, Progression, Progress Atlas, Routes, Dependencies, Migrati
 
 ### Current configuration — IMPLEMENTED
 
-`Configuration` implements Dalamud `IPluginConfiguration`, currently schema `Version = 9`:
+`Configuration` implements Dalamud `IPluginConfiguration`, currently schema `Version = 10`:
 
 - Global: `FirstRunComplete`, `OpenOnLogin`, `CompactNavigation`, `UiScale`, `SelectedPage`, and the compact operations overlay's visibility/lock/transparency/status choices.
 - Per-character dictionary keyed by `CharacterKey.ToString()` (`content ID + home world`): profile name, allow automation, pause-on-manual-target, retained legacy pause-on-manual-movement/quiet-period fields, and a Progression draft containing target level, allowed job-quest/Hunting Log/side-quest/duty methods, and hard minimum-gil reserve. Legacy route fields remain readable for configuration compatibility but are no longer displayed or used by production route control.
 - Per-source `LegacyImports`: reviewed/imported flags, source version, import time, receipt ID, imported count, ready-for-activation, activated.
 
-`Initialize(...)` clamps UI scale, restores dictionary comparers/null safety, supplies missing per-character Progression drafts, sets schema version 4, and attaches the plugin interface. There is no destructive older-version migration; existing character and route settings remain intact.
+`Initialize(...)` clamps UI scale, restores dictionary comparers/null safety, supplies missing per-character Progression drafts, advances the backward-compatible schema marker to version 10, and attaches the plugin interface. There is no destructive older-version migration; existing character and route settings remain intact.
 
 Nexus configuration is saved through Dalamud. NavPlotter and VieriAutoDuty operations staging are separate JSON under `NexusData`; backups and receipts live beside them under the Nexus config directory.
 
@@ -741,7 +741,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.75`. Dalamud API 15. Version 0.1.0.74 is the current production feed entry while 0.1.0.75 is prepared; every prior version remains an immutable historical archive.
+- Plugin project version: `0.1.0.76`. Dalamud API 15. Version 0.1.0.75 is the current production feed entry while 0.1.0.76 is prepared; every prior version remains an immutable historical archive.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.
@@ -861,7 +861,7 @@ A read-only VieriCodex/Questionable architecture review found that stock Questio
 
 ### Current workstream
 
-Version 0.1.0.75 corrects the automation-parity gap the user identified after retiring VieriCodex. The earlier Nexus build preserved Aetheryte, current, exploration, and achievement state in Progress Atlas and exposed one-shot actions, but Current Job Automation and Multi-Job Automation did not schedule that world work. Automation now has a third first-class mode, **World Progression**, using the already migrated per-character selections. It offers Aetherytes & Aethernet, Unlock Flying (field currents plus Aether Current quests), World Exploration, and Achievements; completes one reachable exact objective; requires structured live completion; and then selects the next. Starting a job mode stops World Progression, while starting World Progression stops the current job/queue mode so schedulers never compete. Achievement automation covers the directly verifiable exploration and flying steps; all other achievement types remain fully tracked and guided rather than falsely marked executable.
+Version 0.1.0.75 corrects the automation-parity gap the user identified after retiring VieriCodex. The earlier Nexus build preserved Aetheryte, current, exploration, and achievement state in Progress Atlas and exposed one-shot actions, but Current Job Automation and Multi-Job Automation did not schedule that world work. Automation now has a third first-class mode, **World Progression**, using the already migrated per-character selections. It offers Aetherytes & Aethernet, Unlock Flying (field currents plus Aether Current quests), World Exploration, and Achievements; completes one reachable exact objective; requires structured live completion; and then selects the next. Starting a job mode stops World Progression, while starting World Progression stops the current job/queue mode so schedulers never compete. Version 0.1.0.76 completes the predecessor's directly executable achievement categories by adding exact stock-Questionable quest chains and Nexus-owned class/Grand Company Hunting Log steps. Other achievement types remain fully tracked and guided because they require manual, group, crafting, gathering, PvP, collection, duty-finder-only, or time-gated play and were not executable by VieriCodex either.
 
 The user had said all vendor routes were in a good place and instructed development to continue piecing VieriNexus together while preserving every setting and Discord key. The assistant chose Routes & Navigation as the first safe vertical migration slice and completed staging/rollback.
 

@@ -126,6 +126,11 @@ internal sealed class ProgressAtlasService
                 row.AchievementCategory.Value.Name.ToString(),
                 row.Type,
                 row.Key.RowId,
+                new[] { row.Key.RowId }
+                    .Concat(row.Data.Select(value => value.RowId))
+                    .Where(value => value != 0)
+                    .Distinct()
+                    .ToArray(),
                 row.Type == 20 ? aetherCurrentTerritories.GetValueOrDefault(row.Key.RowId) : 0,
                 row.Type switch
                 {
@@ -538,6 +543,7 @@ internal sealed class ProgressAtlasService
         string Category,
         byte Type,
         uint Key,
+        IReadOnlyList<uint> RelatedRows,
         uint TerritoryId,
         int AutomationPriority);
 

@@ -24,6 +24,8 @@ public sealed record WorldAutomationAvailability(
 
 public static class WorldAutomationPolicy
 {
+    public static bool CanAutomateAchievementType(byte type) => type is 7 or 8 or 9 or 20;
+
     public static WorldAutomationActivity? SelectNext(
         WorldAutomationSelection selection,
         WorldAutomationAvailability availability)

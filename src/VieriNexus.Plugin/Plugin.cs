@@ -263,21 +263,6 @@ public sealed class Plugin : IDalamudPlugin
         progressionProviders = new ProgressionProviderService(
             PluginInterface, questionableCompatibility, dependencyService, DataManager, PlayerState, ObjectTable,
             ClientState, Condition, GameGui, navigationLibrary, suiteTravelProvider, navigationStopProvider);
-        progressAtlasActions = new ProgressAtlasActionService(
-            progressAtlas,
-            progressionProviders,
-            suiteTravelProvider,
-            resourceLeases,
-            ClientState,
-            Condition,
-            ObjectTable,
-            TargetManager);
-        worldAutomation = new WorldAutomationRuntimeService(
-            progressAtlasActions,
-            () => worldStore.Current.Character.Value is { Key.IsKnown: true } character
-                ? Configuration.ForCharacter(character.Key.ToString()).Atlas
-                : null,
-            Save);
         huntingLog = new NexusHuntingLogService(
             PluginInterface,
             progressAtlas,
@@ -291,6 +276,22 @@ public sealed class Plugin : IDalamudPlugin
             TargetManager,
             Condition,
             CommandManager);
+        progressAtlasActions = new ProgressAtlasActionService(
+            progressAtlas,
+            progressionProviders,
+            huntingLog,
+            suiteTravelProvider,
+            resourceLeases,
+            ClientState,
+            Condition,
+            ObjectTable,
+            TargetManager);
+        worldAutomation = new WorldAutomationRuntimeService(
+            progressAtlasActions,
+            () => worldStore.Current.Character.Value is { Key.IsKnown: true } character
+                ? Configuration.ForCharacter(character.Key.ToString()).Atlas
+                : null,
+            Save);
         gearShoppingRuntime = new GearShoppingRuntimeService(resourceLeases, progressionProviders);
         maintenanceRuntime = new NexusMaintenanceRuntimeService(
             resourceLeases, autoDutyMigration, PlayerState, ObjectTable, Condition, GameGui, DataManager,
@@ -470,9 +471,9 @@ public sealed class Plugin : IDalamudPlugin
         questionableCompatibility.Update(DateTimeOffset.UtcNow);
         progressionProviders.UpdateGearAdapter();
         progressAtlas.Update(DateTimeOffset.UtcNow);
+        huntingLog.Update(DateTimeOffset.UtcNow);
         progressAtlasActions.Update(DateTimeOffset.UtcNow);
         worldAutomation.Update(DateTimeOffset.UtcNow);
-        huntingLog.Update(DateTimeOffset.UtcNow);
         gearShoppingRuntime.Update();
         maintenanceRuntime.Update(DateTimeOffset.UtcNow);
         strikingDummyTravel.Update(DateTimeOffset.UtcNow);

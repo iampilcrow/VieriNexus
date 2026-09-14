@@ -2942,7 +2942,7 @@ internal sealed class NexusWindow : Window
                 changed = true;
             }
             TextWrapped(NexusTheme.Muted,
-                $"{progressAtlasActions.RemainingSupportedAchievements} directly runnable achievement goal(s)");
+                $"{progressAtlasActions.RemainingSupportedAchievements} achievement goal(s) Nexus can run now");
             ImGui.EndTable();
         }
         if (changed)
@@ -2965,7 +2965,7 @@ internal sealed class NexusWindow : Window
         if (!string.IsNullOrWhiteSpace(progressionMessage))
             TextWrapped(NexusTheme.Cyan, progressionMessage);
         TextWrapped(NexusTheme.Muted,
-            "Nexus completes one exact objective, verifies it from live game state, then chooses the next. Achievements that require manual, group, crafting, gathering, PvP, collection, or time-gated play remain fully tracked in Progress Atlas.");
+            "Nexus automatically handles achievement steps backed by quests, Hunting Logs, exploration, and flying unlocks. Manual, group, crafting, gathering, PvP, collection, and time-gated goals remain fully tracked in Progress Atlas.");
         EndAutoPanel();
     }
 
@@ -3681,8 +3681,17 @@ internal sealed class NexusWindow : Window
                 continue;
             foreach (var item in category.Take(250))
             {
-                ImGui.TextColored(item.Complete ? NexusTheme.Green : NexusTheme.Muted,
-                    item.Complete ? "Complete" : "Remaining");
+                bool pursuable = progressAtlasActions.CanPursueAchievement(item.Target);
+                ImGui.TextColored(item.Complete ? NexusTheme.Green : pursuable ? NexusTheme.Cyan : NexusTheme.Muted,
+                    item.Complete ? "Complete" : pursuable ? "Automatic" : "Guided");
+                if (pursuable)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive);
+                    if (ImGui.SmallButton($"Pursue###AtlasAchievementPursue{item.Target.Id}"))
+                        progressAtlasActions.StartAchievementTarget(item.Target, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
                 ImGui.SameLine();
                 ImGui.TextWrapped(item.Target.Name);
             }

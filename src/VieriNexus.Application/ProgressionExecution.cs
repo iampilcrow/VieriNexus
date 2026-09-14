@@ -35,6 +35,7 @@ public enum ProgressionQuestKind
     GeneralSideQuest,
     AetherCurrent,
     MainScenario,
+    Achievement,
 }
 
 public sealed record ProgressionQuestCandidate(
@@ -1819,6 +1820,7 @@ public sealed class ProgressionExecutionCoordinator
         ProgressionQuestKind.GeneralSideQuest => "general side quest",
         ProgressionQuestKind.AetherCurrent => "Aether Current quest",
         ProgressionQuestKind.MainScenario => "Main Scenario quest",
+        ProgressionQuestKind.Achievement => "achievement quest",
         _ => "quest",
     };
 
