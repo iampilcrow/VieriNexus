@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-13 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.73`
+Current product version: `0.1.0.74`
 Current published source: `0.1.0.73`, source `4caf39d7f946284982b8a7a34e4e9d1dde61d2ee`, website release `ac1febc7bae24972df41c4a9451c2dcc7ccc2976`, verification documentation `1b6e25a33e54e3f0371622aae981064198c7c807`. Release deployment `dpl_7MfRfBBZUcFQ9j7Uuc77DxTP2nGY` and final documentation deployment `dpl_5KY46Qh2LvSjdxxTc7yZ6DziFg9g` are Ready; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `38BFED59AF6D670D03D5271A34C0C248406F6BF7080818962EE1367740E82BB1` / `B35B95FF900BF921DE7F32C4D001D303EECCC966548D46784BC80FEEB498B1C1`; Discord workflow `34773373234` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.73 is published and restores the exact standalone VieriAutoDuty overlay structure inside Nexus. The compact surface is Goto, Gear, Inventory, Extras, settings, and close; it restores Sell Inventory and the original Equip/TurnIn/Coffers/Armoire/Triple Triad choices, removes unrelated Nexus maintenance shortcuts from those menus, and keeps protected selling behind an exact in-overlay review. The next step is the user's in-game visual and action verification after updating through Dalamud.
+Current workstream: version 0.1.0.74 fixes the shared manual/queued gear-shopping continuation after teleport. The destination territory now authoritatively ends the Lifestream leg; Nexus releases a lingering Lifestream busy state, waits only for vnavmesh readiness, and starts the local vendor route without another click. Version 0.1.0.73 remains the current published production feed entry until 0.1.0.74 completes the release workflow.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -215,7 +215,7 @@ Several target concepts are now live but remain specialized rather than a fully 
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
 - `Configuration.cs` — schema 9 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety, Progression draft and complete multi-job queue state, one-time verified queue promotion, per-source migration state, and independent embedded-module enablement.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.73`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.74`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -738,7 +738,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.73`. Dalamud API 15. Version 0.1.0.73 is the current production feed entry; every prior version remains an immutable historical archive.
+- Plugin project version: `0.1.0.74`. Dalamud API 15. Version 0.1.0.73 is the current production feed entry while 0.1.0.74 is prepared; every prior version remains an immutable historical archive.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.

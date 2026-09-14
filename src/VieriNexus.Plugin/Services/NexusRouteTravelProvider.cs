@@ -212,6 +212,30 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
 
         try
         {
+            if (request is not null &&
+                phase is TravelPhase.WaitingForAethernetRoot or TravelPhase.WaitingForTargetTerritory)
+            {
+                NavigationArrivalAction arrival = NavigationArrivalPolicy.Decide(
+                    clientState.TerritoryType == request.TerritoryId,
+                    navigation.IsReady,
+                    now - phaseStartedAt > PhaseTimeout);
+                if (arrival is NavigationArrivalAction.StartLocalPath or NavigationArrivalAction.WaitForMesh)
+                {
+                    ReleaseCompletedLifestreamLeg();
+                    if (arrival == NavigationArrivalAction.StartLocalPath)
+                        StartAuthoredPath(now);
+                    else
+                        SetRunning(TravelPhase.WaitingForMesh,
+                            "nexus-route-waiting-for-mesh",
+                            "Nexus reached the route territory and is waiting for vnavmesh to finish loading.",
+                            now: now);
+                    return observation;
+                }
+                if (arrival == NavigationArrivalAction.Fail)
+                    return Fail("nexus-route-territory-timeout",
+                        "Lifestream did not reach the route territory within two minutes.");
+            }
+
             switch (phase)
             {
                 case TravelPhase.WaitingForInnOnly:
@@ -228,9 +252,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
                     break;
 
                 case TravelPhase.WaitingForAethernetRoot:
-                    if (clientState.TerritoryType == request!.TerritoryId && navigation.IsReady)
-                        StartAuthoredPath(now);
-                    else if (!IsLifestreamBusy() && clientState.TerritoryType == rootTerritoryId)
+                    if (!IsLifestreamBusy() && clientState.TerritoryType == rootTerritoryId)
                     {
                         if (string.IsNullOrWhiteSpace(aethernetDestination) ||
                             !aethernetTeleport.InvokeFunc(aethernetDestination))
@@ -240,21 +262,12 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
                             "nexus-route-using-aethernet",
                             $"Nexus is using Lifestream to reach {aethernetDestination}.");
                     }
-                    else if (!IsLifestreamBusy() && now - phaseStartedAt > PhaseTimeout)
+                    else if (now - phaseStartedAt > PhaseTimeout)
                         return Fail("nexus-route-root-timeout", "The teleport completed without reaching the expected city Aetheryte.");
                     break;
 
                 case TravelPhase.WaitingForTargetTerritory:
-                    if (clientState.TerritoryType == request!.TerritoryId && !IsLifestreamBusy() && navigation.IsReady)
-                        StartAuthoredPath(now);
-                    else if (clientState.TerritoryType == request.TerritoryId && !IsLifestreamBusy())
-                    {
-                        SetRunning(TravelPhase.WaitingForMesh,
-                            "nexus-route-waiting-for-mesh",
-                            "Nexus reached the route territory and is waiting for vnavmesh to finish loading.",
-                            now: now);
-                    }
-                    else if (!IsLifestreamBusy() && now - phaseStartedAt > PhaseTimeout)
+                    if (now - phaseStartedAt > PhaseTimeout)
                         return Fail("nexus-route-territory-timeout", "Lifestream stopped without reaching the route territory.");
                     break;
 
@@ -408,6 +421,19 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
 
     private bool IsLifestreamBusy() =>
         lifestreamBusy.HasFunction && lifestreamBusy.InvokeFunc();
+
+    private void ReleaseCompletedLifestreamLeg()
+    {
+        try
+        {
+            if (IsLifestreamBusy() && abortLifestream.HasAction)
+                abortLifestream.InvokeAction();
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Debug(ex, "Lifestream retained its busy state after Nexus reached the route territory.");
+        }
+    }
 
     private string StartMessage() => request!.TravelOnly
         ? "Started travel to the route start through Nexus."

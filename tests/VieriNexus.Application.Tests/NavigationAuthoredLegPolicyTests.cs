@@ -4,6 +4,22 @@ namespace VieriNexus.Application.Tests;
 
 public sealed class NavigationAuthoredLegPolicyTests
 {
+    [Theory]
+    [InlineData(true, true, false, NavigationArrivalAction.StartLocalPath)]
+    [InlineData(true, true, true, NavigationArrivalAction.StartLocalPath)]
+    [InlineData(true, false, false, NavigationArrivalAction.WaitForMesh)]
+    [InlineData(true, false, true, NavigationArrivalAction.WaitForMesh)]
+    [InlineData(false, true, false, NavigationArrivalAction.WaitForTerritory)]
+    [InlineData(false, false, true, NavigationArrivalAction.Fail)]
+    public void ArrivalPolicyUsesLoadedDestinationInsteadOfProviderBusyState(
+        bool destinationLoaded,
+        bool navigationReady,
+        bool timedOut,
+        NavigationArrivalAction expected)
+    {
+        Assert.Equal(expected, NavigationArrivalPolicy.Decide(destinationLoaded, navigationReady, timedOut));
+    }
+
     [Fact]
     public void MeshAssistedSinglePointUsesPathfindingAndFinalTolerance()
     {

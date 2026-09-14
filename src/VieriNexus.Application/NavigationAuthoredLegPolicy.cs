@@ -6,6 +6,37 @@ public sealed record NavigationAuthoredLeg(
     bool UseFlight,
     float Tolerance);
 
+public enum NavigationArrivalAction
+{
+    WaitForTerritory,
+    WaitForMesh,
+    StartLocalPath,
+    Fail,
+}
+
+/// <summary>
+/// Decides when a completed cross-zone transfer may hand control to local navigation. Reaching
+/// the exact destination territory is authoritative; a provider's lingering busy flag must not
+/// strand the player at the arrival Aetheryte after the transfer has already completed.
+/// </summary>
+public static class NavigationArrivalPolicy
+{
+    public static NavigationArrivalAction Decide(
+        bool destinationTerritoryLoaded,
+        bool navigationReady,
+        bool phaseTimedOut)
+    {
+        if (destinationTerritoryLoaded)
+            return navigationReady
+                ? NavigationArrivalAction.StartLocalPath
+                : NavigationArrivalAction.WaitForMesh;
+
+        return phaseTimedOut
+            ? NavigationArrivalAction.Fail
+            : NavigationArrivalAction.WaitForTerritory;
+    }
+}
+
 /// <summary>
 /// Converts each authored route point into one movement leg. Mesh-assisted routes must calculate
 /// a navigable path to every authored point; passing a single destination directly to Path.MoveTo
