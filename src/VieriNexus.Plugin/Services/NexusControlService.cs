@@ -27,6 +27,7 @@ internal sealed unsafe class NexusControlService
     private readonly ICondition condition;
     private readonly ProgressionRuntimeService progression;
     private readonly ProgressAtlasActionService atlas;
+    private readonly WorldAutomationRuntimeService worldAutomation;
     private readonly NavigationLibraryService routes;
     private readonly NavigationRouteRuntimeService navigation;
     private readonly GearShoppingRuntimeService gear;
@@ -45,6 +46,7 @@ internal sealed unsafe class NexusControlService
         ICondition condition,
         ProgressionRuntimeService progression,
         ProgressAtlasActionService atlas,
+        WorldAutomationRuntimeService worldAutomation,
         NavigationLibraryService routes,
         NavigationRouteRuntimeService navigation,
         GearShoppingRuntimeService gear,
@@ -60,6 +62,7 @@ internal sealed unsafe class NexusControlService
         this.condition = condition;
         this.progression = progression;
         this.atlas = atlas;
+        this.worldAutomation = worldAutomation;
         this.routes = routes;
         this.navigation = navigation;
         this.gear = gear;
@@ -85,21 +88,25 @@ internal sealed unsafe class NexusControlService
         bool gearActive = gear.Status.IsActive;
         bool maintenanceActive = maintenance.Status.IsActive;
         bool atlasActive = atlas.Status.IsActive;
+        bool worldAutomationActive = worldAutomation.Status.IsActive;
         bool dummyActive = strikingDummies.Status.IsActive;
         bool progressionActive = goal?.Goal.Status == GoalStatus.Active;
         string? module = gearActive ? "Gear & Inventory" :
             maintenanceActive ? "Maintenance" :
+            worldAutomationActive ? "World Progression" :
             atlasActive ? "Progress Atlas" :
             dummyActive || navigationActive ? "Custom Route Editor" :
             progressionActive ? "Progression" : null;
         string? activity = gearActive ? "Gear transaction" :
             maintenanceActive ? maintenance.Status.Operation?.ToString() :
+            worldAutomationActive ? atlas.Status.Title :
             atlasActive ? atlas.Status.Title :
             dummyActive ? "Striking-dummy travel" :
             navigationActive ? navigation.Status.RouteName :
             task?.Title;
         string? detail = gearActive ? gear.Status.Message :
             maintenanceActive ? maintenance.Status.Message :
+            worldAutomationActive ? worldAutomation.Status.Message :
             atlasActive ? atlas.Status.Message :
             dummyActive ? strikingDummies.Status.Message :
             navigationActive ? navigation.Status.Message :
@@ -166,6 +173,8 @@ internal sealed unsafe class NexusControlService
     internal NexusCommandResultDto StopAll(Guid? requestId = null)
     {
         bool stopped = false;
+        if (worldAutomation.Status.IsActive)
+            stopped |= worldAutomation.Stop(out _);
         if (atlas.Status.IsActive)
             stopped |= atlas.Stop(out _);
         if (gear.Status.IsActive)
@@ -201,6 +210,8 @@ internal sealed unsafe class NexusControlService
             case "stop":
                 return StopAll(id);
             case "progression.start":
+                if (worldAutomation.Status.IsActive)
+                    worldAutomation.Stop(out _);
                 CharacterSnapshot? character = world.Current.Character.Value;
                 CharacterConfiguration? characterConfiguration = character is null
                     ? null

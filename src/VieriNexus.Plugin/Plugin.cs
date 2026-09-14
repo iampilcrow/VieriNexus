@@ -72,6 +72,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly SoloDutyRotationRuntimeService soloDutyRotation;
     private readonly ProgressAtlasService progressAtlas;
     private readonly ProgressAtlasActionService progressAtlasActions;
+    private readonly WorldAutomationRuntimeService worldAutomation;
     private readonly NexusHuntingLogService huntingLog;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
@@ -271,6 +272,12 @@ public sealed class Plugin : IDalamudPlugin
             Condition,
             ObjectTable,
             TargetManager);
+        worldAutomation = new WorldAutomationRuntimeService(
+            progressAtlasActions,
+            () => worldStore.Current.Character.Value is { Key.IsKnown: true } character
+                ? Configuration.ForCharacter(character.Key.ToString()).Atlas
+                : null,
+            Save);
         huntingLog = new NexusHuntingLogService(
             PluginInterface,
             progressAtlas,
@@ -330,7 +337,7 @@ public sealed class Plugin : IDalamudPlugin
             codexMigration, commandCenterMigration, commandCenterCatalog, questionableCompatibility,
             navigationLibrary, navigationActivation, navigationDiagnostics,
             navigationRuntime, progressionProviders, progressionRuntime, progressionQueue, soloDutyRotation,
-            progressAtlas, progressAtlasActions,
+            progressAtlas, progressAtlasActions, worldAutomation,
             gearShoppingRuntime, maintenanceRuntime,
             moduleRegistry, embeddedModules, worldStore, logo);
         windows.AddWindow(mainWindow);
@@ -341,6 +348,7 @@ public sealed class Plugin : IDalamudPlugin
             Condition,
             progressionRuntime,
             progressAtlasActions,
+            worldAutomation,
             navigationLibrary,
             navigationRuntime,
             gearShoppingRuntime,
@@ -398,6 +406,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         embeddedModules.Dispose();
         soloDutyRotation.Dispose();
+        worldAutomation.Shutdown();
         progressAtlasActions.Shutdown();
         huntingLog.Shutdown();
         maintenanceRuntime.Shutdown();
@@ -462,6 +471,7 @@ public sealed class Plugin : IDalamudPlugin
         progressionProviders.UpdateGearAdapter();
         progressAtlas.Update(DateTimeOffset.UtcNow);
         progressAtlasActions.Update(DateTimeOffset.UtcNow);
+        worldAutomation.Update(DateTimeOffset.UtcNow);
         huntingLog.Update(DateTimeOffset.UtcNow);
         gearShoppingRuntime.Update();
         maintenanceRuntime.Update(DateTimeOffset.UtcNow);

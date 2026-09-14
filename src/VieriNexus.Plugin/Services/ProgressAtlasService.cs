@@ -112,6 +112,9 @@ internal sealed class ProgressAtlasService
             .Where(row => row.RowId > 0 && !row.Name.IsEmpty && row.AchievementCategory.RowId > 0)
             .Where(row => row.AchievementCategory.Value.AchievementKind.RowId != 9)
             .ToArray();
+        Dictionary<uint, uint> aetherCurrentTerritories = dataManager.GetExcelSheet<AetherCurrentCompFlgSet>()
+            .Where(row => row.RowId > 0 && row.Territory.IsValid)
+            .ToDictionary(row => row.RowId, row => row.Territory.RowId);
         achievementIds = achievementRows
             .Select(row => row.RowId)
             .Distinct()
@@ -120,7 +123,19 @@ internal sealed class ProgressAtlasService
         achievementTargets = achievementRows.Select(row => new AchievementAtlasTarget(
                 row.RowId,
                 row.Name.ToString(),
-                row.AchievementCategory.Value.Name.ToString()))
+                row.AchievementCategory.Value.Name.ToString(),
+                row.Type,
+                row.Key.RowId,
+                row.Type == 20 ? aetherCurrentTerritories.GetValueOrDefault(row.Key.RowId) : 0,
+                row.Type switch
+                {
+                    8 => 0,
+                    20 => 1,
+                    9 => 2,
+                    7 => 3,
+                    14 => 4,
+                    _ => 10,
+                }))
             .OrderBy(target => target.Category, StringComparer.CurrentCulture)
             .ThenBy(target => target.Name, StringComparer.CurrentCulture)
             .ToArray();
@@ -517,7 +532,14 @@ internal sealed class ProgressAtlasService
         internal string Expansion { get; init; } = "Other";
     }
 
-    internal sealed record AchievementAtlasTarget(uint Id, string Name, string Category);
+    internal sealed record AchievementAtlasTarget(
+        uint Id,
+        string Name,
+        string Category,
+        byte Type,
+        uint Key,
+        uint TerritoryId,
+        int AutomationPriority);
 
     private sealed record TerritoryAtlasInfo(string Name, string Expansion);
 

@@ -46,6 +46,7 @@ internal sealed class NexusWindow : Window
     private readonly SoloDutyRotationRuntimeService soloDutyRotation;
     private readonly ProgressAtlasService progressAtlas;
     private readonly ProgressAtlasActionService progressAtlasActions;
+    private readonly WorldAutomationRuntimeService worldAutomation;
     private readonly GearShoppingRuntimeService gearShoppingRuntime;
     private readonly NexusMaintenanceRuntimeService maintenanceRuntime;
     private readonly ModuleRegistry modules;
@@ -102,6 +103,7 @@ internal sealed class NexusWindow : Window
         SoloDutyRotationRuntimeService soloDutyRotation,
         ProgressAtlasService progressAtlas,
         ProgressAtlasActionService progressAtlasActions,
+        WorldAutomationRuntimeService worldAutomation,
         GearShoppingRuntimeService gearShoppingRuntime,
         NexusMaintenanceRuntimeService maintenanceRuntime,
         ModuleRegistry modules,
@@ -129,6 +131,7 @@ internal sealed class NexusWindow : Window
         this.soloDutyRotation = soloDutyRotation;
         this.progressAtlas = progressAtlas;
         this.progressAtlasActions = progressAtlasActions;
+        this.worldAutomation = worldAutomation;
         this.gearShoppingRuntime = gearShoppingRuntime;
         this.maintenanceRuntime = maintenanceRuntime;
         this.modules = modules;
@@ -2825,7 +2828,7 @@ internal sealed class NexusWindow : Window
 
     private void DrawAutomation()
     {
-        PageHeading("Automation", "Run the current job or an ordered multi-job queue from one coordinated workspace.");
+        PageHeading("Automation", "Run job leveling, an ordered multi-job queue, or continuous world progression from one coordinated workspace.");
         CharacterSnapshot? character = world.Current.Character.Value;
         ProgressionGoalState? goal = progressionRuntime.State;
         ProgressionQueueConfiguration? queue = character is { Key.IsKnown: true }
@@ -2833,7 +2836,10 @@ internal sealed class NexusWindow : Window
             : null;
 
         BeginAutoPanel("CURRENT ACTIVITY");
-        if (queue?.IsRunning == true || queue?.IsPaused == true)
+        if (worldAutomation.Status.IsActive)
+            NexusTheme.StatusDot(NexusTheme.Green,
+                $"World Progression • {worldAutomation.Status.Message}");
+        else if (queue?.IsRunning == true || queue?.IsPaused == true)
             NexusTheme.StatusDot(queue.IsRunning ? NexusTheme.Green : NexusTheme.Amber,
                 $"Multi-Job Automation Queue • {queue.StatusDetail}");
         else if (goal is not null && goal.Goal.Status is not (GoalStatus.Cancelled or GoalStatus.Satisfied))
@@ -2863,7 +2869,114 @@ internal sealed class NexusWindow : Window
             DrawProgressionQueue(showHeading: false);
             ImGui.EndTabItem();
         }
+        if (ImGui.BeginTabItem("World Progression"))
+        {
+            DrawWorldAutomation(character);
+            ImGui.EndTabItem();
+        }
         ImGui.EndTabBar();
+    }
+
+    private void DrawWorldAutomation(CharacterSnapshot? character)
+    {
+        if (character is null || !character.Key.IsKnown)
+        {
+            BeginAutoPanel("WORLD PROGRESSION");
+            NexusTheme.StatusDot(NexusTheme.Muted, "Waiting for the current character");
+            EndAutoPanel();
+            return;
+        }
+
+        AtlasAutomationConfiguration settings = plugin.Configuration
+            .ForCharacter(character.Key.ToString()).Atlas;
+        WorldAutomationRuntimeStatus status = worldAutomation.Status;
+
+        BeginAutoPanel("WORLD PROGRESSION");
+        NexusTheme.StatusDot(
+            status.State == WorldAutomationRuntimeState.Blocked ? NexusTheme.Red :
+            status.IsActive ? NexusTheme.Green :
+            status.State == WorldAutomationRuntimeState.Completed ? NexusTheme.Green : NexusTheme.Muted,
+            status.Message);
+        if (status.CompletedActivities > 0)
+            ImGui.TextUnformatted($"Verified this run: {status.CompletedActivities} objective(s)");
+
+        bool changed = false;
+        if (ImGui.BeginTable("###WorldProgressionActivities", 2, ImGuiTableFlags.SizingStretchSame))
+        {
+            ImGui.TableNextColumn();
+            bool aetherytes = settings.AllowAetheryteAttunements;
+            if (ImGui.Checkbox("Aetherytes & Aethernet", ref aetherytes))
+            {
+                settings.AllowAetheryteAttunements = aetherytes;
+                changed = true;
+            }
+            TextWrapped(NexusTheme.Muted,
+                $"{progressAtlasActions.RemainingAetherytes} reachable location(s) remaining");
+
+            ImGui.TableNextColumn();
+            bool unlockFlying = settings.AllowFieldAetherCurrents || settings.AllowAetherCurrentQuests;
+            if (ImGui.Checkbox("Unlock Flying", ref unlockFlying))
+            {
+                settings.AllowFieldAetherCurrents = unlockFlying;
+                settings.AllowAetherCurrentQuests = unlockFlying;
+                changed = true;
+            }
+            TextWrapped(NexusTheme.Muted,
+                $"{progressAtlasActions.RemainingFieldCurrents} reachable field current(s) • {progressAtlasActions.ReadyAetherCurrentQuests} quest(s) ready");
+
+            ImGui.TableNextColumn();
+            bool exploration = settings.AllowMapExploration;
+            if (ImGui.Checkbox("World Exploration", ref exploration))
+            {
+                settings.AllowMapExploration = exploration;
+                changed = true;
+            }
+            TextWrapped(NexusTheme.Muted,
+                $"{progressAtlasActions.RemainingExplorationRegions} reachable region(s) remaining");
+
+            ImGui.TableNextColumn();
+            bool achievements = settings.AllowAchievements;
+            if (ImGui.Checkbox("Achievements", ref achievements))
+            {
+                settings.AllowAchievements = achievements;
+                changed = true;
+            }
+            TextWrapped(NexusTheme.Muted,
+                $"{progressAtlasActions.RemainingSupportedAchievements} directly runnable achievement goal(s)");
+            ImGui.EndTable();
+        }
+        if (changed)
+            plugin.Save();
+
+        ImGui.Spacing();
+        if (status.IsActive)
+        {
+            if (ImGui.Button("Stop World Progression", new Vector2(-1, 0)))
+                worldAutomation.Stop(out progressionMessage);
+        }
+        else
+        {
+            if (ImGui.Button("Start World Progression", new Vector2(-1, 0)))
+            {
+                StopJobAutomationForWorldProgression(character);
+                worldAutomation.Start(out progressionMessage);
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(progressionMessage))
+            TextWrapped(NexusTheme.Cyan, progressionMessage);
+        TextWrapped(NexusTheme.Muted,
+            "Nexus completes one exact objective, verifies it from live game state, then chooses the next. Achievements that require manual, group, crafting, gathering, PvP, collection, or time-gated play remain fully tracked in Progress Atlas.");
+        EndAutoPanel();
+    }
+
+    private void StopJobAutomationForWorldProgression(CharacterSnapshot character)
+    {
+        ProgressionQueueConfiguration queue = plugin.Configuration
+            .ForCharacter(character.Key.ToString()).ProgressionQueue;
+        if (queue.IsRunning || queue.IsPaused)
+            progressionQueue.Stop(character);
+        else if (progressionRuntime.State?.Goal.Status is GoalStatus.Active or GoalStatus.Paused or GoalStatus.Blocked)
+            progressionRuntime.StopNow();
     }
 
     private void DrawProgression(bool showHeading = true)
@@ -3027,7 +3140,11 @@ internal sealed class NexusWindow : Window
             if (!canStart)
                 ImGui.BeginDisabled();
             if (ImGui.Button("Start Queue"))
+            {
+                if (worldAutomation.Status.IsActive)
+                    worldAutomation.Stop(out _);
                 progressionMessage = progressionQueue.Start(character).Message;
+            }
             if (!canStart)
                 ImGui.EndDisabled();
             ImGui.SameLine();
@@ -3271,7 +3388,11 @@ internal sealed class NexusWindow : Window
         }
         ImGui.SameLine();
         if (!queue.IsRunning && !queue.IsPaused && ImGui.Button("Run From Here"))
+        {
+            if (worldAutomation.Status.IsActive)
+                worldAutomation.Stop(out _);
             progressionMessage = progressionQueue.Start(character, index).Message;
+        }
         ImGui.SameLine();
         if (pendingDeleteQueueStepId != step.Id)
         {
@@ -3416,7 +3537,7 @@ internal sealed class NexusWindow : Window
                 return;
         }
 
-        ImGui.BeginDisabled(remaining == 0 || status.IsActive);
+        ImGui.BeginDisabled(remaining == 0 || status.IsActive || worldAutomation.Status.IsActive);
         if (ImGui.Button(label))
         {
             (_, progressAtlasMessage) = start();
@@ -3426,7 +3547,7 @@ internal sealed class NexusWindow : Window
         if (category.Id == ProgressAtlasCategoryId.AetherCurrents)
         {
             int readyQuests = progressAtlasActions.ReadyAetherCurrentQuests;
-            ImGui.BeginDisabled(readyQuests == 0 || status.IsActive);
+            ImGui.BeginDisabled(readyQuests == 0 || status.IsActive || worldAutomation.Status.IsActive);
             if (ImGui.Button($"Run next ready current quest ({readyQuests})###AtlasCurrentQuest"))
                 progressAtlasActions.StartNextAetherCurrentQuest(out progressAtlasMessage);
             ImGui.EndDisabled();
@@ -3686,7 +3807,11 @@ internal sealed class NexusWindow : Window
             if (!canStart)
                 ImGui.BeginDisabled();
             if (ImGui.Button("Start Current Job Automation", new Vector2(-1, 0)))
+            {
+                if (worldAutomation.Status.IsActive)
+                    worldAutomation.Stop(out _);
                 progressionMessage = progressionQueue.StartCurrentJob(character).Message;
+            }
             if (!canStart)
                 ImGui.EndDisabled();
             if (state?.Goal.Status is GoalStatus.Satisfied or GoalStatus.Cancelled)
@@ -3728,7 +3853,11 @@ internal sealed class NexusWindow : Window
         if (queue.IsRunning || queue.IsPaused)
         {
             if (ImGui.Button("Switch to Current Job Automation", new Vector2(-1, 0)))
+            {
+                if (worldAutomation.Status.IsActive)
+                    worldAutomation.Stop(out _);
                 progressionMessage = progressionQueue.StartCurrentJob(character).Message;
+            }
         }
         else if (state.Goal.Status == GoalStatus.Active)
         {

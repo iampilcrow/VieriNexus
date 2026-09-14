@@ -2,9 +2,9 @@
 
 Working snapshot: 2026-09-13 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.74`
+Current product version: `0.1.0.75`
 Current published source: `0.1.0.74`, source `58ed9df19c4c3d84ae71aa3c8089b3d5c4dbf008`, website release `c6dc288a007a39384867ed3f97b7bdb478879a74`, verification documentation `111c8d4`. Release deployment `dpl_9RoN3noVS7hctiviCS7XZk69F8AD` and final documentation deployment `dpl_2Ge1v4VrZQaMXw2swURiZunA4qCe` are Ready on both canonical aliases; focused live verification passed for runtime/source ZIP validity and exact SHA-256 `8718A9F4F51F0946E775E6011977900C355C4920F8B0D84F081C72DE37FEBE44` / `0F2254924C21FC172E108D141D7BE935CC1E6CEEC6EDA8CDDC9A437120F1DE9F`; Discord workflow `34794022347` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.74 is published and fixes the shared manual/queued gear-shopping continuation after teleport. The destination territory now authoritatively ends the Lifestream leg; Nexus releases a lingering Lifestream busy state, waits only for vnavmesh readiness, and starts the local vendor route without another click. The next step is one in-game manual gear-shopping confirmation; the queue uses the identical corrected coordinator.
+Current workstream: version 0.1.0.75 restores the missing VieriCodex world-completion lanes as real Automation rather than Atlas-only buttons. The new World Progression mode continuously selects, executes, verifies, and replans Aetheryte/Aethernet attunement, flying unlocks (field and quest currents), world exploration, and directly runnable achievement steps. Job and world modes hand off instead of competing. Version 0.1.0.74 remains the current published feed entry until the 0.1.0.75 release workflow completes.
 
 Production Dalamud custom repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`  
 GitHub repository: `https://github.com/iampilcrow/VieriNexus.git`  
@@ -214,8 +214,8 @@ Several target concepts are now live but remain specialized rather than a fully 
 ### `src/VieriNexus.Plugin`
 
 - `Plugin.cs` — Dalamud entry point/composition root, command registration, draw lifecycle, setup/open behavior, and disposal.
-- `Configuration.cs` — schema 9 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety, Progression draft and complete multi-job queue state, one-time verified queue promotion, per-source migration state, and independent embedded-module enablement.
-- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.74`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
+- `Configuration.cs` — schema 10 global presentation/setup/operations-overlay settings, imported-operations preference receipt, character-scoped safety, Progression draft, complete multi-job queue state, saved Atlas/World Progression selections, one-time verified queue promotion, per-source migration state, and independent embedded-module enablement.
+- `VieriNexus.Plugin.csproj` — `Dalamud.NET.Sdk/15.0.0`, version `0.1.0.75`, assembly/internal root `VieriNexus`; builds and packages the five isolated custom runtime archives.
 - `VieriNexus.json` — Dalamud API level 15 manifest, author `Valentina Vieri`, permanent internal name `VieriNexus`.
 - `Assets/VieriNexusLogo.png` — permanent Home hero artwork.
 - `Services/BuiltInModuleCatalog.cs` — nine neutral module registrations and capability identifiers.
@@ -242,6 +242,9 @@ Several target concepts are now live but remain specialized rather than a fully 
 - `Services/FastJobSwitchService.cs` — required Fast Job Switcher presence/load checks, localized full job labels, permanent per-job level reads, documented lower-case slash-command dispatch, and exact current-job observation.
 - `Services/ProgressionQueueRuntimeService.cs` — character-scoped ordered queue lifecycle, safe job-switch gating and confirmation, settle delay, fresh bounded goal creation/resumption, durable advancement, fallbacks, Stop, and reload recovery without provider instruction replay.
 - `Services/ProgressAtlasService.cs` — Nexus-owned current-game-data catalogs and per-character completion reads for the complete Aetheryte/Aethernet network, all field/quest Aether Currents, and non-Legacy achievements; achievement data is requested from the game and never shared between characters.
+- `Services/ProgressAtlasActionService.cs` — exact bounded Aetheryte, field-current, current-quest, exploration, and directly runnable achievement-step execution with structured terminal outcomes, resource ownership, provider Stop, and live completion verification.
+- `Services/WorldAutomationRuntimeService.cs` — continuous character-scoped World Progression scheduler. It reads the saved Atlas selections, starts only one exact action, waits for a structured verified result, then replans; failure/Stop cannot be counted or replayed.
+- `WorldAutomationPolicy.cs` — pure selection order for Aetheryte access, field currents, current quests, exploration, and directly runnable achievement steps.
 - `Data/hunting_log_targets.json` plus `Services/ProgressAtlasService.cs` — the complete 12-log/666-target class and Grand Company catalog joined to live `MonsterNoteManager` kill counts; current incomplete targets are available to both the Atlas UI and the provider-neutral execution selector. World exploration builds its region catalog from current plan-map game files and reads per-character discovery state directly.
 - `GearShopping.cs`, `Services/NexusGearCatalogService.cs`, `Services/NexusGearExecutionService.cs`, and `Services/GearShoppingRuntimeService.cs` — Nexus-owned live equipment/owned-item scan, curated vendor-band/job-family selection, ordinary gil-shop catalog traversal, job-aware per-slot candidate ranking, automatic/manual exact approval, vendor travel, shop interaction, purchase confirmation, exact equipping, gearset update, displaced-item cleanup, and full-run coordination. Exact selected slots, vendor identity, item IDs, quantities, maximum unit prices, equipment signature, character, and gil floor form one single-use approval; Teleport/Navigation/Movement/UI/Inventory leases remain held through verified completion or confirmed Stop.
 - `Services/NavigationRouteRuntimeService.cs` — plugin-facing planning, static/live preview, consistent same/cross-zone suite dispatch with guarded local fallback, immediate Stop/restart, and per-frame runtime composition.
@@ -738,7 +741,7 @@ These are migration requirements, not current Nexus features:
 - Recovery implementation commit: `ecaa8c7 Add transactional route migration`; the working tree was clean before `PROJECT_STATE.md` was created.
 - No tags exist in this repository.
 - Origin: `https://github.com/iampilcrow/VieriNexus.git`.
-- Plugin project version: `0.1.0.74`. Dalamud API 15. Version 0.1.0.74 is the current production feed entry; every prior version remains an immutable historical archive.
+- Plugin project version: `0.1.0.75`. Dalamud API 15. Version 0.1.0.74 is the current production feed entry while 0.1.0.75 is prepared; every prior version remains an immutable historical archive.
 - Production Dalamud custom-repository URL: `https://www.thedailypilcrow.com/dalamud/pluginmaster.json`.
 - Distribution website/domain: `https://www.thedailypilcrow.com`.
 - The authoritative deployment source is `D:\FFXIV Plugins\TheDailyPilcrow` / `https://github.com/iampilcrow/TheDailyPilcrow.git`; the live feed and versioned archives are under `public/dalamud/` and are deployed through the linked production Vercel project.
@@ -857,6 +860,8 @@ The user then accepted the 0.1.0.19 vendor-template persistence gate in game: af
 A read-only VieriCodex/Questionable architecture review found that stock Questionable exposes a useful but bounded IPC surface for starting/stopping supported quests and gathering work, querying current quest/step and quest eligibility/status, and managing its quest-priority list. It does not expose VieriCodex's Progression Queue, Progress Atlas, Hunting Log planner and target data, exploration/Aether Current/Aetheryte planners, one-click/local transport, gear-readiness and AutoDuty sequencing, solo-duty combat handoff, named VieriNavPlotter routes, custom UI/hotkeys/settings, or arbitrary custom quest-path injection. The user approved a capability-versioned hybrid target: retain VieriCodex as authoritative during migration, move the Vieri planning/policy/UI layer into Nexus, and prove stock Questionable as the external provider for ordinary supported quest execution before retiring whole-fork upstream merges. Custom or unsupported route data remains in a small Nexus-owned overlay/executor or is accepted upstream.
 
 ### Current workstream
+
+Version 0.1.0.75 corrects the automation-parity gap the user identified after retiring VieriCodex. The earlier Nexus build preserved Aetheryte, current, exploration, and achievement state in Progress Atlas and exposed one-shot actions, but Current Job Automation and Multi-Job Automation did not schedule that world work. Automation now has a third first-class mode, **World Progression**, using the already migrated per-character selections. It offers Aetherytes & Aethernet, Unlock Flying (field currents plus Aether Current quests), World Exploration, and Achievements; completes one reachable exact objective; requires structured live completion; and then selects the next. Starting a job mode stops World Progression, while starting World Progression stops the current job/queue mode so schedulers never compete. Achievement automation covers the directly verifiable exploration and flying steps; all other achievement types remain fully tracked and guided rather than falsely marked executable.
 
 The user had said all vendor routes were in a good place and instructed development to continue piecing VieriNexus together while preserving every setting and Discord key. The assistant chose Routes & Navigation as the first safe vertical migration slice and completed staging/rollback.
 
