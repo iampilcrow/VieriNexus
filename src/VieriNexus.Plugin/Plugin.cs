@@ -371,11 +371,13 @@ public sealed class Plugin : IDalamudPlugin
             this,
             navigationRuntime,
             mapClickNavigation,
+            progressionProviders,
             gearShoppingRuntime,
             progressionRuntime,
             maintenanceRuntime,
             strikingDummyTravel,
             controlService,
+            worldStore,
             page =>
             {
                 Configuration.SelectedPage = page;

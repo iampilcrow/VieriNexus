@@ -31,11 +31,13 @@ internal sealed class NexusOperationsOverlay : Window
     private readonly Plugin plugin;
     private readonly NavigationRouteRuntimeService navigation;
     private readonly MapClickNavigationService mapClickNavigation;
+    private readonly ProgressionProviderService progressionProviders;
     private readonly GearShoppingRuntimeService gear;
     private readonly ProgressionRuntimeService progression;
     private readonly NexusMaintenanceRuntimeService maintenance;
     private readonly StrikingDummyTravelService strikingDummies;
     private readonly NexusControlService control;
+    private readonly WorldStateStore world;
     private readonly Action<string> openPage;
     private readonly ICallGateSubscriber<string, object> lifestreamCommand;
     private readonly ICallGateSubscriber<int?, object> enqueueInnShortcut;
@@ -49,16 +51,22 @@ internal sealed class NexusOperationsOverlay : Window
     private Vector2 lastPosition;
     private int priorLineCount = 1;
     private int currentLineCount = 1;
+    private GearUpgradePreview? manualShoppingPlan;
+    private readonly HashSet<int> manualShoppingSlots = [];
+    private string manualShoppingMessage = string.Empty;
+    private bool openManualShoppingPopup;
 
     internal NexusOperationsOverlay(
         Plugin plugin,
         NavigationRouteRuntimeService navigation,
         MapClickNavigationService mapClickNavigation,
+        ProgressionProviderService progressionProviders,
         GearShoppingRuntimeService gear,
         ProgressionRuntimeService progression,
         NexusMaintenanceRuntimeService maintenance,
         StrikingDummyTravelService strikingDummies,
         NexusControlService control,
+        WorldStateStore world,
         Action<string> openPage)
         : base("Nexus Operations###VieriNexusOperations",
             ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.AlwaysAutoResize)
@@ -66,11 +74,13 @@ internal sealed class NexusOperationsOverlay : Window
         this.plugin = plugin;
         this.navigation = navigation;
         this.mapClickNavigation = mapClickNavigation;
+        this.progressionProviders = progressionProviders;
         this.gear = gear;
         this.progression = progression;
         this.maintenance = maintenance;
         this.strikingDummies = strikingDummies;
         this.control = control;
+        this.world = world;
         this.openPage = openPage;
         lifestreamCommand = Plugin.PluginInterface.GetIpcSubscriber<string, object>("Lifestream.ExecuteCommand");
         enqueueInnShortcut = Plugin.PluginInterface.GetIpcSubscriber<int?, object>("Lifestream.EnqueueInnShortcut");
@@ -202,7 +212,8 @@ internal sealed class NexusOperationsOverlay : Window
             CategoryButton("Gear", "NexusGear", controlsEnabled);
             if (ImGui.BeginPopup("NexusGear"))
             {
-                if (ImGui.Selectable(VieriAutoDutyOverlayContract.ShopForUpgrades)) Open("Gear & Inventory");
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.ShopForUpgrades))
+                    PrepareManualGearShopping();
                 if (Selectable(VieriAutoDutyOverlayContract.Equip, overlay?.ShowGear != false))
                 {
                     ImGui.CloseCurrentPopup();
@@ -290,6 +301,189 @@ internal sealed class NexusOperationsOverlay : Window
             ImGui.NewLine();
             ImGui.TextColored(new Vector4(0f, 1f, 0f, 1f), Truncate(actionStatus, 40));
         }
+
+        if (openManualShoppingPopup)
+        {
+            ImGui.OpenPopup("Shop For Upgrades###NexusManualGearShopping");
+            openManualShoppingPopup = false;
+        }
+        DrawManualGearShoppingPopup();
+    }
+
+    private void PrepareManualGearShopping()
+    {
+        ImGui.CloseCurrentPopup();
+        RefreshManualGearShopping();
+        openManualShoppingPopup = true;
+    }
+
+    private void RefreshManualGearShopping()
+    {
+        manualShoppingSlots.Clear();
+        manualShoppingPlan = null;
+        if (progressionProviders.TryGetGearUpgradePreview(out GearUpgradePreview? preview, out string result))
+        {
+            manualShoppingPlan = preview;
+            if (preview is not null)
+            {
+                foreach (GearUpgradeSlot slot in preview.Slots)
+                {
+                    if (slot.Recommended && !slot.ActiveExperienceBonus && slot.Replacement is not null)
+                        manualShoppingSlots.Add(slot.SlotKey);
+                }
+            }
+        }
+        manualShoppingMessage = result;
+    }
+
+    private void DrawManualGearShoppingPopup()
+    {
+        if (!ImGui.IsPopupOpen("Shop For Upgrades###NexusManualGearShopping"))
+            return;
+
+        ImGui.SetNextWindowSize(new Vector2(650, 540), ImGuiCond.Appearing);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(520, 400), new Vector2(float.MaxValue, float.MaxValue));
+        if (!ImGui.BeginPopupModal("Shop For Upgrades###NexusManualGearShopping"))
+            return;
+
+        if (manualShoppingPlan is not { } preview)
+        {
+            ImGui.TextWrapped(string.IsNullOrWhiteSpace(manualShoppingMessage)
+                ? "Equipment information is unavailable."
+                : manualShoppingMessage);
+        }
+        else if (!string.IsNullOrWhiteSpace(preview.UnavailableReason))
+        {
+            ImGui.TextWrapped(preview.UnavailableReason);
+        }
+        else
+        {
+            ImGui.TextUnformatted($"{preview.Job} — Level {preview.Level}");
+            ImGui.TextDisabled($"Current vendor band: level {preview.VendorLevel}");
+            ImGui.Spacing();
+            ImGui.TextWrapped("Review the replacements below, then select the upgrades you want. Only the displayed items may be purchased; unavailable items will not be substituted. Active EXP items stay protected.");
+            ImGui.Spacing();
+
+            if (ImGui.Button("Recommended"))
+            {
+                manualShoppingSlots.Clear();
+                foreach (GearUpgradeSlot slot in preview.Slots)
+                {
+                    if (slot.Recommended && !slot.ActiveExperienceBonus && slot.Replacement is not null)
+                        manualShoppingSlots.Add(slot.SlotKey);
+                }
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Select All"))
+            {
+                manualShoppingSlots.Clear();
+                foreach (GearUpgradeSlot slot in preview.Slots)
+                {
+                    if (!slot.ActiveExperienceBonus && slot.Replacement is not null)
+                        manualShoppingSlots.Add(slot.SlotKey);
+                }
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Clear"))
+                manualShoppingSlots.Clear();
+            ImGui.SameLine();
+            if (ImGui.Button("Refresh"))
+                RefreshManualGearShopping();
+
+            AutoDutyProfileSnapshot? operationsProfile = maintenance.CurrentProfile;
+            int minimumGilReserve = operationsProfile is not null
+                ? checked((int)Math.Min(operationsProfile.Maintenance.MinimumGilReserve, int.MaxValue))
+                : 0;
+            if (operationsProfile is null &&
+                world.Current.Character.Value is { Key.IsKnown: true } currentCharacter)
+            {
+                minimumGilReserve = plugin.Configuration
+                    .ForCharacter(currentCharacter.Key.ToString())
+                    .Progression.MinimumGilReserve;
+            }
+            ProgressionCharacterMetrics metrics = progressionProviders.CharacterMetrics();
+            GearShoppingApprovalResult approval = GearShoppingApprovalPolicy.Build(
+                preview,
+                manualShoppingSlots,
+                metrics.Gil,
+                minimumGilReserve);
+            ImGui.TextWrapped(approval.Success
+                ? $"Selected purchase estimate: {approval.EstimatedCost:N0} gil. Keep at least {minimumGilReserve:N0} gil."
+                : approval.Message);
+
+            ImGui.Separator();
+            float slotListHeight = MathF.Max(140f, ImGui.GetContentRegionAvail().Y - 72f);
+            if (ImGui.BeginChild("NexusManualGearShoppingSlots", new Vector2(0, slotListHeight), true))
+            {
+                const ImGuiTableFlags tableFlags = ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp;
+                if (ImGui.BeginTable("NexusManualGearShoppingSlotTable", 2, tableFlags))
+                {
+                    ImGui.TableSetupColumn("Slot", ImGuiTableColumnFlags.WidthFixed, 145f);
+                    ImGui.TableSetupColumn("Current equipment / replacement", ImGuiTableColumnFlags.WidthStretch);
+                    foreach (GearUpgradeSlot slot in preview.Slots)
+                    {
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        bool selected = manualShoppingSlots.Contains(slot.SlotKey);
+                        bool selectable = !slot.ActiveExperienceBonus && slot.Replacement is not null;
+                        if (!selectable)
+                            ImGui.BeginDisabled();
+                        if (ImGui.Checkbox($"{slot.Name}##NexusManualGearSlot{slot.SlotKey}", ref selected))
+                        {
+                            if (selected)
+                                manualShoppingSlots.Add(slot.SlotKey);
+                            else
+                                manualShoppingSlots.Remove(slot.SlotKey);
+                        }
+                        if (!selectable)
+                            ImGui.EndDisabled();
+
+                        ImGui.TableNextColumn();
+                        ImGui.TextWrapped($"Current: {slot.CurrentEquipment}");
+                        if (slot.ActiveExperienceBonus)
+                            ImGui.TextColored(new Vector4(1f, .82f, .25f, 1f), "Protected EXP item");
+                        else if (slot.Replacement is { } replacement)
+                        {
+                            if (slot.Recommended)
+                                ImGui.TextColored(new Vector4(.3f, .9f, .4f, 1f), "Upgrade recommended");
+                            ImGui.TextWrapped($"Replacement: {replacement.Name} (iLvl {replacement.ItemLevel}, requires level {replacement.EquipLevel})");
+                            ImGui.TextWrapped(replacement.Quantity > 0
+                                ? $"Buy {replacement.Quantity} × {replacement.UnitPrice:N0} gil each — {replacement.Vendor}"
+                                : "Already owned — no purchase needed; the equipment pass will check it.");
+                        }
+                        else
+                        {
+                            ImGui.TextWrapped("No verified gil-vendor upgrade in this vendor band.");
+                        }
+                    }
+                    ImGui.EndTable();
+                }
+            }
+            ImGui.EndChild();
+
+            if (!string.IsNullOrWhiteSpace(manualShoppingMessage))
+                ImGui.TextWrapped(manualShoppingMessage);
+
+            bool canStart = approval.Success && approval.Approval is not null && !gear.Status.IsActive &&
+                            progressionProviders.IsGearShoppingExecutionReady;
+            if (!canStart)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("Start Shopping") && approval.Approval is not null)
+            {
+                ProgressionActionResult started = gear.Start(approval.Approval);
+                manualShoppingMessage = started.Message;
+                message = started.Message;
+                if (started.Success)
+                    ImGui.CloseCurrentPopup();
+            }
+            if (!canStart)
+                ImGui.EndDisabled();
+            ImGui.SameLine();
+        }
+
+        if (ImGui.Button("Cancel"))
+            ImGui.CloseCurrentPopup();
+        ImGui.EndPopup();
     }
 
     private void Open(string page)
