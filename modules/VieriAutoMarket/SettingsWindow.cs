@@ -22,7 +22,11 @@ internal sealed class SettingsWindow : Window
         };
     }
 
-    public override void Draw()
+    public override void Draw() => DrawContent(false);
+
+    internal void DrawNexusInline() => DrawContent(true);
+
+    private void DrawContent(bool inline)
     {
         ImGui.TextUnformatted("Dependencies");
         ImGui.Separator();
@@ -69,10 +73,10 @@ internal sealed class SettingsWindow : Window
 
         ImGui.Spacing();
         if (ImGui.CollapsingHeader("Last run report", ImGuiTreeNodeFlags.DefaultOpen))
-            DrawLastRunReport();
+            DrawLastRunReport(inline);
     }
 
-    private void DrawLastRunReport()
+    private void DrawLastRunReport(bool inline)
     {
         ImGui.TextWrapped(config.LastRunSummary);
         if (config.LastRunAt != default)
@@ -84,9 +88,14 @@ internal sealed class SettingsWindow : Window
         }
 
         ImGuiTableFlags flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg |
-                                ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollX |
-                                ImGuiTableFlags.ScrollY;
-        if (!ImGui.BeginTable("VieriAutoMarketLastRun", 8, flags, new Vector2(0, 260)))
+                                ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollX;
+        Vector2 size = Vector2.Zero;
+        if (!inline)
+        {
+            flags |= ImGuiTableFlags.ScrollY;
+            size = new Vector2(0, 260);
+        }
+        if (!ImGui.BeginTable("VieriAutoMarketLastRun", 8, flags, size))
             return;
 
         ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthFixed, 190);

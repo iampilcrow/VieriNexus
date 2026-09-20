@@ -62,6 +62,11 @@ public sealed class Plugin : IDalamudPlugin
     private void OpenSettings() => settings.IsOpen = true;
     private void Draw() => windows.Draw();
 
+    // VieriNexus hosts the complete market configuration directly on its Market
+    // Helper page.  Keep the standalone window entry point for rollback and
+    // development, but do not make Nexus users leave the suite to configure it.
+    public void DrawNexusSettings() => settings.DrawNexusInline();
+
     public void Dispose()
     {
         Pi.UiBuilder.Draw -= Draw;

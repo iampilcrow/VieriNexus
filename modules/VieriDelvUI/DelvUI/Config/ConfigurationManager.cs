@@ -1,3 +1,4 @@
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Internal;
 using Dalamud.Interface.Windowing;
 using Dalamud.Logging;
@@ -380,6 +381,40 @@ namespace DelvUI.Config
         public void Draw()
         {
             _windowSystem.Draw();
+        }
+
+        public void DrawNexusSettings()
+        {
+            bool showHud = ShowHUD;
+            if (ImGui.Checkbox("Show HUD", ref showHud))
+                ShowHUD = showHud;
+            ImGui.SameLine();
+            bool lockHud = LockHUD;
+            if (ImGui.Checkbox("Lock HUD layout", ref lockHud))
+                SetNexusHudLocked(lockHud);
+            ImGui.Separator();
+
+            ConfigBaseNode.Draw(1f, true);
+            if (ConfigBaseNode.NeedsSave)
+            {
+                ImGui.Spacing();
+                if (ImGui.Button("Save HUD settings###save-nexus-hud"))
+                {
+                    SaveConfigurations();
+                }
+            }
+        }
+
+        private void SetNexusHudLocked(bool value)
+        {
+            if (_lockHUD == value)
+                return;
+
+            _lockHUD = value;
+            _gridWindow.IsOpen = !value;
+            LockEvent?.Invoke(this);
+            if (value)
+                ConfigBaseNode.NeedsSave = true;
         }
 
         public void AddExtraSectionNode(SectionNode node)

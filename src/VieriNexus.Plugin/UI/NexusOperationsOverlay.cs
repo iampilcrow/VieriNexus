@@ -164,17 +164,17 @@ internal sealed class NexusOperationsOverlay : Window
         CategoryButton("Goto", "NexusGoto", controlsEnabled && overlay?.ShowGoto != false);
         if (ImGui.BeginPopup("NexusGoto"))
         {
-            if (ImGui.Selectable("Barracks")) StartGrandCompanyPoint(barracks: true);
-            if (ImGui.Selectable("Inn")) StartInn();
-            if (ImGui.Selectable("Grand Company supply counter")) StartGrandCompanyPoint(barracks: false);
-            if (ImGui.Selectable("Flag marker")) StartFlagMarker();
-            if (ImGui.Selectable("Summoning bell")) StartPreferredSummoningBell();
-            if (ImGui.Selectable("Apartment")) StartLifestream("apartment", "apartment");
-            if (ImGui.Selectable("Personal home")) StartLifestream("home", "personal home");
-            if (ImGui.Selectable("Free Company estate")) StartLifestream("fc", "Free Company estate");
-            if (ImGui.Selectable("Triple Triad trader"))
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.Barracks)) StartGrandCompanyPoint(barracks: true);
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.Inn)) StartInn();
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.GrandCompanySupply)) StartGrandCompanyPoint(barracks: false);
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.FlagMarker)) StartFlagMarker();
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.SummoningBell)) StartPreferredSummoningBell();
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.Apartment)) StartLifestream("apartment", "apartment");
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.PersonalHome)) StartLifestream("home", "personal home");
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.FreeCompanyEstate)) StartLifestream("fc", "Free Company estate");
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.TripleTriadTrader))
                 StartPoint("Triple Triad trader", 144, new(-56.1f, 1.6f, 16.6f), 4f);
-            if (ImGui.BeginMenu("Striking Dummies"))
+            if (ImGui.BeginMenu(VieriAutoDutyOverlayContract.StrikingDummies))
             {
                 foreach (IGrouping<string, StrikingDummyDestination> expansion in
                          StrikingDummyCatalog.Destinations.GroupBy(item => item.Expansion))
@@ -200,19 +200,19 @@ internal sealed class NexusOperationsOverlay : Window
         CategoryButton("Gear", "NexusGear", controlsEnabled);
         if (ImGui.BeginPopup("NexusGear"))
         {
-            if (ImGui.Selectable("Shop for Upgrades")) Open("Gear & Inventory");
-            if (Selectable("Equip", overlay?.ShowGear != false))
+            if (ImGui.Selectable(VieriAutoDutyOverlayContract.ShopForUpgrades)) Open("Gear & Inventory");
+            if (Selectable(VieriAutoDutyOverlayContract.Equip, overlay?.ShowGear != false))
             {
                 ImGui.CloseCurrentPopup();
                 message = Plugin.CommandManager.ProcessCommand("/ad autoequip")
                     ? "AutoDuty is equipping its recommended gear."
                     : "AutoDuty is not ready to equip recommended gear.";
             }
-            if (Selectable("Repair", maintenance.HasWorkingProfile && overlay?.ShowRepair != false))
+            if (Selectable(VieriAutoDutyOverlayContract.Repair, maintenance.HasWorkingProfile && overlay?.ShowRepair != false))
                 maintenance.Start(NexusMaintenanceOperation.Repair, out message);
-            if (Selectable("Extract Materia", maintenance.HasWorkingProfile && overlay?.ShowExtract != false))
+            if (Selectable(VieriAutoDutyOverlayContract.ExtractMateria, maintenance.HasWorkingProfile && overlay?.ShowExtract != false))
                 maintenance.Start(NexusMaintenanceOperation.ExtractMateria, out message);
-            if (Selectable("Desynth", maintenance.HasWorkingProfile && overlay?.ShowDesynth != false))
+            if (Selectable(VieriAutoDutyOverlayContract.Desynth, maintenance.HasWorkingProfile && overlay?.ShowDesynth != false))
                 maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
             ImGui.EndPopup();
         }
@@ -221,22 +221,22 @@ internal sealed class NexusOperationsOverlay : Window
         CategoryButton("Inventory", "NexusInventory", controlsEnabled);
         if (ImGui.BeginPopup("NexusInventory"))
         {
-            if (Selectable("Sell Inventory", maintenance.HasWorkingProfile && overlay?.ShowSell != false))
+            if (Selectable(VieriAutoDutyOverlayContract.SellInventory, maintenance.HasWorkingProfile && overlay?.ShowSell != false))
             {
                 ImGui.CloseCurrentPopup();
                 sellReviewRequested = true;
             }
-            if (Selectable("TurnIn", maintenance.HasWorkingProfile && overlay?.ShowTurnIn != false))
+            if (Selectable(VieriAutoDutyOverlayContract.TurnIn, maintenance.HasWorkingProfile && overlay?.ShowTurnIn != false))
             {
                 ImGui.CloseCurrentPopup();
                 maintenance.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out message);
             }
-            if (Selectable("Coffers", maintenance.HasWorkingProfile && overlay?.ShowCoffers != false))
+            if (Selectable(VieriAutoDutyOverlayContract.Coffers, maintenance.HasWorkingProfile && overlay?.ShowCoffers != false))
             {
                 ImGui.CloseCurrentPopup();
                 maintenance.Start(NexusMaintenanceOperation.OpenCoffers, out message);
             }
-            if (Selectable("Armoire", maintenance.HasWorkingProfile))
+            if (Selectable(VieriAutoDutyOverlayContract.Armoire, maintenance.HasWorkingProfile))
                 maintenance.Start(NexusMaintenanceOperation.EntrustArmoire, out message);
             ImGui.EndPopup();
         }
@@ -248,11 +248,11 @@ internal sealed class NexusOperationsOverlay : Window
             bool tripleTriadEnabled = maintenance.HasWorkingProfile && overlay?.ShowTripleTriad != false;
             if (!tripleTriadEnabled)
                 ImGui.BeginDisabled();
-            if (ImGui.BeginMenu("Triple Triad"))
+            if (ImGui.BeginMenu(VieriAutoDutyOverlayContract.TripleTriad))
             {
-                if (ImGui.Selectable("Register Cards"))
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.RegisterTripleTriadCards))
                     maintenance.Start(NexusMaintenanceOperation.RegisterTripleTriadCards, out message);
-                if (ImGui.Selectable("Sell Cards"))
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.SellTripleTriadCards))
                 {
                     ImGui.CloseCurrentPopup();
                     message = Plugin.CommandManager.ProcessCommand("/ad ttsell")

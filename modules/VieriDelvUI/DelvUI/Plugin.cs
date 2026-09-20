@@ -371,6 +371,13 @@ namespace DelvUI
             ConfigurationManager.Instance.ToggleConfigWindow();
         }
 
+        // Nexus hosts the complete customized HUD editor directly. The normal
+        // DelvUI window remains available only to the isolated runtime itself.
+        public void DrawNexusSettings()
+        {
+            ConfigurationManager.Instance.DrawNexusSettings();
+        }
+
         protected virtual void Dispose(bool disposing)
         {
             if (!disposing)

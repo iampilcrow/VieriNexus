@@ -148,6 +148,43 @@ internal sealed class DependencyService(
         }
     }
 
+    internal bool OpenMain(DependencyDescriptor definition, out string message)
+    {
+        IExposedPlugin? plugin = pluginInterface.InstalledPlugins
+            .Where(candidate => DependencyPackageIdentityPolicy.MatchesInstalled(
+                definition,
+                candidate.InternalName,
+                candidate.Name))
+            .OrderByDescending(candidate => candidate.IsLoaded)
+            .FirstOrDefault();
+        if (plugin is not { IsLoaded: true })
+        {
+            message = $"{definition.DisplayName} must be installed and enabled before it can open.";
+            return false;
+        }
+
+        try
+        {
+            if (plugin.HasMainUi)
+                plugin.OpenMainUi();
+            else if (plugin.HasConfigUi)
+                plugin.OpenConfigUi();
+            else
+            {
+                message = $"{definition.DisplayName} does not expose a window.";
+                return false;
+            }
+            message = $"Opened {definition.DisplayName}.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "Could not open main window for {Dependency}", definition.Id);
+            message = $"Nexus could not open {definition.DisplayName}. Open it from Dalamud Plugins.";
+            return false;
+        }
+    }
+
     internal void OpenPluginInstaller() =>
         pluginInterface.OpenPluginInstallerTo(PluginInstallerOpenKind.AllPlugins);
 

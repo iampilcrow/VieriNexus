@@ -60,6 +60,10 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OpenConfig() => settings.IsOpen = true;
 
+    // Nexus owns the presentation while this embedded runtime keeps the
+    // encrypted configuration and Discord behavior intact.
+    public void DrawNexusSettings() => settings.Draw();
+
     private void Draw()
     {
         windows.Draw();

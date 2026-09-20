@@ -2847,7 +2847,17 @@ internal sealed class NexusWindow : Window
                 $"Current Job Automation • {goal.Goal.StatusDetail}");
         else
             NexusTheme.StatusDot(NexusTheme.Muted, "No automation is running");
-        DependencyStatus autoDuty = dependencies.Snapshot().First(item => item.Definition.Id == "autoduty");
+        IReadOnlyList<DependencyStatus> dependencySnapshot = dependencies.Snapshot();
+        DependencyStatus questionable = dependencySnapshot.First(item => item.Definition.Id == "questionable");
+        DependencyStatus autoDuty = dependencySnapshot.First(item => item.Definition.Id == "autoduty");
+        bool canOpenQuestionable = questionable.IsReady;
+        if (!canOpenQuestionable)
+            ImGui.BeginDisabled();
+        if (ImGui.Button("Open Questionable"))
+            dependencies.OpenMain(questionable.Definition, out progressionMessage);
+        if (!canOpenQuestionable)
+            ImGui.EndDisabled();
+        ImGui.SameLine();
         bool canOpenAutoDuty = autoDuty.IsReady;
         if (!canOpenAutoDuty)
             ImGui.BeginDisabled();
@@ -4111,10 +4121,17 @@ internal sealed class NexusWindow : Window
             return;
         }
 
-        PageHeading(page.Equals("Market", StringComparison.Ordinal) ? "Market Helper" : page,
-            "Your proven Vieri behavior now runs inside Nexus with its own isolated settings and runtime.");
+        string title = page.Equals("Market", StringComparison.Ordinal) ? "Market Helper" : page;
+        string subtitle = page switch
+        {
+            "Market" => "Check owned-retainer prices, adjust listings, and review the last run.",
+            "Custom UI" => "Configure the complete HUD, profiles, party displays, markers, and ready checks.",
+            "Communications" => "Configure Discord status, notifications, and authorized remote controls.",
+            _ => "Configure this part of VieriNexus.",
+        };
+        PageHeading(title, subtitle);
         foreach (EmbeddedModuleStatus module in pageModules)
-            DrawEmbeddedModuleCard(module, migration: false);
+            DrawEmbeddedModuleSettings(module, title);
     }
 
     private void DrawCombatPage()
@@ -4122,39 +4139,71 @@ internal sealed class NexusWindow : Window
         PageHeading("Combat/Rotation", "Configure what appears on screen while Wrath Combo handles your rotation.");
         EmbeddedModuleStatus? rotation = embeddedModules.Statuses.FirstOrDefault(item =>
             item.Id.Equals("rotation", StringComparison.OrdinalIgnoreCase));
-        if (rotation is null)
+        EmbeddedModuleStatus? positionals = embeddedModules.Statuses.FirstOrDefault(item =>
+            item.Id.Equals("avarice", StringComparison.OrdinalIgnoreCase));
+        if (rotation is null && positionals is null)
         {
             TextWrapped(NexusTheme.Red, "Combat settings are unavailable.");
             return;
         }
 
-        if (rotation.Health == EmbeddedModuleHealth.Running)
+        if (!ImGui.BeginTabBar("###CombatSettings", ImGuiTabBarFlags.None))
+            return;
+
+        if (rotation is not null && ImGui.BeginTabItem("Rotation & Suggestions"))
         {
-            if (!embeddedModules.DrawInlineSettings(rotation.Id))
-                TextWrapped(NexusTheme.Amber, "Combat settings are temporarily unavailable.");
+            DrawEmbeddedModuleSettings(rotation, "Combat");
+            ImGui.EndTabItem();
+        }
+
+        if (positionals is not null && ImGui.BeginTabItem("Positional Guidance"))
+        {
+            DrawEmbeddedModuleSettings(positionals, "Positional Guidance");
+            ImGui.EndTabItem();
+        }
+
+        ImGui.EndTabBar();
+    }
+
+    private void DrawEmbeddedModuleSettings(EmbeddedModuleStatus module, string featureName)
+    {
+        if (module.Health == EmbeddedModuleHealth.Running)
+        {
+            if (!embeddedModules.DrawInlineSettings(module.Id))
+                TextWrapped(NexusTheme.Amber, $"{featureName} settings are temporarily unavailable.");
             return;
         }
 
-        BeginAutoPanel("COMBAT");
-        Vector4 color = rotation.Health == EmbeddedModuleHealth.Failed ? NexusTheme.Red : NexusTheme.Amber;
-        string message = rotation.Health switch
+        BeginAutoPanel(featureName.ToUpperInvariant());
+        Vector4 color = module.Health == EmbeddedModuleHealth.Failed ? NexusTheme.Red : NexusTheme.Amber;
+        string message = module.Health switch
         {
-            EmbeddedModuleHealth.WaitingForPredecessor => "Disable the separate VieriRotationHelper plugin, then reload plugins once.",
-            EmbeddedModuleHealth.Failed => "Combat could not start safely.",
-            EmbeddedModuleHealth.Disabled => "Combat features are turned off.",
-            _ => "Combat is getting ready.",
+            EmbeddedModuleHealth.WaitingForPredecessor => $"Disable the separate {LegacyProductName(module.Id)} plugin. Nexus will take over automatically.",
+            EmbeddedModuleHealth.Failed => $"{featureName} could not start safely.",
+            EmbeddedModuleHealth.Disabled => $"{featureName} is turned off.",
+            _ => $"{featureName} is getting ready.",
         };
         TextWrapped(color, message);
-        if (rotation.Health == EmbeddedModuleHealth.Disabled && ImGui.Button("Turn on Combat features"))
-            embeddedModules.SetEnabled(rotation.Id, true);
-        if (rotation.Health == EmbeddedModuleHealth.Failed)
+        if (module.Health == EmbeddedModuleHealth.Disabled && ImGui.Button($"Turn on {featureName}##enable-{module.Id}"))
+            embeddedModules.SetEnabled(module.Id, true);
+        if (module.Health == EmbeddedModuleHealth.Failed)
         {
-            TextWrapped(NexusTheme.Muted, rotation.Message);
-            if (ImGui.Button("Try again"))
-                embeddedModules.Retry(rotation.Id);
+            TextWrapped(NexusTheme.Muted, module.Message);
+            if (ImGui.Button($"Try again##retry-{module.Id}"))
+                embeddedModules.Retry(module.Id);
         }
         EndAutoPanel();
     }
+
+    private static string LegacyProductName(string moduleId) => moduleId switch
+    {
+        "rotation" => "VieriRotationHelper",
+        "avarice" => "VieriAvarice",
+        "delvui" => "VieriDelvUI",
+        "automarket" => "VieriAutoMarket",
+        "link" => "VieriLink",
+        _ => "older Vieri product",
+    };
 
     private void DrawEmbeddedModuleCard(EmbeddedModuleStatus module, bool migration)
     {

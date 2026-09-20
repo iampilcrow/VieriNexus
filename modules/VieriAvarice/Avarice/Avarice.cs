@@ -223,6 +223,22 @@ public unsafe class Avarice : IDalamudPlugin
         return null;
     }
 
+    // Render the complete positional configuration on Nexus's Combat/Rotation
+    // page instead of opening a second VieriAvarice window.
+    public void DrawNexusSettings()
+    {
+        if (configWindow == null)
+        {
+            ImGui.TextDisabled("Positional settings are still loading.");
+            return;
+        }
+
+        configWindow.Draw();
+        ImGui.Spacing();
+        if (ImGui.Button("Save positional settings###save-nexus-avarice"))
+            Svc.PluginInterface.SavePluginConfig(config);
+    }
+
     public void Dispose()
     {
         ResetAutoDutyPositionalBridge();

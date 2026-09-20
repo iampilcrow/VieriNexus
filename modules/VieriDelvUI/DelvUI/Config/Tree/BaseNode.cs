@@ -165,7 +165,7 @@ namespace DelvUI.Config.Tree
             }
         }
 
-        public void Draw(float alpha)
+        public void Draw(float alpha, bool embedded = false)
         {
             CreateNodesIfNeeded();
             if (_nodes.Count == 0) { return; }
@@ -299,43 +299,50 @@ namespace DelvUI.Config.Tree
 
             ImGui.EndGroup(); // Middle section
 
-            // close button
-            ImGui.PushFont(UiBuilder.IconFont);
-            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(229f / 255f, 57f / 255f, 57f / 255f, alpha));
-            ImGui.SetCursorPos(new Vector2(ImGui.GetWindowWidth() - 28 * _scale, 5 * _scale));
-            if (ImGui.Button(FontAwesomeIcon.Times.ToIconString(), new Vector2(22 * _scale, 22 * _scale)))
+            // A close button only belongs to DelvUI's standalone window. Nexus
+            // renders this editor as a page, so closing it would be misleading.
+            if (!embedded)
             {
-                ConfigurationManager.Instance.CloseConfigWindow();
+                ImGui.PushFont(UiBuilder.IconFont);
+                ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(229f / 255f, 57f / 255f, 57f / 255f, alpha));
+                ImGui.SetCursorPos(new Vector2(ImGui.GetWindowWidth() - 28 * _scale, 5 * _scale));
+                if (ImGui.Button(FontAwesomeIcon.Times.ToIconString(), new Vector2(22 * _scale, 22 * _scale)))
+                {
+                    ConfigurationManager.Instance.CloseConfigWindow();
+                }
+                ImGui.PopStyleColor();
+                ImGui.PopFont();
+                ImGuiHelper.SetTooltip("Close");
             }
-            ImGui.PopStyleColor();
-            ImGui.PopFont();
-            ImGuiHelper.SetTooltip("Close");
 
-            // unlock button
-            ImGui.PushFont(UiBuilder.IconFont);
-            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(229f / 255f, 57f / 255f, 57f / 255f, alpha));
-            ImGui.SetCursorPos(new Vector2(ImGui.GetWindowWidth() - 60 * _scale, 5 * _scale));
-            string lockString = ConfigurationManager.Instance.LockHUD ? FontAwesomeIcon.Lock.ToIconString() : FontAwesomeIcon.LockOpen.ToIconString();
-            if (ImGui.Button(lockString, new Vector2(22 * _scale, 22 * _scale)))
+            if (!embedded)
             {
-                ConfigurationManager.Instance.LockHUD = !ConfigurationManager.Instance.LockHUD;
-            }
-            ImGui.PopStyleColor();
-            ImGui.PopFont();
-            ImGuiHelper.SetTooltip("Unlock HUD");
+                // unlock button
+                ImGui.PushFont(UiBuilder.IconFont);
+                ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(229f / 255f, 57f / 255f, 57f / 255f, alpha));
+                ImGui.SetCursorPos(new Vector2(ImGui.GetWindowWidth() - 60 * _scale, 5 * _scale));
+                string lockString = ConfigurationManager.Instance.LockHUD ? FontAwesomeIcon.Lock.ToIconString() : FontAwesomeIcon.LockOpen.ToIconString();
+                if (ImGui.Button(lockString, new Vector2(22 * _scale, 22 * _scale)))
+                {
+                    ConfigurationManager.Instance.LockHUD = !ConfigurationManager.Instance.LockHUD;
+                }
+                ImGui.PopStyleColor();
+                ImGui.PopFont();
+                ImGuiHelper.SetTooltip("Unlock HUD");
 
-            // hide button
-            ImGui.PushFont(UiBuilder.IconFont);
-            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(229f / 255f, 57f / 255f, 57f / 255f, alpha));
-            ImGui.SetCursorPos(new Vector2(ImGui.GetWindowWidth() - 88 * _scale, 5 * _scale));
-            string hideString = ConfigurationManager.Instance.ShowHUD ? FontAwesomeIcon.Eye.ToIconString() : FontAwesomeIcon.EyeSlash.ToIconString();
-            if (ImGui.Button(hideString, new Vector2(26 * _scale, 22 * _scale)))
-            {
-                ConfigurationManager.Instance.ShowHUD = !ConfigurationManager.Instance.ShowHUD;
+                // hide button
+                ImGui.PushFont(UiBuilder.IconFont);
+                ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(229f / 255f, 57f / 255f, 57f / 255f, alpha));
+                ImGui.SetCursorPos(new Vector2(ImGui.GetWindowWidth() - 88 * _scale, 5 * _scale));
+                string hideString = ConfigurationManager.Instance.ShowHUD ? FontAwesomeIcon.Eye.ToIconString() : FontAwesomeIcon.EyeSlash.ToIconString();
+                if (ImGui.Button(hideString, new Vector2(26 * _scale, 22 * _scale)))
+                {
+                    ConfigurationManager.Instance.ShowHUD = !ConfigurationManager.Instance.ShowHUD;
+                }
+                ImGui.PopStyleColor();
+                ImGui.PopFont();
+                ImGuiHelper.SetTooltip(ConfigurationManager.Instance.ShowHUD ? "Hide HUD" : "Show HUD");
             }
-            ImGui.PopStyleColor();
-            ImGui.PopFont();
-            ImGuiHelper.SetTooltip(ConfigurationManager.Instance.ShowHUD ? "Hide HUD" : "Show HUD");
 
             PopStyles(popColors);
 
