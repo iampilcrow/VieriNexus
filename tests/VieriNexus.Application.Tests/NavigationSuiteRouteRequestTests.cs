@@ -79,8 +79,25 @@ public sealed class NavigationSuiteRouteRequestTests
         Assert.Equal(route.Tolerance, parsed.Tolerance);
         Assert.Equal(route.LastPointTolerance, parsed.LastPointTolerance);
         Assert.False(parsed.TravelOnly);
+        Assert.False(parsed.ResolveDestinationFloor);
         Assert.Equal(route.TargetDataId, parsed.VendorTargetDataId);
         Assert.NotNull(parsed.VendorPosition);
+    }
+
+    [Fact]
+    public void MapDestinationRequestsPreserveDeferredFloorResolution()
+    {
+        NavigationRouteSnapshot route = new(
+            Guid.NewGuid(), "Map destination", 956, [new(123.5f, 1024f, -456.25f)],
+            string.Empty, "map-navigation", true, false, 2.5f, 2.5f,
+            0, 0, string.Empty, false, DateTime.UnixEpoch);
+
+        string json = NavigationSuiteRouteRequest.Create(
+            route, NavigationRoutePlanKind.Playback, resolveDestinationFloor: true);
+        NavigationSuiteRouteRequest.PlaybackRequest parsed = NavigationSuiteRouteRequest.Parse(json)!;
+
+        Assert.True(parsed.ResolveDestinationFloor);
+        Assert.Equal(1024f, Assert.Single(parsed.Points).Y);
     }
 
     [Theory]

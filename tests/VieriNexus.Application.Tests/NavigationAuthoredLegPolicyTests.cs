@@ -85,5 +85,6 @@ public sealed class NavigationAuthoredLegPolicyTests
             lastPointTolerance,
             false,
             0,
-            null);
+            null,
+            false);
 }

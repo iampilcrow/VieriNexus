@@ -55,7 +55,8 @@ public sealed class NavigationSuiteTravelCoordinator(
     public NavigationRouteExecutionStatus Start(
         NavigationRouteSnapshot route,
         NavigationRoutePlan plan,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool resolveDestinationFloor = false)
     {
         ArgumentNullException.ThrowIfNull(route);
         ArgumentNullException.ThrowIfNull(plan);
@@ -77,7 +78,7 @@ public sealed class NavigationSuiteTravelCoordinator(
         string request;
         try
         {
-            request = NavigationSuiteRouteRequest.Create(route, plan.Kind);
+            request = NavigationSuiteRouteRequest.Create(route, plan.Kind, resolveDestinationFloor);
         }
         catch (ArgumentException ex)
         {

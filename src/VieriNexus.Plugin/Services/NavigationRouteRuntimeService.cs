@@ -34,7 +34,8 @@ internal sealed class NavigationRouteRuntimeService(
 
     internal NavigationRouteExecutionStatus Start(
         NavigationRouteSnapshot route,
-        NavigationRoutePlanKind kind)
+        NavigationRoutePlanKind kind,
+        bool resolveDestinationFloor = false)
     {
         NavigationRoutePlan plan = Plan(route, kind);
         NavigationRecoveryStatus recoveryStatus = recovery.PrepareForExplicitStart(Environment.TickCount64);
@@ -66,9 +67,15 @@ internal sealed class NavigationRouteRuntimeService(
                 "route-already-running",
                 "Stop the current Nexus route before starting another one.");
         suiteTravel.ResetInactive();
-        return NavigationRouteDispatchPolicy.Select(plan, suiteTravel.CanDispatch) switch
+        NavigationRouteDispatchKind dispatch = resolveDestinationFloor
+            ? suiteTravel.CanDispatch
+                ? NavigationRouteDispatchKind.SuiteTravel
+                : NavigationRouteDispatchKind.Unavailable
+            : NavigationRouteDispatchPolicy.Select(plan, suiteTravel.CanDispatch);
+        return dispatch switch
         {
-            NavigationRouteDispatchKind.SuiteTravel => suiteTravel.Start(route, plan, DateTimeOffset.UtcNow),
+            NavigationRouteDispatchKind.SuiteTravel => suiteTravel.Start(
+                route, plan, DateTimeOffset.UtcNow, resolveDestinationFloor),
             NavigationRouteDispatchKind.Local => execution.Start(plan, DateTimeOffset.UtcNow),
             _ => new NavigationRouteExecutionStatus(
                 NavigationRouteExecutionState.Blocked,

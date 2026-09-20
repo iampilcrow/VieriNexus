@@ -67,9 +67,13 @@ public static class NavigationSuiteRouteRequest
         float LastPointTolerance,
         bool TravelOnly,
         uint VendorTargetDataId,
-        NavigationRoutePoint? VendorPosition);
+        NavigationRoutePoint? VendorPosition,
+        bool ResolveDestinationFloor);
 
-    public static string Create(NavigationRouteSnapshot route, NavigationRoutePlanKind kind)
+    public static string Create(
+        NavigationRouteSnapshot route,
+        NavigationRoutePlanKind kind,
+        bool resolveDestinationFloor = false)
     {
         ArgumentNullException.ThrowIfNull(route);
         if (kind == NavigationRoutePlanKind.Review)
@@ -97,6 +101,7 @@ public static class NavigationSuiteRouteRequest
             Mode = kind == NavigationRoutePlanKind.TravelToStart ? "travel" : "play",
             VendorTargetDataId = includeVendor ? route.TargetDataId : 0,
             VendorPosition = vendorPosition,
+            ResolveDestinationFloor = resolveDestinationFloor,
         });
     }
 
@@ -141,6 +146,8 @@ public static class NavigationSuiteRouteRequest
             bool useFlight = root.TryGetProperty("UseFlight", out JsonElement flightElement) && flightElement.GetBoolean();
             bool travelOnly = root.TryGetProperty("Mode", out JsonElement modeElement) &&
                               string.Equals(modeElement.GetString(), "travel", StringComparison.OrdinalIgnoreCase);
+            bool resolveDestinationFloor = root.TryGetProperty("ResolveDestinationFloor", out JsonElement floorElement) &&
+                                           floorElement.ValueKind == JsonValueKind.True;
             uint vendorTargetDataId = root.TryGetProperty("VendorTargetDataId", out JsonElement targetElement)
                 ? targetElement.GetUInt32()
                 : 0;
@@ -168,7 +175,8 @@ public static class NavigationSuiteRouteRequest
                 lastPointTolerance,
                 travelOnly,
                 vendorTargetDataId,
-                vendorPosition);
+                vendorPosition,
+                resolveDestinationFloor);
         }
         catch (JsonException)
         {

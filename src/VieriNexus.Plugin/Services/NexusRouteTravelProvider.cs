@@ -3,6 +3,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
+using System.Numerics;
 using VieriNexus.Application;
 
 namespace VieriNexus.Services;
@@ -329,6 +330,27 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
             throw new InvalidOperationException("The route territory is not active.");
         if (!navigation.IsReady)
             throw new InvalidOperationException("vnavmesh is not ready in the route territory.");
+
+        if (request.ResolveDestinationFloor)
+        {
+            var resolvedPoints = new List<NavigationRoutePoint>(request.Points.Count);
+            foreach (NavigationRoutePoint point in request.Points)
+            {
+                Vector3 approximate = new(point.X, 1024f, point.Z);
+                Vector3? floor = navigation.PointOnFloor(approximate, false, 5f) ??
+                                 navigation.PointOnFloor(approximate, true, 12f);
+                if (floor is null)
+                    throw new InvalidOperationException(
+                        "The selected map point is not on a reachable navigation surface.");
+                resolvedPoints.Add(new NavigationRoutePoint(floor.Value.X, floor.Value.Y, floor.Value.Z));
+            }
+
+            request = request with
+            {
+                Points = resolvedPoints,
+                ResolveDestinationFloor = false,
+            };
+        }
 
         authoredPointIndex = 0;
         territoryOnlyTarget = 0;

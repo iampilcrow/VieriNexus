@@ -59,6 +59,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly NavigationDiagnosticsService navigationDiagnostics;
     private readonly NavigationRecoveryService navigationRecovery;
     private readonly NavigationRouteRuntimeService navigationRuntime;
+    private readonly MapClickNavigationService mapClickNavigation;
     private readonly NavigationLibraryService navigationLibrary;
     private readonly AutoDutyMigrationService autoDutyMigration;
     private readonly CodexMigrationService codexMigration;
@@ -249,6 +250,8 @@ public sealed class Plugin : IDalamudPlugin
             navigationRecording,
             navigationLibrary,
             navigationRecovery);
+        mapClickNavigation = new MapClickNavigationService(
+            Configuration, navigationRuntime, ClientState, DataManager, KeyState);
         navigationDiagnostics = new NavigationDiagnosticsService(
             dependencyService,
             resourceLeases,
@@ -337,7 +340,7 @@ public sealed class Plugin : IDalamudPlugin
         mainWindow = new NexusWindow(this, dependencyService, legacyInventory, navigationMigration, autoDutyMigration,
             codexMigration, commandCenterMigration, commandCenterCatalog, questionableCompatibility,
             navigationLibrary, navigationActivation, navigationDiagnostics,
-            navigationRuntime, progressionProviders, progressionRuntime, progressionQueue, soloDutyRotation,
+            navigationRuntime, mapClickNavigation, progressionProviders, progressionRuntime, progressionQueue, soloDutyRotation,
             progressAtlas, progressAtlasActions, worldAutomation,
             gearShoppingRuntime, maintenanceRuntime,
             moduleRegistry, embeddedModules, worldStore, logo);
@@ -366,6 +369,7 @@ public sealed class Plugin : IDalamudPlugin
         operationsOverlay = new NexusOperationsOverlay(
             this,
             navigationRuntime,
+            mapClickNavigation,
             gearShoppingRuntime,
             progressionRuntime,
             maintenanceRuntime,
@@ -412,6 +416,7 @@ public sealed class Plugin : IDalamudPlugin
         huntingLog.Shutdown();
         maintenanceRuntime.Shutdown();
         strikingDummyTravel.Stop(out _);
+        mapClickNavigation.Stop(out _);
         gearShoppingRuntime.Shutdown();
         progressionRuntime.Shutdown();
         navigationRuntime.Shutdown();
@@ -466,6 +471,7 @@ public sealed class Plugin : IDalamudPlugin
         manualMovementSafety.Update(now);
         navigationAuthority.Update();
         navigationRuntime.Update(now);
+        mapClickNavigation.Update();
         navigationRecovery.Update(now);
         navigationDiagnostics.Update(DateTimeOffset.UtcNow);
         questionableCompatibility.Update(DateTimeOffset.UtcNow);

@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using VieriNexus.Application;
 using VieriNexus.Domain;
@@ -40,6 +41,7 @@ internal sealed class NexusWindow : Window
     private readonly NavigationActivationService navigationActivation;
     private readonly NavigationDiagnosticsService navigationDiagnostics;
     private readonly NavigationRouteRuntimeService navigationRuntime;
+    private readonly MapClickNavigationService mapClickNavigation;
     private readonly ProgressionProviderService progressionProviders;
     private readonly ProgressionRuntimeService progressionRuntime;
     private readonly ProgressionQueueRuntimeService progressionQueue;
@@ -97,6 +99,7 @@ internal sealed class NexusWindow : Window
         NavigationActivationService navigationActivation,
         NavigationDiagnosticsService navigationDiagnostics,
         NavigationRouteRuntimeService navigationRuntime,
+        MapClickNavigationService mapClickNavigation,
         ProgressionProviderService progressionProviders,
         ProgressionRuntimeService progressionRuntime,
         ProgressionQueueRuntimeService progressionQueue,
@@ -125,6 +128,7 @@ internal sealed class NexusWindow : Window
         this.navigationActivation = navigationActivation;
         this.navigationDiagnostics = navigationDiagnostics;
         this.navigationRuntime = navigationRuntime;
+        this.mapClickNavigation = mapClickNavigation;
         this.progressionProviders = progressionProviders;
         this.progressionRuntime = progressionRuntime;
         this.progressionQueue = progressionQueue;
@@ -1554,6 +1558,7 @@ internal sealed class NexusWindow : Window
     private void DrawRoutesAndNavigation()
     {
         PageHeading("Custom Route Editor", "Create, edit, and run your saved routes.");
+        DrawMapClickNavigation();
 
         NavigationLibrarySnapshot? snapshot = navigationLibrary.Current;
         if (snapshot is null)
@@ -1680,6 +1685,86 @@ internal sealed class NexusWindow : Window
 
         if (ImGui.CollapsingHeader("Troubleshooting"))
             DrawNavigationDiagnostics();
+    }
+
+    private void DrawMapClickNavigation()
+    {
+        MapClickNavigationStatus status = mapClickNavigation.Status;
+        BeginAutoPanel("MAP NAVIGATION");
+        ImGui.TextWrapped("Place a flag anywhere on the FFXIV map, then let Nexus handle the complete trip through Lifestream and vnavmesh.");
+
+        if (status.State == MapClickNavigationState.Armed)
+        {
+            if (ImGui.Button("Cancel map click", new Vector2(ButtonWidth("Cancel map click"), 0)))
+                mapClickNavigation.CancelArming();
+        }
+        else if (ImGui.Button("Arm next map click", new Vector2(ButtonWidth("Arm next map click"), 0)))
+        {
+            mapClickNavigation.ArmNextMapClick(out routeOperationMessage);
+        }
+
+        ImGui.SameLine();
+        using (ImRaii.Disabled(status.State == MapClickNavigationState.Navigating))
+        {
+            if (ImGui.Button("Go to current flag", new Vector2(ButtonWidth("Go to current flag"), 0)))
+                mapClickNavigation.NavigateToCurrentFlag(out routeOperationMessage);
+        }
+
+        if (status.State == MapClickNavigationState.Navigating)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button("Stop", new Vector2(ButtonWidth("Stop"), 0)))
+                mapClickNavigation.Stop(out routeOperationMessage);
+        }
+
+        Vector4 statusColor = status.State switch
+        {
+            MapClickNavigationState.Armed => NexusTheme.Gold,
+            MapClickNavigationState.Navigating or MapClickNavigationState.Arrived => NexusTheme.Green,
+            MapClickNavigationState.Blocked or MapClickNavigationState.Failed => NexusTheme.Red,
+            _ => NexusTheme.Muted,
+        };
+        ImGui.TextColored(statusColor, status.Message);
+        if (status.Destination is { } destination)
+            TextWrapped(NexusTheme.Muted,
+                $"{destination.TerritoryName} • X {destination.X:F1}, Y {destination.Z:F1}");
+
+        if (ImGui.CollapsingHeader("Map navigation shortcut"))
+        {
+            bool enabled = plugin.Configuration.MapClickNavigationHotkeyEnabled;
+            if (ImGui.Checkbox("Enable shortcut", ref enabled))
+            {
+                plugin.Configuration.MapClickNavigationHotkeyEnabled = enabled;
+                plugin.Save();
+            }
+            ImGui.TextUnformatted($"Shortcut: {mapClickNavigation.HotkeyName}");
+            if (mapClickNavigation.IsCapturingHotkey)
+            {
+                if (ImGui.Button("Press a key combination... (Esc cancels)"))
+                    mapClickNavigation.CancelHotkeyCapture();
+            }
+            else if (ImGui.Button("Record shortcut"))
+            {
+                mapClickNavigation.StartHotkeyCapture();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Clear shortcut"))
+                mapClickNavigation.ClearHotkey();
+
+            bool exact = plugin.Configuration.MapClickNavigationHotkeyExactModifiers;
+            if (ImGui.Checkbox("Require exact modifier combination", ref exact))
+            {
+                plugin.Configuration.MapClickNavigationHotkeyExactModifiers = exact;
+                plugin.Save();
+            }
+            if (plugin.Configuration.MapClickNavigationHotkey != 0 &&
+                !plugin.Configuration.MapClickNavigationHotkeyControl &&
+                !plugin.Configuration.MapClickNavigationHotkeyShift &&
+                !plugin.Configuration.MapClickNavigationHotkeyAlt)
+                TextWrapped(NexusTheme.Gold, "An unmodified shortcut can trigger while typing in chat.");
+        }
+        EndAutoPanel();
+        ImGui.Spacing();
     }
 
     private void DrawCompactNavigationStatus()

@@ -44,6 +44,22 @@ public sealed class NavigationSuiteTravelCoordinatorTests
     }
 
     [Fact]
+    public void MapNavigationDefersFloorResolutionUntilTheDestinationMeshIsLoaded()
+    {
+        var provider = new FakeProvider();
+        var coordinator = new NavigationSuiteTravelCoordinator(provider, () => true, () => true);
+        NavigationRouteSnapshot route = Route();
+
+        NavigationRouteExecutionStatus started = coordinator.Start(
+            route, Plan(route), DateTimeOffset.UtcNow, resolveDestinationFloor: true);
+
+        Assert.True(started.IsActive);
+        NavigationSuiteRouteRequest.PlaybackRequest parsed =
+            NavigationSuiteRouteRequest.Parse(provider.LastRequest)!;
+        Assert.True(parsed.ResolveDestinationFloor);
+    }
+
+    [Fact]
     public void ExistingExternalProviderActivityIsNeverAdoptedOrStopped()
     {
         var provider = new FakeProvider { RouteActive = true };

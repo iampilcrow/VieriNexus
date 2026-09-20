@@ -4,7 +4,6 @@ using Dalamud.Interface;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Interface.Windowing;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using VieriNexus.Application;
 using VieriNexus.Services;
 
@@ -31,6 +30,7 @@ internal sealed class NexusOperationsOverlay : Window
         };
     private readonly Plugin plugin;
     private readonly NavigationRouteRuntimeService navigation;
+    private readonly MapClickNavigationService mapClickNavigation;
     private readonly GearShoppingRuntimeService gear;
     private readonly ProgressionRuntimeService progression;
     private readonly NexusMaintenanceRuntimeService maintenance;
@@ -41,7 +41,6 @@ internal sealed class NexusOperationsOverlay : Window
     private readonly ICallGateSubscriber<int?, object> enqueueInnShortcut;
     private readonly ICallGateSubscriber<bool> lifestreamBusy;
     private readonly ICallGateSubscriber<object> lifestreamAbort;
-    private readonly ICallGateSubscriber<Vector3, bool, float, Vector3?> pointOnFloor;
     private string message = string.Empty;
     private bool quickTravelRequested;
     private bool quickTravelObservedBusy;
@@ -56,6 +55,7 @@ internal sealed class NexusOperationsOverlay : Window
     internal NexusOperationsOverlay(
         Plugin plugin,
         NavigationRouteRuntimeService navigation,
+        MapClickNavigationService mapClickNavigation,
         GearShoppingRuntimeService gear,
         ProgressionRuntimeService progression,
         NexusMaintenanceRuntimeService maintenance,
@@ -67,6 +67,7 @@ internal sealed class NexusOperationsOverlay : Window
     {
         this.plugin = plugin;
         this.navigation = navigation;
+        this.mapClickNavigation = mapClickNavigation;
         this.gear = gear;
         this.progression = progression;
         this.maintenance = maintenance;
@@ -77,8 +78,6 @@ internal sealed class NexusOperationsOverlay : Window
         enqueueInnShortcut = Plugin.PluginInterface.GetIpcSubscriber<int?, object>("Lifestream.EnqueueInnShortcut");
         lifestreamBusy = Plugin.PluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy");
         lifestreamAbort = Plugin.PluginInterface.GetIpcSubscriber<object>("Lifestream.Abort");
-        pointOnFloor = Plugin.PluginInterface.GetIpcSubscriber<Vector3, bool, float, Vector3?>(
-            "vnavmesh.Query.Mesh.PointOnFloor");
         RespectCloseHotkey = false;
         IsOpen = true;
     }
@@ -527,29 +526,10 @@ internal sealed class NexusOperationsOverlay : Window
         StartPoint(destination.Name, destination.TerritoryId, destination.Position, barracks ? 2f : 3f);
     }
 
-    private unsafe void StartFlagMarker()
+    private void StartFlagMarker()
     {
         ImGui.CloseCurrentPopup();
-        AgentMap* map = AgentMap.Instance();
-        if (map is null || map->FlagMarkerCount == 0)
-        {
-            message = "Set a flag marker on the map first.";
-            return;
-        }
-        FlagMapMarker marker = map->FlagMapMarkers[0];
-        if (marker.TerritoryId != Plugin.ClientState.TerritoryType)
-        {
-            message = "Travel to the flag marker's territory first, then choose Flag marker again.";
-            return;
-        }
-        Vector3 approximate = new(marker.XFloat, 1024f, marker.YFloat);
-        Vector3? floor = pointOnFloor.HasFunction ? pointOnFloor.InvokeFunc(approximate, false, 10f) : null;
-        if (floor is null)
-        {
-            message = "vnavmesh could not locate walkable ground at the flag marker.";
-            return;
-        }
-        StartPoint("Flag marker", marker.TerritoryId, floor.Value, 2f);
+        mapClickNavigation.NavigateToCurrentFlag(out message);
     }
 
     private void StartPoint(string name, uint territoryId, Vector3 position, float tolerance)
