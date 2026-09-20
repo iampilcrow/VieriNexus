@@ -613,10 +613,10 @@ internal sealed class NexusWindow : Window
                     if (imported.Success && imported.Receipt is { } receipt && snapshot is not null)
                     {
                         codexImportState.Reviewed = codexImportState.Imported = true;
-                        codexImportState.SourceVersion = "codex-preferences-v1";
+                        codexImportState.SourceVersion = "codex-preferences-v2";
                         codexImportState.ImportedAt = receipt.CreatedAtUtc;
                         codexImportState.ReceiptId = receipt.Id;
-                        codexImportState.ImportedItemCount = 11 + snapshot.SavedQueueSteps;
+                        codexImportState.ImportedItemCount = 12 + snapshot.SavedQueueSteps;
                         if (ApplyCodexPreferences(snapshot, codexImportState, out string applyMessage))
                             results.Add(applyMessage);
                         else
@@ -833,7 +833,7 @@ internal sealed class NexusWindow : Window
             }.Count(value => value);
             ImGui.TextUnformatted($"{enabled} enabled activity group(s) • {preview.SavedQueueSteps} saved queue step(s)");
             TextWrapped(NexusTheme.Muted,
-                "MSQ, Class/Job/Role, logs, currents, travel nodes, exploration, side quests, achievements, duties, the level stop, and the full Nexus-owned job queue are mapped together. Old provider instruction pointers are never resumed.");
+                "MSQ, Class/Job/Role, logs, currents, travel nodes, exploration, side quests, achievements, duties, the level stop, One Click Navigation shortcut, and the full Nexus-owned job queue are mapped together. Old provider instruction pointers are never resumed.");
             foreach (MigrationIssue issue in status.Preview.Issues.Take(2))
             {
                 Vector4 color = issue.Severity == MigrationIssueSeverity.Error ? NexusTheme.Red :
@@ -855,10 +855,10 @@ internal sealed class NexusWindow : Window
             if (result.Success && result.Receipt is { } receipt && codexMigration.Status().StagedSnapshot is { } snapshot)
             {
                 state.Reviewed = state.Imported = true;
-                state.SourceVersion = "codex-preferences-v1";
+                state.SourceVersion = "codex-preferences-v2";
                 state.ImportedAt = receipt.CreatedAtUtc;
                 state.ReceiptId = receipt.Id;
-                state.ImportedItemCount = 11 + snapshot.SavedQueueSteps;
+                state.ImportedItemCount = 12 + snapshot.SavedQueueSteps;
                 ApplyCodexPreferences(snapshot, state, out operationMessage);
             }
         }
@@ -890,6 +890,8 @@ internal sealed class NexusWindow : Window
                     state.PreviousProgression = null;
                     state.PreviousProgressionQueue = null;
                     state.PreviousAtlas = null;
+                    state.MapNavigationPromoted = false;
+                    state.PreviousMapNavigation = null;
                     plugin.Save();
                 }
             }
@@ -924,6 +926,12 @@ internal sealed class NexusWindow : Window
             state.PreviousProgressionQueue = Clone(configuration.ProgressionQueue);
             state.PreviousAtlas = Clone(configuration.Atlas);
         }
+        if (!state.MapNavigationPromoted)
+        {
+            state.PreviousMapNavigation = plugin.Configuration.MapNavigationSnapshot();
+            state.MapNavigationPromoted = true;
+        }
+        plugin.Configuration.ApplyMapNavigation(snapshot.MapNavigation);
 
         configuration.Progression.AllowMainScenario = snapshot.MainScenarioQuests;
         configuration.Progression.AllowJobQuests = snapshot.CombatClassJobQuests || snapshot.RoleQuests;
@@ -975,6 +983,8 @@ internal sealed class NexusWindow : Window
 
     private void RestoreCodexPreferences(LegacyImportState state)
     {
+        if (state.PreviousMapNavigation is not null)
+            plugin.Configuration.ApplyMapNavigation(state.PreviousMapNavigation);
         if (state.AppliedCharacterKey.Length == 0 || state.PreviousProgression is null || state.PreviousAtlas is null)
             return;
         CharacterConfiguration configuration = plugin.Configuration.ForCharacter(state.AppliedCharacterKey);

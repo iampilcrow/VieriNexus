@@ -467,6 +467,7 @@ public sealed class Plugin : IDalamudPlugin
         var now = Environment.TickCount64;
         worldObserver.Update(now);
         ApplyPendingCodexQueuePromotion();
+        ApplyPendingCodexMapNavigationPromotion();
         navigationExecutionSafety.Update(DateTimeOffset.UtcNow);
         manualMovementSafety.Update(now);
         navigationAuthority.Update();
@@ -737,6 +738,20 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.PendingCodexQueuePromotion = false;
         Save();
         ChatGui.Print($"[VieriNexus] Promoted {snapshot.SavedQueueSteps} verified VieriCodex queue step(s) into the Nexus Multi-Job Automation Queue.");
+    }
+
+    private void ApplyPendingCodexMapNavigationPromotion()
+    {
+        LegacyImportState state = Configuration.ForLegacyImport("codex");
+        if (!state.Activated || state.MapNavigationPromoted ||
+            codexMigration.Status().StagedSnapshot is not { } snapshot)
+            return;
+
+        state.PreviousMapNavigation = Configuration.MapNavigationSnapshot();
+        Configuration.ApplyMapNavigation(snapshot.MapNavigation);
+        state.MapNavigationPromoted = true;
+        Save();
+        ChatGui.Print("[VieriNexus] Promoted the verified VieriCodex One Click Navigation shortcut into Nexus.");
     }
 
     private static void PrintControl(VieriNexus.Contracts.NexusCommandResultDto result)

@@ -7,7 +7,7 @@ namespace VieriNexus;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 11;
+    public int Version { get; set; } = 12;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
@@ -57,7 +57,7 @@ public sealed class Configuration : IPluginConfiguration
             ProgressionQueuePolicy.Normalize(character.ProgressionQueue);
             character.Atlas ??= new AtlasAutomationConfiguration();
         }
-        Version = 11;
+        Version = 12;
     }
 
     public CharacterConfiguration ForCharacter(string key)
@@ -84,6 +84,24 @@ public sealed class Configuration : IPluginConfiguration
         !EmbeddedModules.TryGetValue(moduleId, out bool enabled) || enabled;
 
     public void SetEmbeddedModuleEnabled(string moduleId, bool enabled) => EmbeddedModules[moduleId] = enabled;
+
+    public CodexMapNavigationSnapshot MapNavigationSnapshot() => new(
+        MapClickNavigationHotkeyEnabled,
+        MapClickNavigationHotkey,
+        MapClickNavigationHotkeyControl,
+        MapClickNavigationHotkeyShift,
+        MapClickNavigationHotkeyAlt,
+        MapClickNavigationHotkeyExactModifiers);
+
+    public void ApplyMapNavigation(CodexMapNavigationSnapshot value)
+    {
+        MapClickNavigationHotkeyEnabled = value.HotkeyEnabled;
+        MapClickNavigationHotkey = value.Hotkey;
+        MapClickNavigationHotkeyControl = value.HotkeyControl;
+        MapClickNavigationHotkeyShift = value.HotkeyShift;
+        MapClickNavigationHotkeyAlt = value.HotkeyAlt;
+        MapClickNavigationHotkeyExactModifiers = value.HotkeyExactModifiers;
+    }
 
     public void Save() => pluginInterface?.SavePluginConfig(this);
 }
@@ -138,4 +156,6 @@ public sealed class LegacyImportState
     public ProgressionDraftConfiguration? PreviousProgression { get; set; }
     public ProgressionQueueConfiguration? PreviousProgressionQueue { get; set; }
     public AtlasAutomationConfiguration? PreviousAtlas { get; set; }
+    public bool MapNavigationPromoted { get; set; }
+    public CodexMapNavigationSnapshot? PreviousMapNavigation { get; set; }
 }

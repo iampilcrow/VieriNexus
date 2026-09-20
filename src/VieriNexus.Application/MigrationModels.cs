@@ -227,7 +227,18 @@ public sealed record CodexMigrationSnapshot(
     CodexQueueSettingsSnapshot QueueSettings)
 {
     public int SavedQueueSteps => QueueSteps.Count;
+
+    public CodexMapNavigationSnapshot MapNavigation { get; init; } = new(
+        true, 0, false, false, false, true);
 }
+
+public sealed record CodexMapNavigationSnapshot(
+    bool HotkeyEnabled,
+    ushort Hotkey,
+    bool HotkeyControl,
+    bool HotkeyShift,
+    bool HotkeyAlt,
+    bool HotkeyExactModifiers);
 
 public sealed record CodexQueueStepSnapshot(
     Guid Id,

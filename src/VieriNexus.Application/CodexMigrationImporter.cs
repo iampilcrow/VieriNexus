@@ -42,12 +42,21 @@ public sealed class CodexMigrationImporter
                 Boolean(stop, "LevelToStopAfter"),
                 targetLevel,
                 queueSteps,
-                queueSettings);
+                queueSettings)
+            {
+                MapNavigation = new CodexMapNavigationSnapshot(
+                    Boolean(root, "OneClickNavigationHotkeyEnabled", true),
+                    UnsignedShort(root, "OneClickNavigationHotkey"),
+                    Boolean(root, "OneClickNavigationHotkeyControl"),
+                    Boolean(root, "OneClickNavigationHotkeyShift"),
+                    Boolean(root, "OneClickNavigationHotkeyAlt"),
+                    Boolean(root, "OneClickNavigationHotkeyExactModifiers", true)),
+            };
 
             List<MigrationIssue> issues =
             [
                 new(MigrationIssueSeverity.Information,
-                    "Main Scenario, Class/Job/Role, logs, currents, travel-node, exploration, side-quest, achievement, duty, and level-stop preferences were mapped."),
+                    "Main Scenario, Class/Job/Role, logs, currents, travel-node, exploration, side-quest, achievement, duty, level-stop, and One Click Navigation preferences were mapped."),
             ];
             if (queueSteps.Length > 0)
                 issues.Add(new(MigrationIssueSeverity.Information,
@@ -81,6 +90,14 @@ public sealed class CodexMigrationImporter
         value.TryGetInt32(out int number)
             ? number
             : fallback;
+
+    private static ushort UnsignedShort(JsonElement parent, string name) =>
+        parent.ValueKind == JsonValueKind.Object &&
+        parent.TryGetProperty(name, out JsonElement value) &&
+        value.ValueKind == JsonValueKind.Number &&
+        value.TryGetUInt16(out ushort number)
+            ? number
+            : (ushort)0;
 
     private static CodexQueueStepSnapshot[] QueueSteps(JsonElement queue)
     {

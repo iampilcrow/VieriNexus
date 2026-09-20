@@ -24,6 +24,12 @@ public sealed class CodexMigrationImporterTests
             "RequiredMsqDungeons": true
           },
           "Stop": { "LevelToStopAfter": true, "TargetLevel": 87 },
+          "OneClickNavigationHotkeyEnabled": true,
+          "OneClickNavigationHotkey": 75,
+          "OneClickNavigationHotkeyControl": true,
+          "OneClickNavigationHotkeyShift": false,
+          "OneClickNavigationHotkeyAlt": true,
+          "OneClickNavigationHotkeyExactModifiers": false,
           "ProgressionQueue": {
             "Steps": [
               { "Id": "58f548eb-afd2-44dd-9fff-b15227d5880d", "Enabled": true, "ClassJob": 35, "TargetLevel": 100, "Method": 3, "FallbackPolicy": 0 },
@@ -52,6 +58,12 @@ public sealed class CodexMigrationImporterTests
         Assert.Equal(3, snapshot.QueueSteps[0].Method);
         Assert.False(snapshot.QueueSettings.ResumeAfterRestart);
         Assert.False(snapshot.QueueSettings.AutomaticUsesSideQuests);
+        Assert.True(snapshot.MapNavigation.HotkeyEnabled);
+        Assert.Equal((ushort)75, snapshot.MapNavigation.Hotkey);
+        Assert.True(snapshot.MapNavigation.HotkeyControl);
+        Assert.False(snapshot.MapNavigation.HotkeyShift);
+        Assert.True(snapshot.MapNavigation.HotkeyAlt);
+        Assert.False(snapshot.MapNavigation.HotkeyExactModifiers);
         Assert.Contains(preview.Issues, issue => issue.Message.Contains("Nexus-owned queue", StringComparison.Ordinal));
     }
 
@@ -64,6 +76,9 @@ public sealed class CodexMigrationImporterTests
         Assert.Equal(50, preview.Snapshot!.TargetLevel);
         Assert.True(preview.Snapshot.RequiredMsqDungeons);
         Assert.Equal(0, preview.Snapshot.SavedQueueSteps);
+        Assert.True(preview.Snapshot.MapNavigation.HotkeyEnabled);
+        Assert.Equal((ushort)0, preview.Snapshot.MapNavigation.Hotkey);
+        Assert.True(preview.Snapshot.MapNavigation.HotkeyExactModifiers);
     }
 
     [Fact]
@@ -74,7 +89,9 @@ public sealed class CodexMigrationImporterTests
           "Version": null,
           "Codex": { "MainScenarioQuests": null, "RequiredMsqDungeons": "yes" },
           "Stop": { "LevelToStopAfter": null, "TargetLevel": null },
-          "ProgressionQueue": { "Steps": null }
+          "ProgressionQueue": { "Steps": null },
+          "OneClickNavigationHotkey": null,
+          "OneClickNavigationHotkeyEnabled": null
         }
         """;
 
@@ -84,6 +101,8 @@ public sealed class CodexMigrationImporterTests
         Assert.False(preview.Snapshot!.MainScenarioQuests);
         Assert.True(preview.Snapshot.RequiredMsqDungeons);
         Assert.Equal(50, preview.Snapshot.TargetLevel);
+        Assert.Equal((ushort)0, preview.Snapshot.MapNavigation.Hotkey);
+        Assert.True(preview.Snapshot.MapNavigation.HotkeyEnabled);
     }
 
     [Theory]
