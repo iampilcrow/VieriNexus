@@ -13,6 +13,8 @@ using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
+using Lumina.Data.Files;
+using Lumina.Data.Parsing.Layer;
 using System.Numerics;
 using System.Text.Json;
 using VieriNexus.Application;
@@ -92,6 +94,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
     private bool stopRequested;
     private ProviderPreparationPhase providerPreparation;
     private DateTimeOffset providerPreparationStartedAt;
+    private SaleVendor? saleVendor;
+    private readonly Dictionary<uint, IReadOnlyList<SaleVendor>> saleVendorsByTerritory = [];
     private long runStartedSequence;
     private long runCompletedSequence;
 
@@ -175,6 +179,28 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
             latestSalePreview = current;
             return false;
         }
+        approvedSale = new Queue<NexusInventoryItemSnapshot>(current.Items);
+        latestSalePreview = null;
+        return Start([NexusMaintenanceOperation.Sell], selectedPolicy, out result);
+    }
+
+    internal bool StartProtectedSelling(out string result)
+    {
+        AutoDutyMaintenancePolicy? selectedPolicy = CurrentProfile?.Maintenance;
+        if (selectedPolicy is null)
+        {
+            result = "Import VieriAutoDuty operations before using Sell Inventory.";
+            return false;
+        }
+
+        NexusItemTransactionPreview current = ItemTransactionPolicy.CreateSellPreview(
+            ReadBagSnapshot(), selectedPolicy.ProtectGearsetsFromSelling);
+        if (current.Items.Count == 0)
+        {
+            result = "No eligible inventory items need to be sold.";
+            return false;
+        }
+
         approvedSale = new Queue<NexusInventoryItemSnapshot>(current.Items);
         latestSalePreview = null;
         return Start([NexusMaintenanceOperation.Sell], selectedPolicy, out result);
@@ -271,7 +297,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         var owner = new LeaseOwner(GoalId.New(), TaskId.New(), AttemptId.New(), 60,
             "Nexus native inventory maintenance");
         List<ResourceKind> resources = [ResourceKind.UiInteraction, ResourceKind.InventoryMutation];
-        if (operations.Any(operation => operation is NexusMaintenanceOperation.GrandCompanyTurnIn or
+        if (operations.Any(operation => operation is NexusMaintenanceOperation.Sell or
+                NexusMaintenanceOperation.GrandCompanyTurnIn or
                 NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest))
             resources.Add(ResourceKind.Teleport);
         if (operations.Contains(NexusMaintenanceOperation.GrandCompanyTurnIn))
@@ -327,7 +354,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         }
         if (condition[ConditionFlag.BetweenAreas] || condition[ConditionFlag.BetweenAreas51] || now < nextActionAt)
             return;
-        TimeSpan operationTimeout = current is NexusMaintenanceOperation.GrandCompanyTurnIn or
+        TimeSpan operationTimeout = current is NexusMaintenanceOperation.Sell or
+            NexusMaintenanceOperation.GrandCompanyTurnIn or
             NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest
                 ? TimeSpan.FromMinutes(15)
                 : OperationTimeout;
@@ -623,9 +651,10 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
     {
         if (!TryAddon("Shop", out _))
         {
-            Fail("Open a normal NPC shop, then approve the protected-selling preview again. Nexus will never choose an unknown vendor or sell outside its exact approval.");
+            UpdateSalePreparation(now);
             return;
         }
+        providerPreparation = ProviderPreparationPhase.Ready;
         if (pendingSale is { } pending)
         {
             InventoryItem* slot = InventoryManager.Instance()->GetInventorySlot(
@@ -645,6 +674,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         }
         if (approvedSale.Count == 0)
         {
+            CloseAddon("Shop");
             CompleteCurrent(now);
             return;
         }
@@ -660,6 +690,198 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         pendingSale = next;
         pendingItemStartedAt = now;
         Throttle(now, 500);
+    }
+
+    private void UpdateSalePreparation(DateTimeOffset now)
+    {
+        if (providerPreparation == ProviderPreparationPhase.None)
+        {
+            saleVendor = SelectSaleVendor();
+            if (saleVendor is null)
+            {
+                Fail("No ordinary shop vendor could be found for Sell Inventory.");
+                return;
+            }
+            SaleVendor vendor = saleVendor.Value;
+            string request = JsonSerializer.Serialize(new
+            {
+                TerritoryId = vendor.TerritoryId,
+                Points = new[] { new { X = vendor.Position.X, Y = vendor.Position.Y, Z = vendor.Position.Z } },
+                UseMesh = true,
+                UseFlight = false,
+                Tolerance = 0.75f,
+                LastPointTolerance = 3f,
+                Mode = "travel",
+                VendorTargetDataId = vendor.DataId,
+                VendorPosition = new { X = vendor.Position.X, Y = vendor.Position.Y, Z = vendor.Position.Z },
+            });
+            SuiteRouteDispatchResult dispatch = travel.Dispatch(request);
+            if (!dispatch.Started)
+            {
+                Fail(dispatch.Message);
+                return;
+            }
+            providerPreparation = ProviderPreparationPhase.Traveling;
+            providerPreparationStartedAt = now;
+            message = "Traveling to a shop to sell inventory.";
+            Throttle(now, 250);
+            return;
+        }
+
+        if (providerPreparation is ProviderPreparationPhase.Traveling or ProviderPreparationPhase.Approaching)
+        {
+            SuiteRouteProviderObservation observation = travel.Observe(now);
+            if (observation.State == SuiteRouteProviderState.Failed)
+            {
+                Fail("Could not reach a shop to sell inventory.");
+                return;
+            }
+            if (observation.State != SuiteRouteProviderState.Completed)
+                return;
+            providerPreparation = ProviderPreparationPhase.Interacting;
+            providerPreparationStartedAt = now;
+            message = "Opening the shop.";
+            Throttle(now, 250);
+            return;
+        }
+
+        if (providerPreparation != ProviderPreparationPhase.Interacting || saleVendor is not { } vendorToOpen)
+            return;
+        if (now - providerPreparationStartedAt > TimeSpan.FromSeconds(45))
+        {
+            Fail("The selected shop vendor did not become interactable.");
+            return;
+        }
+        if (TryAddon<AddonTalk>("Talk", out AddonTalk* talk))
+        {
+            ClickTalk(talk);
+            Throttle(now, 500);
+            return;
+        }
+        if (TryAddon<AddonSelectIconString>("SelectIconString", out AddonSelectIconString* icon))
+        {
+            Fire((AtkUnitBase*)icon, true, vendorToOpen.ShopIndex);
+            Throttle(now, 500);
+            return;
+        }
+        if (TryAddon<AddonSelectString>("SelectString", out AddonSelectString* list))
+        {
+            Fire((AtkUnitBase*)list, true, vendorToOpen.ShopIndex);
+            Throttle(now, 500);
+            return;
+        }
+
+        IGameObject? target = objectTable.Where(candidate => candidate.BaseId == vendorToOpen.DataId)
+            .OrderBy(candidate => objectTable.LocalPlayer is { } player
+                ? Vector3.DistanceSquared(player.Position, candidate.Position)
+                : float.MaxValue)
+            .FirstOrDefault();
+        if (target is not { IsTargetable: true } || objectTable.LocalPlayer is not { } localPlayer ||
+            Vector3.Distance(localPlayer.Position, target.Position) > 7f)
+        {
+            message = "Waiting for the shopkeeper.";
+            return;
+        }
+        TargetSystem.Instance()->InteractWithObject((GameObject*)target.Address, false);
+        message = "Opening the shop.";
+        Throttle(now, 750);
+    }
+
+    private SaleVendor? SelectSaleVendor()
+    {
+        uint currentTerritory = clientState.TerritoryType;
+        Vector3 origin = objectTable.LocalPlayer?.Position ?? Vector3.Zero;
+        uint[] territories;
+        switch (currentTerritory)
+        {
+            case 177:
+                territories = [128, 129];
+                origin = new Vector3(15.42688f, 39.99999f, 12.466553f);
+                break;
+            case 178:
+                territories = [130, 131];
+                origin = new Vector3(28.85994f, 6.999999f, -80.12716f);
+                break;
+            case 179:
+                territories = [132, 133];
+                origin = new Vector3(25.6627f, -8f, 99.74237f);
+                break;
+            default:
+                territories = [currentTerritory];
+                break;
+        }
+
+        SaleVendor? local = territories.SelectMany(ShopVendors)
+            .OrderBy(vendor => vendor.TerritoryId == currentTerritory ? 0 : 1)
+            .ThenBy(vendor => Vector3.DistanceSquared(origin, vendor.Position))
+            .Select(vendor => (SaleVendor?)vendor)
+            .FirstOrDefault();
+        if (local is not null)
+            return local;
+
+        uint fallback = FFXIVClientStructs.FFXIV.Client.Game.UI.PlayerState.Instance()->GrandCompany switch
+        {
+            1 => 129u,
+            2 => 133u,
+            _ => 131u,
+        };
+        return ShopVendors(fallback).Select(vendor => (SaleVendor?)vendor).FirstOrDefault();
+    }
+
+    private IReadOnlyList<SaleVendor> ShopVendors(uint territoryId)
+    {
+        if (saleVendorsByTerritory.TryGetValue(territoryId, out IReadOnlyList<SaleVendor>? cached))
+            return cached;
+
+        List<SaleVendor> vendors = [];
+        try
+        {
+            TerritoryType? territory = dataManager.GetExcelSheet<TerritoryType>().GetRowOrDefault(territoryId);
+            string background = territory?.Bg.ToString() ?? string.Empty;
+            int level = background.IndexOf("/level/", StringComparison.Ordinal);
+            if (level >= 0)
+            {
+                LgbFile? file = dataManager.GetFile<LgbFile>($"bg/{background[..(level + 1)]}level/planevent.lgb");
+                if (file is not null)
+                {
+                    foreach (LayerCommon.InstanceObject instance in file.Layers.SelectMany(layer => layer.InstanceObjects))
+                    {
+                        if (instance.AssetType != LayerEntryType.EventNPC ||
+                            instance.Object is not LayerCommon.ENPCInstanceObject npc)
+                            continue;
+                        uint dataId = npc.ParentData.ParentData.BaseId;
+                        if (dataId == 0)
+                            continue;
+                        ENpcBase? npcBase = dataManager.GetExcelSheet<ENpcBase>().GetRowOrDefault(dataId);
+                        if (npcBase is null)
+                            continue;
+                        int shopIndex = -1;
+                        int referenceIndex = 0;
+                        foreach (var reference in npcBase.Value.ENpcData)
+                        {
+                            if (reference.Is<GilShop>())
+                            {
+                                shopIndex = referenceIndex;
+                                break;
+                            }
+                            referenceIndex++;
+                        }
+                        if (shopIndex < 0)
+                            continue;
+                        vendors.Add(new SaleVendor(dataId, territoryId,
+                            new Vector3(instance.Transform.Translation.X, instance.Transform.Translation.Y,
+                                instance.Transform.Translation.Z), shopIndex));
+                    }
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Warning(exception, "Nexus could not discover ordinary shop vendors in territory {Territory}.", territoryId);
+        }
+        IReadOnlyList<SaleVendor> result = vendors.DistinctBy(vendor => vendor.DataId).ToArray();
+        saleVendorsByTerritory[territoryId] = result;
+        return result;
     }
 
     private void UpdateDesynthesis(DateTimeOffset now)
@@ -1290,6 +1512,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         providerStarted = false;
         sawProviderBusy = false;
         pendingSale = null;
+        saleVendor = null;
         desynthCategory = default;
         desynthCategoryInitialized = false;
         stopRequested = false;
@@ -1367,6 +1590,23 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
             addon->ReceiveEvent(evt->State.EventType, checked((int)evt->Param), evt);
     }
 
+    private static void ClickTalk(AddonTalk* addon)
+    {
+        AtkUnitBase* unit = (AtkUnitBase*)addon;
+        AtkEvent* evt = stackalloc AtkEvent[1];
+        *evt = new AtkEvent
+        {
+            Listener = (AtkEventListener*)unit,
+            Target = &AtkStage.Instance()->AtkEventTarget,
+            State = new AtkEventState { StateFlags = (AtkEventStateFlags)132 },
+        };
+        AtkEventData* data = stackalloc AtkEventData[1];
+        *data = default;
+        unit->ReceiveEvent(AtkEventType.MouseDown, 0, evt, data);
+        unit->ReceiveEvent(AtkEventType.MouseClick, 0, evt, data);
+        unit->ReceiveEvent(AtkEventType.MouseUp, 0, evt, data);
+    }
+
     private static string Display(NexusMaintenanceOperation operation) => operation switch
     {
         NexusMaintenanceOperation.Repair => "repairing equipped gear",
@@ -1403,4 +1643,6 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         uint TerritoryId,
         uint InnTerritoryId,
         Vector3 Position);
+
+    private readonly record struct SaleVendor(uint DataId, uint TerritoryId, Vector3 Position, int ShopIndex);
 }

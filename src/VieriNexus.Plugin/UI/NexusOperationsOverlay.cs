@@ -46,8 +46,6 @@ internal sealed class NexusOperationsOverlay : Window
     private bool quickTravelObservedBusy;
     private string quickTravelDestination = string.Empty;
     private DateTimeOffset quickTravelStartedAt;
-    private NexusItemTransactionPreview? sellPreview;
-    private bool sellReviewRequested;
     private Vector2 lastPosition;
     private int priorLineCount = 1;
     private int currentLineCount = 1;
@@ -103,10 +101,7 @@ internal sealed class NexusOperationsOverlay : Window
             Position = null;
         }
         priorLineCount = currentLineCount;
-        NexusTheme.Push();
     }
-
-    public override void PostDraw() => NexusTheme.Pop();
 
     public override void Draw()
     {
@@ -123,7 +118,7 @@ internal sealed class NexusOperationsOverlay : Window
         bool anyActive = navigationActive || gearActive || progressionActive || progressionPaused || maintenanceActive ||
                          dummyTravelActive || quickTravelRequested;
         currentLineCount = plugin.Configuration.ShowOperationsStatus &&
-                           (anyActive || !string.IsNullOrWhiteSpace(message)) ? 2 : 1;
+                           anyActive ? 2 : 1;
 
         if (anyActive)
         {
@@ -135,14 +130,14 @@ internal sealed class NexusOperationsOverlay : Window
                     ? "Stopped the Nexus travel request."
                     : stopped.Message;
             }
-            ImGui.SameLine();
+            ImGui.SameLine(0, 5);
         }
 
         if (progressionActive)
         {
             if (ImGui.Button("Pause"))
                 message = progression.PauseNow().Message;
-            ImGui.SameLine();
+            ImGui.SameLine(0, 5);
             bool lastRunArmed = progression.State?.StopAfterCurrentDuty == true;
             if (lastRunArmed)
                 ImGui.BeginDisabled();
@@ -150,13 +145,13 @@ internal sealed class NexusOperationsOverlay : Window
                 message = progression.StopAfterCurrentDuty().Message;
             if (lastRunArmed)
                 ImGui.EndDisabled();
-            ImGui.SameLine();
+            ImGui.SameLine(0, 5);
         }
         else if (progressionPaused)
         {
             if (ImGui.Button("Resume"))
                 message = progression.Resume().Message;
-            ImGui.SameLine();
+            ImGui.SameLine(0, 5);
         }
 
         bool controlsEnabled = !anyActive;
@@ -194,7 +189,7 @@ internal sealed class NexusOperationsOverlay : Window
             }
             ImGui.EndPopup();
         }
-        ImGui.SameLine();
+        ImGui.SameLine(0, 5);
 
         CategoryButton("Gear", "NexusGear", controlsEnabled);
         if (ImGui.BeginPopup("NexusGear"))
@@ -215,7 +210,7 @@ internal sealed class NexusOperationsOverlay : Window
                 maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
             ImGui.EndPopup();
         }
-        ImGui.SameLine();
+        ImGui.SameLine(0, 5);
 
         CategoryButton("Inventory", "NexusInventory", controlsEnabled);
         if (ImGui.BeginPopup("NexusInventory"))
@@ -223,7 +218,7 @@ internal sealed class NexusOperationsOverlay : Window
             if (Selectable(VieriAutoDutyOverlayContract.SellInventory, maintenance.HasWorkingProfile && overlay?.ShowSell != false))
             {
                 ImGui.CloseCurrentPopup();
-                sellReviewRequested = true;
+                maintenance.StartProtectedSelling(out message);
             }
             if (Selectable(VieriAutoDutyOverlayContract.TurnIn, maintenance.HasWorkingProfile && overlay?.ShowTurnIn != false))
             {
@@ -240,7 +235,7 @@ internal sealed class NexusOperationsOverlay : Window
             ImGui.EndPopup();
         }
 
-        ImGui.SameLine();
+        ImGui.SameLine(0, 5);
         CategoryButton("Extras", "NexusExtras", controlsEnabled);
         if (ImGui.BeginPopup("NexusExtras"))
         {
@@ -265,12 +260,12 @@ internal sealed class NexusOperationsOverlay : Window
             ImGui.EndPopup();
         }
 
-        ImGui.SameLine();
+        ImGui.SameLine(0, 5);
         using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
         {
             if (ImGui.Button($"{FontAwesomeIcon.Cog.ToIconString()}###NexusOperationsSettings"))
-                Open("Settings");
-            ImGui.SameLine();
+                Open("Automation");
+            ImGui.SameLine(0, 5);
             if (ImGui.Button($"{FontAwesomeIcon.WindowClose.ToIconString()}###CloseNexusOperations"))
             {
                 plugin.Configuration.ShowOperationsOverlay = false;
@@ -278,26 +273,14 @@ internal sealed class NexusOperationsOverlay : Window
             }
         }
 
-        if (sellReviewRequested)
-        {
-            sellReviewRequested = false;
-            sellPreview = maintenance.PreviewProtectedSelling();
-            message = sellPreview.Summary;
-            ImGui.OpenPopup("Sell Inventory###NexusOverlaySell");
-        }
-        DrawSellInventoryPopup();
-
         if (!plugin.Configuration.ShowOperationsStatus)
             return;
 
-        VieriNexus.Contracts.NexusOperationsStatusDto operations = control.Status();
-        string? status = anyActive
-            ? operations.Detail ?? operations.Activity ?? message
-            : string.IsNullOrWhiteSpace(message) ? null : message;
+        string? status = OverlayActionText(anyActive);
         if (!string.IsNullOrWhiteSpace(status))
         {
-            ImGui.Separator();
-            ImGui.TextColored(anyActive ? NexusTheme.Green : NexusTheme.Muted, status);
+            ImGui.NewLine();
+            ImGui.TextColored(new Vector4(0f, 1f, 0f, 1f), Truncate(status, 40));
         }
     }
 
@@ -327,50 +310,30 @@ internal sealed class NexusOperationsOverlay : Window
         return selected && enabled;
     }
 
-    private void DrawSellInventoryPopup()
+    private string? OverlayActionText(bool anyActive)
     {
-        const string popup = "Sell Inventory###NexusOverlaySell";
-        if (!ImGui.IsPopupOpen(popup))
-            return;
-        ImGui.SetNextWindowSize(new Vector2(560, 0), ImGuiCond.Appearing);
-        if (!ImGui.BeginPopupModal(popup, ImGuiWindowFlags.AlwaysAutoResize))
-            return;
-
-        NexusItemTransactionPreview? preview = sellPreview;
-        if (preview is null)
-        {
-            ImGui.TextWrapped("Inventory information is unavailable.");
-        }
-        else
-        {
-            ImGui.TextWrapped(preview.Summary);
-            foreach (NexusInventoryItemSnapshot item in preview.Items.Take(20))
-                ImGui.BulletText($"{item.Name} ×{item.Quantity} — {item.VendorPrice:N0} gil each");
-            if (preview.Items.Count > 20)
-                ImGui.TextDisabled($"…and {preview.Items.Count - 20} more exact slot(s).");
-            ImGui.Spacing();
-            ImGui.TextWrapped("Open a normal NPC shop, then approve this exact list. Nexus protects equipped and gearset items, EXP-bonus equipment, collectables, and anything that changes after review.");
-            ImGui.Spacing();
-            bool canSell = preview.Items.Count > 0;
-            if (!canSell)
-                ImGui.BeginDisabled();
-            if (ImGui.Button("Sell Approved Items"))
-            {
-                maintenance.StartApprovedSelling(preview.Signature, out message);
-                sellPreview = null;
-                ImGui.CloseCurrentPopup();
-            }
-            if (!canSell)
-                ImGui.EndDisabled();
-            ImGui.SameLine();
-        }
-        if (ImGui.Button("Cancel"))
-        {
-            sellPreview = null;
-            ImGui.CloseCurrentPopup();
-        }
-        ImGui.EndPopup();
+        if (!anyActive)
+            return null;
+        if (maintenance.Status.IsActive)
+            return maintenance.Status.Message;
+        if (gear.Status.IsActive)
+            return gear.Status.Message;
+        if (strikingDummies.Status.IsActive)
+            return strikingDummies.Status.Message;
+        if (quickTravelRequested)
+            return $"Traveling to {quickTravelDestination}.";
+        if (navigation.Status.State is not NavigationRouteExecutionState.Idle and
+            not NavigationRouteExecutionState.Completed and not NavigationRouteExecutionState.Failed)
+            return navigation.Status.Message;
+        if (progression.State?.Goal.Status is VieriNexus.Domain.GoalStatus.Active or VieriNexus.Domain.GoalStatus.Paused)
+            return progression.State.Goal.Status == VieriNexus.Domain.GoalStatus.Paused
+                ? "Automation paused."
+                : "Running automation.";
+        return string.IsNullOrWhiteSpace(message) ? null : message;
     }
+
+    private static string Truncate(string value, int maximum) =>
+        value.Length <= maximum ? value : $"{value[..(maximum - 3)]}...";
 
     private void StartLifestream(string command, string destination)
     {
@@ -478,7 +441,7 @@ internal sealed class NexusOperationsOverlay : Window
             if (!busy && (quickTravelObservedBusy || elapsed >= TimeSpan.FromSeconds(4)))
             {
                 quickTravelRequested = false;
-                message = $"Lifestream finished the {quickTravelDestination} travel request.";
+                message = string.Empty;
             }
             else if (elapsed >= TimeSpan.FromMinutes(15))
             {

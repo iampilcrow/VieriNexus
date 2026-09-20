@@ -265,15 +265,15 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         try
         {
             string? overlaySetting = autoDutyGetConfig.HasFunction
-                ? autoDutyGetConfig.InvokeFunc("ShowOverlay")
+                ? autoDutyGetConfig.InvokeFunc("Overlay.Show")
                 : null;
             if (!dutyPresentationInitialized)
             {
-                autoDutySetConfig.InvokeAction("AutoManageRotationPluginState", "true");
-                autoDutySetConfig.InvokeAction("rotationPlugin", "WrathCombo");
+                autoDutySetConfig.InvokeAction("DutyConfig.AutoManageRotationPluginState", "true");
+                autoDutySetConfig.InvokeAction("DutyConfig.RotationPlugin", "WrathCombo");
             }
             if (!dutyPresentationInitialized || !IsFalseSetting(overlaySetting))
-                autoDutySetConfig.InvokeAction("ShowOverlay", "false");
+                autoDutySetConfig.InvokeAction("Overlay.Show", "false");
             dutyPresentationInitialized = true;
         }
         catch
@@ -1115,9 +1115,9 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 // Stock AutoDuty keeps duty mechanics; Nexus supplies the unified controls and
                 // stock Wrath supplies rotations. These public settings prevent two overlays or
                 // an accidental BossMod-only rotation selection from competing with that model.
-                autoDutySetConfig.InvokeAction("ShowOverlay", "false");
-                autoDutySetConfig.InvokeAction("AutoManageRotationPluginState", "true");
-                autoDutySetConfig.InvokeAction("rotationPlugin", "WrathCombo");
+                autoDutySetConfig.InvokeAction("Overlay.Show", "false");
+                autoDutySetConfig.InvokeAction("DutyConfig.AutoManageRotationPluginState", "true");
+                autoDutySetConfig.InvokeAction("DutyConfig.RotationPlugin", "WrathCombo");
             }
             autoDutyRun.InvokeAction(territoryId, 1, false);
             message = $"Nexus asked {selection.Selected!.DisplayName} to run one duty, then return control for verification.";
