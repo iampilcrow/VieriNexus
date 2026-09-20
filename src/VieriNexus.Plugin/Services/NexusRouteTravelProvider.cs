@@ -2,10 +2,12 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
 using System.Numerics;
 using VieriNexus.Application;
+using NativePlayerState = FFXIVClientStructs.FFXIV.Client.Game.UI.PlayerState;
 
 namespace VieriNexus.Services;
 
@@ -13,11 +15,13 @@ namespace VieriNexus.Services;
 /// Nexus-owned whole-trip route coordinator. Lifestream owns teleport and inn-entry operations,
 /// vnavmesh owns only the authored local path, and VieriAutoDuty is not part of this flow.
 /// </summary>
-internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
+internal sealed unsafe class NexusRouteTravelProvider : INavigationSuiteTravelProvider
 {
     private static readonly TimeSpan OverallTimeout = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan PhaseTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan MovementStartGrace = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan FlightPreparationTimeout = TimeSpan.FromSeconds(12);
+    private static readonly TimeSpan FlightActionThrottle = TimeSpan.FromSeconds(2);
 
     private readonly DependencyService dependencies;
     private readonly IClientState clientState;
@@ -35,6 +39,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
     private TravelPhase phase;
     private DateTimeOffset startedAt;
     private DateTimeOffset phaseStartedAt;
+    private DateTimeOffset nextFlightActionAt;
     private bool observedMovement;
     private int authoredPointIndex;
     private uint rootTerritoryId;
@@ -286,6 +291,10 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
                             "vnavmesh did not become ready within two minutes after the zone finished loading.");
                     break;
 
+                case TravelPhase.PreparingAuthoredLeg:
+                    ContinueAuthoredLegPreparation(now);
+                    break;
+
                 case TravelPhase.MovingAuthoredPath:
                     bool? active = navigation.IsMovementActive();
                     if (active is true)
@@ -300,7 +309,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
                     {
                         authoredPointIndex++;
                         if (authoredPointIndex < request!.Points.Count)
-                            StartAuthoredLeg(now);
+                            BeginAuthoredLeg(now);
                         else
                         {
                             string routeName = request.TravelOnly ? "Travel to start completed." : "Route playback completed.";
@@ -357,17 +366,21 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
 
         authoredPointIndex = 0;
         territoryOnlyTarget = 0;
-        StartAuthoredLeg(now);
-        SetRunning(TravelPhase.MovingAuthoredPath,
-            "nexus-route-playing",
-            request.TravelOnly
-                ? "Nexus is pathfinding to the route start through vnavmesh."
-                : $"Nexus is pathfinding through all {request.Points.Count} authored route points with vnavmesh.",
-            visualizationActive: true,
-            now);
+        BeginAuthoredLeg(now);
     }
 
-    private void StartAuthoredLeg(DateTimeOffset now)
+    private void BeginAuthoredLeg(DateTimeOffset now)
+    {
+        nextFlightActionAt = now;
+        SetRunning(
+            TravelPhase.PreparingAuthoredLeg,
+            "nexus-route-preparing-leg",
+            "Nexus is preparing the local route from the arrival Aetheryte.",
+            now: now);
+        ContinueAuthoredLegPreparation(now);
+    }
+
+    private void ContinueAuthoredLegPreparation(DateTimeOffset now)
     {
         if (request is null || authoredPointIndex < 0 || authoredPointIndex >= request.Points.Count)
             throw new InvalidOperationException("No authored Nexus route point is available.");
@@ -389,20 +402,75 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
             leg.UseFlight,
             request.VendorTargetDataId != 0,
             directDistance);
+
+        NavigationFlightPreparationAction preparation = NavigationFlightPreparationPolicy.Decide(
+            useFlight,
+            FlightPathSupported(request.TerritoryId),
+            condition[ConditionFlag.Mounted],
+            condition[ConditionFlag.InFlight],
+            now - phaseStartedAt >= FlightPreparationTimeout);
+        switch (preparation)
+        {
+            case NavigationFlightPreparationAction.Mount:
+                observation = observation with
+                {
+                    Code = "nexus-route-mounting",
+                    Message = "Nexus is mounting for the vendor approach.",
+                };
+                if (now >= nextFlightActionAt)
+                {
+                    ActionManager.Instance()->UseAction(ActionType.GeneralAction, 9);
+                    nextFlightActionAt = now + FlightActionThrottle;
+                }
+                return;
+
+            case NavigationFlightPreparationAction.TakeOff:
+                observation = observation with
+                {
+                    Code = "nexus-route-taking-off",
+                    Message = "Nexus is taking off for the vendor approach.",
+                };
+                if (now >= nextFlightActionAt)
+                {
+                    ActionManager.Instance()->UseAction(ActionType.GeneralAction, 2);
+                    nextFlightActionAt = now + FlightActionThrottle;
+                }
+                return;
+
+            case NavigationFlightPreparationAction.UseGroundPath:
+                useFlight = false;
+                break;
+
+            case NavigationFlightPreparationAction.UseFlightPath:
+                useFlight = true;
+                break;
+        }
+
         if (leg.RequiresPathfinding)
             navigation.StartPathfinding(leg.Destination, useFlight, leg.Tolerance);
         else
             navigation.Start([leg.Destination], useFlight, leg.Tolerance);
 
         observedMovement = false;
-        phaseStartedAt = now;
+        SetRunning(TravelPhase.MovingAuthoredPath,
+            "nexus-route-playing",
+            request.TravelOnly
+                ? "Nexus is pathfinding to the route start through vnavmesh."
+                : $"Nexus is pathfinding through all {request.Points.Count} authored route points with vnavmesh.",
+            visualizationActive: true,
+            now);
     }
 
     private bool FlightPathSupported(uint territoryId)
     {
         TerritoryType? territory = dataManager.GetExcelSheet<TerritoryType>()
             .GetRowOrDefault(territoryId);
-        return territory?.TerritoryIntendedUse.RowId is 1 or 47 or 49;
+        uint currentSet = territory?.AetherCurrentCompFlgSet.RowId ?? 0;
+        NativePlayerState* playerState = NativePlayerState.Instance();
+        return territory?.TerritoryIntendedUse.RowId is 1 or 47 or 49 &&
+               currentSet != 0 &&
+               playerState is not null &&
+               playerState->IsAetherCurrentZoneComplete(currentSet);
     }
 
     private bool TryResolveTeleport(uint territoryId, float targetX, float targetZ, out TeleportDestination destination)
@@ -565,6 +633,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         aethernetDestination = null;
         observedMovement = false;
         authoredPointIndex = 0;
+        nextFlightActionAt = default;
         observation = Idle();
         territoryOnlyTarget = 0;
     }
@@ -593,6 +662,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         WaitingForAethernetRoot,
         WaitingForTargetTerritory,
         WaitingForMesh,
+        PreparingAuthoredLeg,
         WaitingForInnOnly,
         MovingAuthoredPath,
     }

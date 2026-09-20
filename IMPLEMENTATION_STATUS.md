@@ -1,6 +1,6 @@
 # VieriNexus implementation status
 
-Version 0.1.0.86 restores the intended one-click VieriAutoDuty overlay behavior for Shop for Upgrades. The menu action scans the current job, selects only strict recommended upgrades, protects active EXP equipment, enforces the imported per-character gil reserve, and immediately starts the Nexus-owned shopping transaction. It opens neither a Nexus page nor a review/confirmation window; a concise overlay result appears only when there is nothing eligible to buy or the action cannot start. Version 0.1.0.84's broad maintenance and Atlas parity work remains intact: stock AutoDuty runs duties, stock Questionable runs ordinary quests, and Nexus owns the custom Vieri behavior and unified presentation around them.
+Version 0.1.0.87 ports the missing VieriAutoDuty outdoor movement contract into every Nexus-owned route. Post-teleport vendor travel now checks the character's real zone-flight unlock, mounts and takes off before starting a flying vnavmesh path, uses ground immediately where flight is locked, and falls back to ground if mount/takeoff preparation cannot finish within twelve seconds. The level-86 Anagnorisis gear trip can no longer remain parked at the Aetheryte because Nexus requested flight without preparing the character. Version 0.1.0.86's true one-click Shop for Upgrades behavior remains intact: stock AutoDuty runs duties, stock Questionable runs ordinary quests, and Nexus owns the custom Vieri behavior and unified presentation around them.
 
 ## Foundation implemented
 

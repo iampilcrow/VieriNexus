@@ -14,6 +14,37 @@ public enum NavigationArrivalAction
     Fail,
 }
 
+public enum NavigationFlightPreparationAction
+{
+    UseGroundPath,
+    Mount,
+    TakeOff,
+    UseFlightPath,
+}
+
+/// <summary>
+/// Preserves the predecessor's outdoor-route behavior without allowing a missing mount, locked
+/// flight, or failed takeoff to strand an owned trip at its arrival Aetheryte.
+/// </summary>
+public static class NavigationFlightPreparationPolicy
+{
+    public static NavigationFlightPreparationAction Decide(
+        bool flightRequested,
+        bool flightUnlocked,
+        bool mounted,
+        bool inFlight,
+        bool preparationTimedOut)
+    {
+        if (!flightRequested || !flightUnlocked || preparationTimedOut)
+            return NavigationFlightPreparationAction.UseGroundPath;
+        if (!mounted)
+            return NavigationFlightPreparationAction.Mount;
+        return inFlight
+            ? NavigationFlightPreparationAction.UseFlightPath
+            : NavigationFlightPreparationAction.TakeOff;
+    }
+}
+
 /// <summary>
 /// Decides when a completed cross-zone transfer may hand control to local navigation. Reaching
 /// the exact destination territory is authoritative; a provider's lingering busy flag must not
