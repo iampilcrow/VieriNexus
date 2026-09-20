@@ -127,13 +127,15 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             .GroupBy(item => item.ContentFinderConditionId)
             .ToDictionary(group => group.Key, group => group.First().Quest);
         atlasDutyTargets = dataManager.GetExcelSheet<ContentFinderCondition>()
-            .Where(row => row.RowId > 0 && row.TerritoryType.RowId > 0 && row.Content.RowId > 0 &&
-                          !row.Name.IsEmpty && row.ContentType.RowId is 2 or 3 or 4 or 5 or 21 or 28 or 30 or 37)
-            .Select(row => (Row: row, UnlockQuest: dutyUnlockQuests.GetValueOrDefault(row.RowId)))
+            .Where(row => row.RowId > 0 && row.TerritoryType.RowId > 0 && !row.Name.IsEmpty &&
+                          row.ContentType.RowId is 2 or 3 or 4 or 5 or 21 or 28 or 30 or 37)
+            .Select(row => (Row: row, ContentId: ContentRowId(row)))
+            .Where(item => item.ContentId > 0)
+            .Select(item => (item.Row, item.ContentId, UnlockQuest: dutyUnlockQuests.GetValueOrDefault(item.Row.RowId)))
             .Select(item => new ProgressAtlasDutyTarget(
                 item.Row.RowId,
                 item.Row.TerritoryType.RowId,
-                item.Row.Content.RowId,
+                item.ContentId,
                 item.Row.Name.ExtractText(),
                 DutyCategoryName(item.Row.ContentType.RowId),
                 ProgressAtlasCatalog.ExpansionName(item.Row.TerritoryType.Value.ExVersion.RowId),
@@ -957,15 +959,18 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         {
             ContentFinderCondition? condition = sheet.FirstOrDefault(row =>
                 row.TerritoryType.RowId == territoryId &&
-                row.Content.RowId != 0 &&
-                row.ContentType.RowId == 2);
+                row.ContentType.RowId == 2 &&
+                ContentRowId(row) != 0);
             if (condition is null || condition.Value.RowId == 0)
                 continue;
 
             ContentFinderCondition row = condition.Value;
+            uint contentId = ContentRowId(row);
+            if (contentId == 0)
+                continue;
             if (row.ClassJobLevelRequired > currentLevel || row.ItemLevelRequired > currentItemLevel)
                 continue;
-            if (!UIState.IsInstanceContentUnlocked(row.Content.RowId))
+            if (!UIState.IsInstanceContentUnlocked(contentId))
                 continue;
 
             bool hasPath;
@@ -985,7 +990,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 name = $"Duty {territoryId}";
             result.Add(new ProgressionDutyCandidate(
                 territoryId,
-                row.Content.RowId,
+                contentId,
                 name,
                 row.ClassJobLevelRequired,
                 checked((int)row.ItemLevelRequired)));
@@ -1011,9 +1016,10 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
         ContentFinderCondition? match = dataManager.GetExcelSheet<ContentFinderCondition>()
             .FirstOrDefault(row => row.TerritoryType.RowId == territoryId &&
-                                   row.Content.RowId != 0 && row.ContentType.RowId == 2);
+                                   row.ContentType.RowId == 2 && ContentRowId(row) != 0);
+        uint contentId = match is { } matched ? ContentRowId(matched) : 0;
         if (match is not { RowId: > 0 } row || row.ClassJobLevelRequired > currentLevel ||
-            row.ItemLevelRequired > CurrentItemLevel() || !UIState.IsInstanceContentUnlocked(row.Content.RowId))
+            contentId == 0 || row.ItemLevelRequired > CurrentItemLevel() || !UIState.IsInstanceContentUnlocked(contentId))
             return null;
         try
         {
@@ -1028,10 +1034,26 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         string name = row.Name.ExtractText();
         return new ProgressionDutyCandidate(
             territoryId,
-            row.Content.RowId,
+            contentId,
             string.IsNullOrWhiteSpace(name) ? $"Duty {territoryId}" : name,
             row.ClassJobLevelRequired,
             checked((int)row.ItemLevelRequired));
+    }
+
+    private static uint ContentRowId(ContentFinderCondition row)
+    {
+        if (row.RowId == 0 || row.ContentType.RowId == 0)
+            return 0;
+
+        try
+        {
+            return row.Content.RowId;
+        }
+        catch (Exception exception) when (exception is NullReferenceException or InvalidOperationException or ArgumentException)
+        {
+            // Dynamic content links can be unresolved in otherwise enumerable live sheet rows.
+            return 0;
+        }
     }
 
     internal ProgressionDutyProviderObservation ObserveDuty()

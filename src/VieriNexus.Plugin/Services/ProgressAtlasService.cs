@@ -144,11 +144,13 @@ internal sealed class ProgressAtlasService
             .OrderBy(target => target.Category, StringComparer.CurrentCulture)
             .ThenBy(target => target.Name, StringComparer.CurrentCulture)
             .ToArray();
-        Dictionary<uint, ContentFinderCondition> dutiesByTerritory = dataManager
+        Dictionary<uint, (ContentFinderCondition Duty, uint ContentId)> dutiesByTerritory = dataManager
             .GetExcelSheet<ContentFinderCondition>()
-            .Where(row => row.RowId > 0 && row.TerritoryType.RowId > 0 && row.Content.RowId > 0 &&
+            .Where(row => row.RowId > 0 && row.TerritoryType.RowId > 0 &&
                           row.ContentType.RowId is 2 or 3 or 4 or 5 or 21 or 28 or 30 or 37)
-            .GroupBy(row => row.TerritoryType.RowId)
+            .Select(row => (Duty: row, ContentId: ContentRowId(row)))
+            .Where(item => item.ContentId > 0)
+            .GroupBy(item => item.Duty.TerritoryType.RowId)
             .ToDictionary(group => group.Key, group => group.First());
         mapDiscoveryRegions = BuildMapDiscoveryRegions(dataManager)
             .Select(target => (Target: target, Duty: dutiesByTerritory.GetValueOrDefault(target.TerritoryId)))
@@ -156,9 +158,9 @@ internal sealed class ProgressAtlasService
             {
                 TerritoryName = territories.GetValueOrDefault(item.Target.TerritoryId)?.Name ?? $"Territory {item.Target.TerritoryId}",
                 Expansion = territories.GetValueOrDefault(item.Target.TerritoryId)?.Expansion ?? "Other",
-                IsDuty = item.Duty.RowId > 0,
-                ContentFinderConditionId = item.Duty.RowId,
-                ContentId = item.Duty.Content.RowId,
+                IsDuty = item.Duty.Duty.RowId > 0,
+                ContentFinderConditionId = item.Duty.Duty.RowId,
+                ContentId = item.Duty.ContentId,
             }).ToArray();
         huntingLogCatalog = LoadHuntingLogCatalog();
         current = Empty(DateTimeOffset.MinValue);
@@ -171,6 +173,23 @@ internal sealed class ProgressAtlasService
     internal IReadOnlyList<AetherCurrentQuestAtlasTarget> AetherCurrentQuestTargets => aetherCurrentQuestTargets;
     internal IReadOnlyList<MapDiscoveryRegion> ExplorationTargets => mapDiscoveryRegions;
     internal IReadOnlyList<AchievementAtlasTarget> AchievementTargets => achievementTargets;
+
+    private static uint ContentRowId(ContentFinderCondition row)
+    {
+        if (row.RowId == 0 || row.ContentType.RowId == 0)
+            return 0;
+
+        try
+        {
+            return row.Content.RowId;
+        }
+        catch (Exception exception) when (exception is NullReferenceException or InvalidOperationException or ArgumentException)
+        {
+            // Content is a dynamic sheet reference. Live game data may contain an incomplete row whose
+            // content type cannot resolve to a sheet; such a row is not a runnable duty and must be skipped.
+            return 0;
+        }
+    }
 
     internal static unsafe bool IsAetheryteUnlocked(uint id)
     {
