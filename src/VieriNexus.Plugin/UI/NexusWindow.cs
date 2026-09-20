@@ -3507,6 +3507,8 @@ internal sealed class NexusWindow : Window
             EndAutoPanel();
         }
 
+        DrawExpansionProgressAtlas(character);
+
         BeginAutoPanel("ATLAS EXECUTION");
         ProgressAtlasActionStatus action = progressAtlasActions.Status;
         NexusTheme.StatusDot(action.IsActive ? NexusTheme.Cyan : NexusTheme.Muted,
@@ -3569,28 +3571,352 @@ internal sealed class NexusWindow : Window
 
     private void DrawProgressAtlasCategoryDetails(ProgressAtlasCategorySnapshot category)
     {
+        if (category.Id is not (ProgressAtlasCategoryId.Achievements or ProgressAtlasCategoryId.HuntingLogs))
+            return;
         if (!ImGui.CollapsingHeader($"Browse {category.Name}###AtlasBrowse{category.Id}"))
             return;
 
         switch (category.Id)
         {
-            case ProgressAtlasCategoryId.Aetherytes:
-                DrawAetheryteAtlasDetails();
-                break;
-            case ProgressAtlasCategoryId.AetherCurrents:
-                DrawAetherCurrentAtlasDetails();
-                break;
             case ProgressAtlasCategoryId.Achievements:
                 DrawAchievementAtlasDetails();
-                break;
-            case ProgressAtlasCategoryId.Exploration:
-                DrawExplorationAtlasDetails();
                 break;
             case ProgressAtlasCategoryId.HuntingLogs:
                 DrawHuntingLogAtlasTargets();
                 break;
         }
     }
+
+    private void DrawExpansionProgressAtlas(CharacterSnapshot character)
+    {
+        IReadOnlyList<ProgressAtlasQuestTarget> quests = progressionProviders
+            .AtlasQuestTargets(character.ClassJobId);
+        IReadOnlyList<ProgressAtlasDutyTarget> duties = progressionProviders.AtlasDutyTargets;
+        string[] expansions = quests.Select(item => item.Expansion)
+            .Concat(duties.Select(item => item.Expansion))
+            .Concat(progressAtlas.AetheryteTargets.Select(item => item.Expansion))
+            .Concat(progressAtlas.AetherCurrentTargets.Select(item => item.Expansion))
+            .Concat(progressAtlas.AetherCurrentQuestTargets.Select(item => item.Expansion))
+            .Concat(progressAtlas.ExplorationTargets.Select(item => item.Expansion))
+            .Distinct(StringComparer.CurrentCulture)
+            .OrderBy(ProgressAtlasCatalog.ExpansionOrder)
+            .ThenBy(value => value, StringComparer.CurrentCulture)
+            .ToArray();
+
+        BeginAutoPanel("EXPANSIONS, QUESTS & UNLOCKS");
+        TextWrapped(NexusTheme.Muted,
+            "Browse the same progression areas by expansion. Nexus owns this organized view and its completion state; stock Questionable runs exact quests and stock AutoDuty runs only duties for which it exposes a path.");
+        foreach (string expansion in expansions)
+        {
+            ProgressAtlasQuestTarget[] expansionQuests = quests
+                .Where(item => item.Expansion == expansion)
+                .Where(item => AtlasMatches(item.Name, item.Expansion,
+                    ProgressAtlasCatalog.QuestCategoryName(item.Kind)))
+                .ToArray();
+            ProgressAtlasDutyTarget[] expansionDuties = duties
+                .Where(item => item.Expansion == expansion)
+                .Where(item => AtlasMatches(item.Name, item.Expansion, item.Category))
+                .ToArray();
+            int travelCount = progressAtlas.AetheryteTargets.Count(item => item.Expansion == expansion) +
+                              progressAtlas.AetherCurrentTargets.Count(item => item.Expansion == expansion) +
+                              progressAtlas.AetherCurrentQuestTargets.Count(item => item.Expansion == expansion) +
+                              progressAtlas.ExplorationTargets.Count(item => item.Expansion == expansion);
+            if (expansionQuests.Length == 0 && expansionDuties.Length == 0 && travelCount == 0)
+                continue;
+
+            if (!ImGui.CollapsingHeader(
+                    $"{expansion} • {expansionQuests.Length} quests • {expansionDuties.Length} duties • {travelCount} travel/exploration###AtlasExpansion{expansion}"))
+                continue;
+
+            foreach (IGrouping<ProgressionQuestKind, ProgressAtlasQuestTarget> category in expansionQuests
+                         .GroupBy(item => item.Kind)
+                         .OrderBy(item => ProgressAtlasCatalog.QuestCategoryOrder(item.Key)))
+                DrawAtlasQuestCategory(expansion, category.Key, category.ToArray(), character.Level);
+
+            DrawAtlasTravelCategories(expansion);
+
+            foreach (IGrouping<string, ProgressAtlasDutyTarget> category in expansionDuties
+                         .GroupBy(item => item.Category)
+                         .OrderBy(item => item.Key, StringComparer.CurrentCulture))
+                DrawAtlasDutyCategory(expansion, category.Key, category.ToArray(), character.Level);
+        }
+        EndAutoPanel();
+    }
+
+    private void DrawAtlasQuestCategory(
+        string expansion,
+        ProgressionQuestKind kind,
+        IReadOnlyList<ProgressAtlasQuestTarget> targets,
+        int currentLevel)
+    {
+        string category = ProgressAtlasCatalog.QuestCategoryName(kind);
+        if (!ImGui.CollapsingHeader($"{category} ({targets.Count})###AtlasExpansionQuest{expansion}{kind}"))
+            return;
+
+        if (!ImGui.BeginTable($"###AtlasQuestTable{expansion}{kind}", 4,
+                ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+            return;
+        ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 120f);
+        ImGui.TableSetupColumn("Quest", ImGuiTableColumnFlags.WidthStretch, .38f);
+        ImGui.TableSetupColumn("What is needed", ImGuiTableColumnFlags.WidthStretch, .62f);
+        ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 150f);
+        ImGui.TableHeadersRow();
+        foreach (ProgressAtlasQuestTarget target in targets)
+        {
+            ProgressAtlasQuestObservation observation = progressionProviders.ObserveAtlasQuest(target, currentLevel);
+            if (progressAtlasRemainingOnly && observation.State == ProgressAtlasEntryState.Complete)
+                continue;
+
+            ImGui.TableNextRow();
+            ImGui.TableNextColumn();
+            ImGui.TextColored(AtlasStateColor(observation.State), ProgressAtlasCatalog.StateLabel(observation.State));
+            ImGui.TableNextColumn();
+            ImGui.TextWrapped(target.Name);
+            ImGui.TextColored(NexusTheme.Muted, $"Level {target.RequiredLevel} • Quest {target.QuestId}");
+            ImGui.TableNextColumn();
+            ImGui.TextWrapped(observation.Detail);
+            ImGui.TableNextColumn();
+            if (observation.CanStart)
+            {
+                ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                string action = observation.State == ProgressAtlasEntryState.InProgress ? "Continue" : "Start";
+                if (ImGui.SmallButton($"{action}###AtlasCatalogQuest{target.QuestId}"))
+                {
+                    ProgressionQuestStartResult result = progressionProviders.StartAtlasQuest(target, currentLevel);
+                    progressAtlasMessage = result.Message;
+                }
+                ImGui.EndDisabled();
+            }
+        }
+        ImGui.EndTable();
+    }
+
+    private void DrawAtlasDutyCategory(
+        string expansion,
+        string category,
+        IReadOnlyList<ProgressAtlasDutyTarget> targets,
+        int currentLevel)
+    {
+        if (!ImGui.CollapsingHeader($"{category} ({targets.Count})###AtlasExpansionDuty{expansion}{category}"))
+            return;
+
+        if (!ImGui.BeginTable($"###AtlasDutyTable{expansion}{category}", 4,
+                ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+            return;
+        ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 120f);
+        ImGui.TableSetupColumn("Duty", ImGuiTableColumnFlags.WidthStretch, .42f);
+        ImGui.TableSetupColumn("Unlock / requirements", ImGuiTableColumnFlags.WidthStretch, .58f);
+        ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 150f);
+        ImGui.TableHeadersRow();
+        foreach (ProgressAtlasDutyTarget target in targets)
+        {
+            ProgressAtlasDutyObservation observation = progressionProviders.ObserveAtlasDuty(target, currentLevel);
+            if (progressAtlasRemainingOnly && observation.State == ProgressAtlasEntryState.Complete)
+                continue;
+
+            ImGui.TableNextRow();
+            ImGui.TableNextColumn();
+            ImGui.TextColored(AtlasStateColor(observation.State), ProgressAtlasCatalog.StateLabel(observation.State));
+            ImGui.TableNextColumn();
+            ImGui.TextWrapped(target.Name);
+            ImGui.TableNextColumn();
+            string requirements = $"Level {target.RequiredLevel}" +
+                                  (target.RequiredItemLevel > 0 ? $" • Item level {target.RequiredItemLevel}" : string.Empty);
+            ImGui.TextWrapped($"{observation.Detail} {requirements}");
+            ImGui.TableNextColumn();
+            if (observation.CanStartUnlockQuest)
+            {
+                ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                if (ImGui.SmallButton($"Start unlock quest###AtlasCatalogDutyUnlock{target.ContentFinderConditionId}"))
+                {
+                    ProgressionQuestStartResult result = progressionProviders
+                        .StartAtlasDutyUnlockQuest(target, currentLevel);
+                    progressAtlasMessage = result.Message;
+                }
+                ImGui.EndDisabled();
+            }
+            else if (observation.CanRun)
+            {
+                ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                if (ImGui.SmallButton($"Run with AutoDuty###AtlasCatalogDuty{target.ContentFinderConditionId}"))
+                    progressionProviders.StartAtlasDuty(target, currentLevel, out progressAtlasMessage);
+                ImGui.EndDisabled();
+            }
+            else if (observation.State is ProgressAtlasEntryState.Complete or ProgressAtlasEntryState.Ready)
+            {
+                ImGui.TextColored(NexusTheme.Muted, "Use Duty Finder");
+            }
+        }
+        ImGui.EndTable();
+    }
+
+    private void DrawAtlasTravelCategories(string expansion)
+    {
+        var aetherytes = progressAtlas.AetheryteTargets
+            .Where(item => item.Expansion == expansion)
+            .Where(item => AtlasMatches(item.Name, item.TerritoryName, item.Expansion))
+            .ToArray();
+        if (aetherytes.Length > 0 && ImGui.CollapsingHeader(
+                $"Aetherytes & Aethernet ({aetherytes.Length})###AtlasExpansionTravel{expansion}"))
+        {
+            foreach (var target in aetherytes)
+            {
+                bool complete = ProgressAtlasService.IsAetheryteUnlocked(target.Id);
+                if (progressAtlasRemainingOnly && complete)
+                    continue;
+                bool reachable = progressAtlasActions.CanReachTerritory(target.TerritoryId);
+                ImGui.TextColored(complete ? NexusTheme.Green : reachable ? NexusTheme.Cyan : NexusTheme.Muted,
+                    complete ? "Attuned" : reachable ? "Ready" : "Locked");
+                if (!complete && reachable)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                    if (ImGui.SmallButton($"Go Here###AtlasExpansionAetheryte{target.Id}"))
+                        progressAtlasActions.StartAetheryte(target, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
+                ImGui.SameLine();
+                ImGui.TextWrapped($"{target.Name} — {target.TerritoryName}");
+            }
+        }
+
+        var currents = progressAtlas.AetherCurrentTargets.Where(item => item.Expansion == expansion).ToArray();
+        var currentQuests = progressAtlas.AetherCurrentQuestTargets.Where(item => item.Expansion == expansion).ToArray();
+        if (currents.Length + currentQuests.Length > 0 && ImGui.CollapsingHeader(
+                $"Aether Currents ({currents.Length + currentQuests.Length})###AtlasExpansionCurrents{expansion}"))
+        {
+            foreach (var target in currents)
+            {
+                bool complete = ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId);
+                if (progressAtlasRemainingOnly && complete)
+                    continue;
+                bool reachable = progressAtlasActions.CanReachTerritory(target.TerritoryId);
+                ImGui.TextColored(complete ? NexusTheme.Green : reachable ? NexusTheme.Cyan : NexusTheme.Muted,
+                    complete ? "Collected" : reachable ? "Ready" : "Locked");
+                if (!complete && reachable)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                    if (ImGui.SmallButton($"Go Here###AtlasExpansionCurrent{target.AetherCurrentId}"))
+                        progressAtlasActions.StartFieldCurrent(target, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
+                ImGui.SameLine();
+                ImGui.TextWrapped(target.TerritoryName);
+            }
+            foreach (var target in currentQuests)
+            {
+                bool complete = ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId);
+                if (progressAtlasRemainingOnly && complete)
+                    continue;
+                ImGui.TextColored(complete ? NexusTheme.Green : NexusTheme.Amber,
+                    complete ? "Complete" : $"Level {target.RequiredLevel}");
+                if (!complete)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                    if (ImGui.SmallButton($"Start###AtlasExpansionCurrentQuest{target.QuestId}"))
+                        progressAtlasActions.StartAetherCurrentQuest(target, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
+                ImGui.SameLine();
+                ImGui.TextWrapped($"{target.QuestName} — {target.TerritoryName}");
+            }
+        }
+
+        var exploration = progressAtlas.ExplorationTargets
+            .Where(item => item.Expansion == expansion && !item.IsDuty)
+            .Where(item => AtlasMatches(item.Name, item.TerritoryName, item.Expansion))
+            .ToArray();
+        if (exploration.Length > 0 && ImGui.CollapsingHeader(
+                $"World Exploration ({exploration.Length})###AtlasExpansionExploration{expansion}"))
+        {
+            foreach (var target in exploration)
+            {
+                bool complete = ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId);
+                if (progressAtlasRemainingOnly && complete)
+                    continue;
+                bool reachable = progressAtlasActions.CanReachTerritory(target.TerritoryId);
+                ImGui.TextColored(complete ? NexusTheme.Green : reachable ? NexusTheme.Cyan : NexusTheme.Muted,
+                    complete ? "Discovered" : reachable ? "Ready" : "Locked");
+                if (!complete && reachable && target.Positions.FirstOrDefault() is { } position)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                    if (ImGui.SmallButton($"Go Here###AtlasExpansionExplore{target.MapId}-{target.DiscoveryId}"))
+                        progressAtlasActions.StartExploration(target, position, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
+                ImGui.SameLine();
+                ImGui.TextWrapped($"{target.Name} — {target.TerritoryName}");
+            }
+        }
+
+        var dutyExploration = progressAtlas.ExplorationTargets
+            .Where(item => item.Expansion == expansion && item.IsDuty)
+            .Where(item => AtlasMatches(item.Name, item.TerritoryName, item.Expansion, "Duty Exploration"))
+            .ToArray();
+        if (dutyExploration.Length > 0 && ImGui.CollapsingHeader(
+                $"Duty Exploration ({dutyExploration.Length})###AtlasExpansionDutyExploration{expansion}"))
+        {
+            foreach (var target in dutyExploration)
+            {
+                bool complete = ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId);
+                if (progressAtlasRemainingOnly && complete)
+                    continue;
+
+                bool inside = Plugin.ClientState.TerritoryType == target.TerritoryId;
+                bool unlocked = target.ContentId != 0 && IsInstanceContentUnlocked(target.ContentId);
+                ImGui.TextColored(complete ? NexusTheme.Green : inside ? NexusTheme.Cyan :
+                    unlocked ? NexusTheme.Gold : NexusTheme.Muted,
+                    complete ? "Discovered" : inside ? "Ready" : unlocked ? "Unlocked" : "Locked");
+                if (!complete && inside && target.Positions.FirstOrDefault() is { } position)
+                {
+                    ImGui.SameLine();
+                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                    if (ImGui.SmallButton($"Go Here###AtlasExpansionDutyExplore{target.MapId}-{target.DiscoveryId}"))
+                        progressAtlasActions.StartExploration(target, position, out progressAtlasMessage);
+                    ImGui.EndDisabled();
+                }
+                else if (!complete && unlocked)
+                {
+                    ProgressAtlasDutyTarget? duty = progressionProviders.AtlasDutyTargets
+                        .FirstOrDefault(item => item.ContentFinderConditionId == target.ContentFinderConditionId);
+                    if (duty is not null && progressionProviders.ObserveAtlasDuty(duty, world.Current.Character.Value?.Level ?? 0).CanRun)
+                    {
+                        ImGui.SameLine();
+                        ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                        if (ImGui.SmallButton($"Run with AutoDuty###AtlasExpansionDutyExploreRun{target.ContentFinderConditionId}"))
+                            progressionProviders.StartAtlasDuty(duty, world.Current.Character.Value?.Level ?? 0,
+                                out progressAtlasMessage);
+                        ImGui.EndDisabled();
+                    }
+                    else
+                    {
+                        ImGui.SameLine();
+                        ImGui.TextColored(NexusTheme.Muted, "Enter through Duty Finder");
+                    }
+                }
+                ImGui.SameLine();
+                ImGui.TextWrapped($"{target.Name} — {target.TerritoryName}");
+            }
+        }
+    }
+
+    private static unsafe bool IsInstanceContentUnlocked(uint contentId) =>
+        FFXIVClientStructs.FFXIV.Client.Game.UI.UIState.Instance() is not null &&
+        FFXIVClientStructs.FFXIV.Client.Game.UI.UIState.IsInstanceContentUnlocked(contentId);
+
+    private static Vector4 AtlasStateColor(ProgressAtlasEntryState state) => state switch
+    {
+        ProgressAtlasEntryState.Complete => NexusTheme.Green,
+        ProgressAtlasEntryState.InProgress => NexusTheme.Cyan,
+        ProgressAtlasEntryState.Ready => NexusTheme.Gold,
+        ProgressAtlasEntryState.Unsupported => NexusTheme.Red,
+        ProgressAtlasEntryState.ProviderUnavailable => NexusTheme.Red,
+        ProgressAtlasEntryState.Loading => NexusTheme.Cyan,
+        _ => NexusTheme.Muted,
+    };
 
     private void DrawAetheryteAtlasDetails()
     {

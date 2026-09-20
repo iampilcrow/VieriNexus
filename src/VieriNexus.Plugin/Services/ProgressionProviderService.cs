@@ -29,6 +29,14 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly IClientState clientState;
     private readonly IPlayerState playerState;
     private readonly HashSet<uint> aetherCurrentQuestIds;
+    private readonly Quest[] atlasQuestRows;
+    private readonly Dictionary<uint, uint> atlasQuestChapters;
+    private readonly HashSet<uint> allClassJobRoleChapters;
+    private readonly ProgressAtlasDutyTarget[] atlasDutyTargets;
+    private readonly Dictionary<uint, IReadOnlyList<ProgressAtlasQuestTarget>> atlasQuestTargetsByClassJob = [];
+    private readonly Dictionary<string, (long ExpiresAt, ProgressAtlasQuestObservation Observation)> atlasQuestObservations = [];
+    private long atlasObservationBudgetWindow;
+    private int atlasObservationBudgetUsed;
     private readonly ICallGateSubscriber<bool> questionableIsRunning;
     private readonly QuestionableCompatibilityService questionableCompatibility;
     private readonly ICallGateSubscriber<string?> questionableCurrentQuest;
@@ -101,6 +109,50 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             .Where(current => current.RowId > 0 && current.Value.Quest.RowId > 0)
             .Select(current => current.Value.Quest.RowId & 0xFFFF)
             .ToHashSet();
+        atlasQuestRows = dataManager.GetExcelSheet<Quest>()
+            .Where(quest => quest.RowId > 0 && quest.IssuerLocation.RowId > 0)
+            .ToArray();
+        atlasQuestChapters = dataManager.GetExcelSheet<QuestChapter>()
+            .Where(row => row.RowId > 0 && row.Quest.RowId > 0)
+            .GroupBy(row => row.Quest.RowId)
+            .ToDictionary(group => group.Key, group => group.First().Redo.RowId);
+        allClassJobRoleChapters = Enumerable.Range(1, 43)
+            .SelectMany(id => ClassJobRoleQuestPolicy.Chapters((uint)id))
+            .ToHashSet();
+        Dictionary<uint, Quest> dutyUnlockQuests = atlasQuestRows
+            .Select(quest => (Quest: quest,
+                ContentFinderConditionId:
+                quest.InstanceContentUnlock.ValueNullable?.ContentFinderCondition.RowId ?? 0))
+            .Where(item => item.ContentFinderConditionId > 0)
+            .GroupBy(item => item.ContentFinderConditionId)
+            .ToDictionary(group => group.Key, group => group.First().Quest);
+        atlasDutyTargets = dataManager.GetExcelSheet<ContentFinderCondition>()
+            .Where(row => row.RowId > 0 && row.TerritoryType.RowId > 0 && row.Content.RowId > 0 &&
+                          !row.Name.IsEmpty && row.ContentType.RowId is 2 or 3 or 4 or 5 or 21 or 28 or 30 or 37)
+            .Select(row => (Row: row, UnlockQuest: dutyUnlockQuests.GetValueOrDefault(row.RowId)))
+            .Select(item => new ProgressAtlasDutyTarget(
+                item.Row.RowId,
+                item.Row.TerritoryType.RowId,
+                item.Row.Content.RowId,
+                item.Row.Name.ExtractText(),
+                DutyCategoryName(item.Row.ContentType.RowId),
+                ProgressAtlasCatalog.ExpansionName(item.Row.TerritoryType.Value.ExVersion.RowId),
+                item.Row.ClassJobLevelRequired,
+                checked((int)item.Row.ItemLevelRequired),
+                item.UnlockQuest.RowId > 0
+                    ? ((ushort)(item.UnlockQuest.RowId & 0xFFFF)).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : null,
+                item.UnlockQuest.RowId > 0 ? item.UnlockQuest.Name.ExtractText() : null,
+                item.UnlockQuest.RowId > 0 ? item.UnlockQuest.ClassJobLevel[0] : 0,
+                item.UnlockQuest.RowId > 0 && item.UnlockQuest.JournalGenre.ValueNullable?.Icon == 61412
+                    ? ProgressionQuestKind.MainScenario
+                    : ProgressionQuestKind.GeneralSideQuest))
+            .DistinctBy(target => target.ContentFinderConditionId)
+            .OrderBy(target => ProgressAtlasCatalog.ExpansionOrder(target.Expansion))
+            .ThenBy(target => target.Category, StringComparer.CurrentCulture)
+            .ThenBy(target => target.RequiredLevel)
+            .ThenBy(target => target.Name, StringComparer.CurrentCulture)
+            .ToArray();
         this.questionableCompatibility = questionableCompatibility;
         questionableIsRunning = pluginInterface.GetIpcSubscriber<bool>("Questionable.IsRunning");
         questionableCurrentQuest = pluginInterface.GetIpcSubscriber<string?>("Questionable.GetCurrentQuestId");
@@ -364,6 +416,185 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         return eligibleQuestCache;
     }
 
+    internal IReadOnlyList<ProgressAtlasQuestTarget> AtlasQuestTargets(uint classJobId)
+    {
+        if (atlasQuestTargetsByClassJob.TryGetValue(classJobId, out IReadOnlyList<ProgressAtlasQuestTarget>? cached))
+            return cached;
+
+        HashSet<uint> currentChapters = ClassJobRoleQuestPolicy.Chapters(classJobId).ToHashSet();
+        cached = atlasQuestRows
+            .Select(quest => (Quest: quest, Kind: ClassifyQuest(
+                quest,
+                classJobId,
+                atlasQuestChapters.GetValueOrDefault(quest.RowId),
+                currentChapters,
+                allClassJobRoleChapters)))
+            .Where(item => item.Kind is not null)
+            .Select(item => new ProgressAtlasQuestTarget(
+                ((ushort)(item.Quest.RowId & 0xFFFF)).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                string.IsNullOrWhiteSpace(item.Quest.Name.ExtractText())
+                    ? $"Quest {item.Quest.RowId & 0xFFFF}"
+                    : item.Quest.Name.ExtractText(),
+                item.Quest.ClassJobLevel[0],
+                item.Kind!.Value,
+                ProgressAtlasCatalog.ExpansionName(item.Quest.Expansion.RowId)))
+            .DistinctBy(target => target.QuestId)
+            .OrderBy(target => ProgressAtlasCatalog.ExpansionOrder(target.Expansion))
+            .ThenBy(target => ProgressAtlasCatalog.QuestCategoryOrder(target.Kind))
+            .ThenBy(target => target.RequiredLevel)
+            .ThenBy(target => target.Name, StringComparer.CurrentCulture)
+            .ToArray();
+        atlasQuestTargetsByClassJob[classJobId] = cached;
+        return cached;
+    }
+
+    internal ProgressAtlasQuestObservation ObserveAtlasQuest(
+        ProgressAtlasQuestTarget target,
+        int currentLevel)
+    {
+        long now = Environment.TickCount64;
+        if (atlasQuestObservations.TryGetValue(target.QuestId, out var cached) && now < cached.ExpiresAt)
+            return cached.Observation;
+
+        if (now - atlasObservationBudgetWindow >= 100)
+        {
+            atlasObservationBudgetWindow = now;
+            atlasObservationBudgetUsed = 0;
+        }
+        if (atlasObservationBudgetUsed >= 12)
+            return new(ProgressAtlasEntryState.Loading,
+                "Reading this quest's live state from stock Questionable.", false);
+        atlasObservationBudgetUsed++;
+
+        ProgressionProviderSelection selection = Snapshot().Questing;
+        ProgressAtlasQuestObservation observation;
+        if (!selection.IsReady)
+        {
+            observation = new(ProgressAtlasEntryState.ProviderUnavailable, selection.Detail, false);
+        }
+        else if (unsupportedQuestIdsByProvider.GetValueOrDefault(selection.Selected!.Id.Value)?.Contains(target.QuestId) == true)
+        {
+            observation = new(ProgressAtlasEntryState.Unsupported,
+                "Stock Questionable does not currently provide a route for this quest.", false);
+        }
+        else
+        {
+            try
+            {
+                bool complete = questionableIsQuestComplete.InvokeFunc(target.QuestId);
+                bool accepted = !complete && questionableIsQuestAccepted.InvokeFunc(target.QuestId);
+                bool ready = !complete && !accepted && questionableIsReadyToAcceptQuest.InvokeFunc(target.QuestId);
+                bool locked = !complete && !accepted && questionableIsQuestLocked.InvokeFunc(target.QuestId);
+                observation = complete
+                    ? new(ProgressAtlasEntryState.Complete, "Completed on this character.", false)
+                    : accepted
+                        ? new(ProgressAtlasEntryState.InProgress,
+                            "Accepted and ready to continue through stock Questionable.", true)
+                        : target.RequiredLevel > currentLevel
+                            ? new(ProgressAtlasEntryState.Locked,
+                                $"Requires level {target.RequiredLevel}; current level is {currentLevel}.", false)
+                            : ready && !locked
+                                ? new(ProgressAtlasEntryState.Ready,
+                                    "Ready to start through stock Questionable.", true)
+                                : new(ProgressAtlasEntryState.Locked,
+                                    "Requires earlier story, class/job/role, travel, or quest progress.", false);
+            }
+            catch (Exception ex)
+            {
+                observation = new(ProgressAtlasEntryState.ProviderUnavailable,
+                    $"Questionable could not report this quest: {ex.Message}", false);
+            }
+        }
+
+        atlasQuestObservations[target.QuestId] = (now + 30_000, observation);
+        return observation;
+    }
+
+    internal ProgressionQuestStartResult StartAtlasQuest(ProgressAtlasQuestTarget target, int currentLevel)
+    {
+        ProgressAtlasQuestObservation observation = ObserveAtlasQuest(target, currentLevel);
+        if (!observation.CanStart)
+            return new(false, observation.State == ProgressAtlasEntryState.Unsupported, observation.Detail);
+
+        ProgressionQuestStartResult result = TryStartQuest(new ProgressionQuestCandidate(
+            target.QuestId,
+            target.Name,
+            target.RequiredLevel,
+            observation.State == ProgressAtlasEntryState.InProgress,
+            target.Kind));
+        atlasQuestObservations.Remove(target.QuestId);
+        return result;
+    }
+
+    internal IReadOnlyList<ProgressAtlasDutyTarget> AtlasDutyTargets => atlasDutyTargets;
+
+    internal unsafe ProgressAtlasDutyObservation ObserveAtlasDuty(
+        ProgressAtlasDutyTarget target,
+        int currentLevel)
+    {
+        if (UIState.Instance() is null)
+            return new(ProgressAtlasEntryState.ProviderUnavailable,
+                "Waiting for this character's duty-unlock state.", false);
+
+        bool unlocked = UIState.IsInstanceContentUnlocked(target.ContentId);
+        bool completed = unlocked && UIState.IsInstanceContentCompleted(target.ContentId);
+        if (!unlocked)
+        {
+            if (target.UnlockQuestId is not null && target.UnlockQuestName is not null)
+            {
+                var unlockTarget = new ProgressAtlasQuestTarget(
+                    target.UnlockQuestId,
+                    target.UnlockQuestName,
+                    target.UnlockQuestLevel,
+                    target.UnlockQuestKind,
+                    target.Expansion);
+                ProgressAtlasQuestObservation quest = ObserveAtlasQuest(unlockTarget, currentLevel);
+                string detail = quest.State == ProgressAtlasEntryState.Complete
+                    ? $"Unlock quest \"{target.UnlockQuestName}\" is complete; finish its related unlock conversation or prerequisite duty."
+                    : $"Unlock quest: \"{target.UnlockQuestName}\". {quest.Detail}";
+                return new(ProgressAtlasEntryState.Locked, detail, false, quest.CanStart);
+            }
+            string level = target.RequiredLevel > currentLevel
+                ? $" Requires level {target.RequiredLevel}; current level is {currentLevel}."
+                : string.Empty;
+            return new(ProgressAtlasEntryState.Locked,
+                $"Requires its unlock quest or prerequisite duty chain.{level}", false);
+        }
+
+        ProgressionDutyCandidate? runnable = EligibleDutyForTerritory(target.TerritoryId, currentLevel);
+        return new(
+            completed ? ProgressAtlasEntryState.Complete : ProgressAtlasEntryState.Ready,
+            completed ? "Unlocked and cleared." : "Unlocked; not yet cleared.",
+            runnable is not null);
+    }
+
+    internal bool StartAtlasDuty(ProgressAtlasDutyTarget target, int currentLevel, out string message)
+    {
+        ProgressAtlasDutyObservation observation = ObserveAtlasDuty(target, currentLevel);
+        if (!observation.CanRun)
+        {
+            message = observation.State is ProgressAtlasEntryState.Complete or ProgressAtlasEntryState.Ready
+                ? "This duty is unlocked, but stock AutoDuty does not expose a runnable path for it. Use the stock Duty Finder."
+                : observation.Detail;
+            return false;
+        }
+        return TryStartDuty(target.TerritoryId, out message);
+    }
+
+    internal ProgressionQuestStartResult StartAtlasDutyUnlockQuest(
+        ProgressAtlasDutyTarget target,
+        int currentLevel)
+    {
+        if (target.UnlockQuestId is null || target.UnlockQuestName is null)
+            return new(false, false, "No exact unlock quest is known for this duty.");
+        return StartAtlasQuest(new ProgressAtlasQuestTarget(
+            target.UnlockQuestId,
+            target.UnlockQuestName,
+            target.UnlockQuestLevel,
+            target.UnlockQuestKind,
+            target.Expansion), currentLevel);
+    }
+
     internal IReadOnlyList<ProgressionQuestCandidate> EligibleAetherCurrentQuests(
         IReadOnlyList<ProgressAtlasService.AetherCurrentQuestAtlasTarget> targets,
         int currentLevel)
@@ -533,6 +764,19 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             ? ProgressionQuestKind.GeneralSideQuest
             : null;
     }
+
+    private static string DutyCategoryName(uint contentTypeId) => contentTypeId switch
+    {
+        2 => "Dungeon Unlocks",
+        3 => "Guildhest Unlocks",
+        4 => "Trial Unlocks",
+        5 => "Raid & Alliance Raid Unlocks",
+        21 => "Deep Dungeon Unlocks",
+        28 => "Ultimate Raid Unlocks",
+        30 => "Variant & Criterion Dungeon Unlocks",
+        37 => "Chaotic Alliance Raid Unlocks",
+        _ => "Other Duty Unlocks",
+    };
 
     private static bool QuestAllowsClassJob(Quest quest, uint classJobId)
     {

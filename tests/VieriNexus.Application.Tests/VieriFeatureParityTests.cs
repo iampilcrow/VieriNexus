@@ -14,6 +14,8 @@ public sealed class VieriFeatureParityTests
     [InlineData("Hunting & Grand Company Logs")]
     [InlineData("Side Quests")]
     [InlineData("Achievements")]
+    [InlineData("Expansion-organized quest and duty Progress Atlas")]
+    [InlineData("Duty exploration")]
     [InlineData("Multi-job automation queue")]
     public void CodexCustomFeaturesHaveExplicitNexusDestinations(string feature)
     {

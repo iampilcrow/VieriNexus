@@ -144,11 +144,21 @@ internal sealed class ProgressAtlasService
             .OrderBy(target => target.Category, StringComparer.CurrentCulture)
             .ThenBy(target => target.Name, StringComparer.CurrentCulture)
             .ToArray();
+        Dictionary<uint, ContentFinderCondition> dutiesByTerritory = dataManager
+            .GetExcelSheet<ContentFinderCondition>()
+            .Where(row => row.RowId > 0 && row.TerritoryType.RowId > 0 && row.Content.RowId > 0 &&
+                          row.ContentType.RowId is 2 or 3 or 4 or 5 or 21 or 28 or 30 or 37)
+            .GroupBy(row => row.TerritoryType.RowId)
+            .ToDictionary(group => group.Key, group => group.First());
         mapDiscoveryRegions = BuildMapDiscoveryRegions(dataManager)
-            .Select(target => target with
+            .Select(target => (Target: target, Duty: dutiesByTerritory.GetValueOrDefault(target.TerritoryId)))
+            .Select(item => item.Target with
             {
-                TerritoryName = territories.GetValueOrDefault(target.TerritoryId)?.Name ?? $"Territory {target.TerritoryId}",
-                Expansion = territories.GetValueOrDefault(target.TerritoryId)?.Expansion ?? "Other",
+                TerritoryName = territories.GetValueOrDefault(item.Target.TerritoryId)?.Name ?? $"Territory {item.Target.TerritoryId}",
+                Expansion = territories.GetValueOrDefault(item.Target.TerritoryId)?.Expansion ?? "Other",
+                IsDuty = item.Duty.RowId > 0,
+                ContentFinderConditionId = item.Duty.RowId,
+                ContentId = item.Duty.Content.RowId,
             }).ToArray();
         huntingLogCatalog = LoadHuntingLogCatalog();
         current = Empty(DateTimeOffset.MinValue);
@@ -268,12 +278,12 @@ internal sealed class ProgressAtlasService
                     : "Requesting this character's completed-achievement list from the game."),
             ProgressAtlasModel.Category(
                 ProgressAtlasCategoryId.Exploration,
-                "World Exploration",
+                "World & Duty Exploration",
                 discoveredRegions,
                 mapDiscoveryRegions.Length,
                 explorationLoaded,
                 explorationLoaded
-                    ? "Mapping and Remapping the Realm regions are discovered from the current game world catalog."
+                    ? "Mapping and Remapping the Realm regions are discovered from the current world and duty catalogs."
                     : "Waiting for this character's map-discovery state."),
             ProgressAtlasModel.Category(
                 ProgressAtlasCategoryId.HuntingLogs,
@@ -296,7 +306,7 @@ internal sealed class ProgressAtlasService
                 aetherCurrentIds?.Length ?? 0, false, "Log in to load this character's Aether Currents."),
             ProgressAtlasModel.Category(ProgressAtlasCategoryId.Achievements, "Achievements", 0,
                 achievementIds?.Length ?? 0, false, "Log in to load this character's achievements."),
-            ProgressAtlasModel.Category(ProgressAtlasCategoryId.Exploration, "World Exploration", 0,
+            ProgressAtlasModel.Category(ProgressAtlasCategoryId.Exploration, "World & Duty Exploration", 0,
                 mapDiscoveryRegions?.Length ?? 0, false, "Log in to load this character's map discoveries."),
             ProgressAtlasModel.Category(ProgressAtlasCategoryId.HuntingLogs, "Hunting & Grand Company Logs", 0,
                 0, false, "Log in to load the current class and Grand Company logs."),
@@ -535,6 +545,9 @@ internal sealed class ProgressAtlasService
     {
         internal string TerritoryName { get; init; } = string.Empty;
         internal string Expansion { get; init; } = "Other";
+        internal bool IsDuty { get; init; }
+        internal uint ContentFinderConditionId { get; init; }
+        internal uint ContentId { get; init; }
     }
 
     internal sealed record AchievementAtlasTarget(

@@ -32,6 +32,8 @@ public static class VieriFeatureParity
         new("VieriCodex", "Hunting & Grand Company Logs", VieriFeatureOwnership.Nexus, "Automation and Progress Atlas"),
         new("VieriCodex", "Side Quests", VieriFeatureOwnership.Nexus, "Automation"),
         new("VieriCodex", "Achievements", VieriFeatureOwnership.Nexus, "Automation and Progress Atlas"),
+        new("VieriCodex", "Expansion-organized quest and duty Progress Atlas", VieriFeatureOwnership.Nexus, "Progress Atlas"),
+        new("VieriCodex", "Duty exploration", VieriFeatureOwnership.Nexus, "Progress Atlas"),
         new("VieriCodex", "Multi-job automation queue", VieriFeatureOwnership.Nexus, "Automation"),
         new("VieriCodex", "Quest execution and native quest tools", VieriFeatureOwnership.StockProvider, "Questionable"),
 
