@@ -2,9 +2,13 @@
 
 Working snapshot: 2026-09-20 (America/New_York)
 Repository: `D:\FFXIV Plugins\VieriNexus`  
-Current product version: `0.1.0.88`
-Current published source: `0.1.0.88`, source `2441570e8cae9789592c428e1c8af34b3de5a3d7`, website release `ed3bfa9e3d7ae6ce472bfe431c2833e84875b9f9`, Vercel deployment `9HBeSkcty6MCPJFjrWBS3icTg2g8` / GitHub production deployment `6552893606`. Focused live verification passed for runtime/source HTTP availability, ZIP validity, and exact SHA-256 `EBD767DD4E1E3D04B3E41A6ED138479C2B1412DB3FB4BDA99DC37E3121BC891C` / `EAA6689B5D523AEE58DF246FA11AC497D4331942652995E91AEB0E603160805D`; Discord workflow `35511407526` succeeded. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
-Current workstream: version 0.1.0.88 combines the 0.1.0.87 outdoor movement restoration with an exact source-to-source VieriAutoDuty overlay audit. After Lifestream reaches an outdoor vendor territory, Nexus checks the character's actual Aether Current completion for that zone, mounts, confirms takeoff, and only then dispatches the flying vnavmesh leg; locked or failed flight preparation safely falls back to ground instead of parking at the arrival Aetheryte. Goto -> Inn now resolves the active character's Grand Company and passes Lifestream the explicit Maelstrom, Twin Adder, or Immortal Flames inn index, matching the predecessor instead of allowing a nullable shortcut to choose a different suite. Goto -> Barracks now travels to the exact company door, interacts, confirms entry, and verifies the barracks interior instead of stopping outside. Automatic Return to Inn uses the same exact company mapping. The imported Override Overlay Buttons setting and every Vieri button enablement rule are preserved, the striking-dummy catalog label/order drift is removed, and overlay travel continues updating even when the window is not drawing. Version 0.1.0.86's one-click Gear -> Shop for Upgrades action and all prior protected shopping, maintenance, Atlas, and provider behavior remain intact. The overall consolidation remains subject to the non-negotiable source-to-source parity gate below.
+Final local product version: `0.1.0.88`
+Distribution status: **retired from the live Dalamud feed by explicit user decision on 2026-09-20.** The local repository and historical packages remain available for reference and recovery, but VieriNexus must not be republished unless the user explicitly reverses this decision.
+Current maintenance model: the standalone Vieri products are authoritative again. VieriCodex integrates Questionable updates while preserving its custom dashboard, Progress Atlas, queue, routes, and automation. VieriAutoDuty integrates AutoDuty updates while preserving the complete Vieri overlay, vendor routes, gear/inventory maintenance, minion/orchestrion handling, striking dummies, Last Run, settings, and IPC. VieriRotationHelper integrates Wrath Combo updates while preserving the Vieri suggestion bars, switch overlay, hotkeys, forecast safety, settings migration, and compatibility IPC. Boss Mod, vnavmesh, and Lifestream remain external IPC providers and are not source-vendored into those products.
+
+The 2026-09-20 maintenance baseline is VieriCodex `1.12.2.83` / source `5a6806a0d` over Questionable `15.756.3.9`; VieriAutoDuty `1.0.0.445` / source `ab8c4761` over AutoDuty `0.0.0.346`; and VieriRotationHelper `2.0.0.12` / source `6cbd001` over Wrath Combo `1.0.4.25` plus WrathCombo.API `0.5.8`. The live feed also retires `MarkerIconPriority` (VieriMarkerIcon), `WrathSwitch` (VieriWrathSwitch), and `VieriHildaLayer`; their local repositories remain untouched. The unrelated untracked `rustdesk-1.4.9-x86_64.exe` remains untouched.
+
+Everything below this retirement notice is retained as historical implementation and design context. Statements describing Nexus as the future or only installed Vieri product are superseded by this decision.
 
 ### Non-negotiable predecessor parity completion gate
 
@@ -26,7 +30,7 @@ The repository is authoritative for what exists today. The recovered conversatio
 
 ### Name and purpose
 
-`VieriNexus` is the permanent product and Dalamud internal name for the planned unified Vieri FFXIV suite. It is intended to replace the separately installed Vieri plugins with one coherent, modular Dalamud package. It is not intended to be a launcher for separate plugins, a collection of embedded predecessor windows, or one giant controller.
+`VieriNexus` was the attempted unified Vieri FFXIV suite. On 2026-09-20 the user ended that consolidation effort and restored the standalone products as the supported model. Nexus is retained locally as historical/reference source only and is no longer distributed through Dalamud.
 
 The current production line is the unified Vieri runtime. Versions 0.1.0.4 through 0.1.0.60 established transactional migration, Nexus-owned routes, progression and multi-job queueing, native gear and maintenance transactions, Progress Atlas, stock Questionable compatibility, the favorites-first Plugins page, the compact operations overlay, Fast Job Switcher integration, and correct player-facing job names. Version 0.1.0.61 packages the remaining custom Rotation, Positional, HUD, Market, and Link engines inside Nexus with isolated dependencies and settings. Versions 0.1.0.62-63 complete deterministic stock AutoDuty coexistence, overlay restoration, and verified maintenance/gear replanning. Version 0.1.0.64 unifies Automation, restores detailed Atlas and overlay parity, and hardens stock-provider setup and post-load travel. Version 0.1.0.65 makes the embedded HUD input-safe and corrects embedded-provider host discovery. Version 0.1.0.66 completes one-click dependency setup and removes fixed-height dependency-card clipping. Version 0.1.0.67 makes Nexus the single settings and duty-control presentation while stock Wrath and AutoDuty remain replaceable mechanics providers. Version 0.1.0.68 simplifies Combat to three user-facing sections and restores the complete multi-icon forecast while stock Wrath remains the sole action-replacement provider. Versions 0.1.0.69-76 refine naming, provider identity, overlay parity, post-teleport gear travel, World Progression, and executable achievement coverage. Version 0.1.0.77 exposes every embedded custom settings surface inside Nexus and establishes a tested predecessor-feature/stock-provider parity contract. Version 0.1.0.78 restores the expansion-organized VieriCodex Progress Atlas and delegates exact quest/duty execution to stock Questionable and AutoDuty. Version 0.1.0.79 restores VieriCodex One Click Navigation and shares it with the compact overlay over stock Lifestream and vnavmesh. Version 0.1.0.80 completes that feature's transactional shortcut migration, automatic promotion, and rollback. Version 0.1.0.81 restores destination-aware Aetheryte/Aethernet selection for cross-zone route arrivals. Version 0.1.0.82 makes live duty-catalog discovery fail-safe so incomplete dynamic game-data rows cannot prevent Nexus from loading. VieriDeck and VieriCodex are retired runtime products; after per-computer preparation, the remaining standalone Vieri plugins can be disabled while stock Questionable and stock AutoDuty provide ordinary quest/duty mechanics.
 
@@ -36,7 +40,7 @@ The complete VieriCodex migration scope—Hunting and Grand Company logs, Aether
 
 ### Product vision
 
-The long-term experience is outcome-driven. A user should state a durable desired result—such as reaching a job level, acquiring items, completing achievements, finishing a relic, earning currency, or completing recurring activities—and Nexus should:
+The historical Nexus design was outcome-driven. A user would state a durable desired result—such as reaching a job level, acquiring items, completing achievements, finishing a relic, earning currency, or completing recurring activities—and Nexus would:
 
 1. Observe the actual character/world state.
 2. Resolve prerequisites and constraints.
@@ -60,10 +64,10 @@ The intended architectural style is a **modular monolith**: one installed `Vieri
 
 ### Long-term direction
 
-The final installed topology is:
+The superseded planned installed topology was:
 
 ```text
-VieriNexus (the only installed Vieri product)
+VieriNexus (the only installed Vieri product; superseded/retired)
   + genuine external providers required by enabled modules
 ```
 
