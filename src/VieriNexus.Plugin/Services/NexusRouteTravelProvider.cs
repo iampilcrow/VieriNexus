@@ -376,10 +376,23 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
             request,
             authoredPointIndex,
             FlightPathSupported(request.TerritoryId));
+        // Preserve VieriAutoDuty's proven vendor behavior: short approaches must stay on the
+        // ground. Asking vnavmesh for a flight path across a counter or a few nearby yalms can
+        // leave its asynchronous path calculation pending forever and block both manual shopping
+        // and the duty preflight that is waiting for gear readiness.
+        float directDistance = Plugin.ObjectTable.LocalPlayer is { } player
+            ? Vector3.Distance(
+                player.Position,
+                new Vector3(leg.Destination.X, leg.Destination.Y, leg.Destination.Z))
+            : float.MaxValue;
+        bool useFlight = NavigationAuthoredLegPolicy.ShouldUseFlightForLeg(
+            leg.UseFlight,
+            request.VendorTargetDataId != 0,
+            directDistance);
         if (leg.RequiresPathfinding)
-            navigation.StartPathfinding(leg.Destination, leg.UseFlight, leg.Tolerance);
+            navigation.StartPathfinding(leg.Destination, useFlight, leg.Tolerance);
         else
-            navigation.Start([leg.Destination], leg.UseFlight, leg.Tolerance);
+            navigation.Start([leg.Destination], useFlight, leg.Tolerance);
 
         observedMovement = false;
         phaseStartedAt = now;

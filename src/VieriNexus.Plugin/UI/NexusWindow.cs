@@ -3,6 +3,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using VieriNexus.Application;
 using VieriNexus.Domain;
 using VieriNexus.Services;
@@ -74,6 +75,8 @@ internal sealed class NexusWindow : Window
     private readonly HashSet<int> selectedGearUpgradeSlots = [];
     private string gearShoppingMessage = string.Empty;
     private string maintenanceMessage = string.Empty;
+    private int operationsCofferBlacklistItemId;
+    private string operationsCofferBlacklistLabel = string.Empty;
     private NexusItemTransactionPreview? protectedSalePreview;
     private string migrationQuickStartMessage = string.Empty;
     private string commandCenterSearch = string.Empty;
@@ -1589,6 +1592,7 @@ internal sealed class NexusWindow : Window
         if (!navigationLibrary.HasWorkingLibrary)
             DrawNavigationWorkingLibrary();
         DrawCompactNavigationStatus();
+        DrawCurrentRoutePosition();
         ImGui.Spacing();
 
         if (ImGui.CollapsingHeader("Add a built-in vendor route"))
@@ -1794,6 +1798,22 @@ internal sealed class NexusWindow : Window
         }
 
         NexusTheme.StatusDot(NexusTheme.Amber, authority.Message);
+    }
+
+    private void DrawCurrentRoutePosition()
+    {
+        if (Plugin.ObjectTable.LocalPlayer is not { } player)
+            return;
+        Vector3 position = player.Position;
+        ImGui.TextDisabled(
+            $"Current position • Territory {Plugin.ClientState.TerritoryType} • X {position.X:0.000}  Y {position.Y:0.000}  Z {position.Z:0.000}");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Copy###CopyCurrentRoutePosition"))
+        {
+            ImGui.SetClipboardText(
+                $"Territory {Plugin.ClientState.TerritoryType} | X {position.X:0.0000} | Y {position.Y:0.0000} | Z {position.Z:0.0000}");
+            routeOperationMessage = "Copied the current territory and coordinates.";
+        }
     }
 
     private void DrawRouteDetails(NavigationRouteSnapshot? route, bool showPointNumbers)
@@ -2918,7 +2938,230 @@ internal sealed class NexusWindow : Window
         if (profile?.Maintenance.InDutyMaintenance == true)
             TextWrapped(NexusTheme.Amber,
                 $"In-duty withdrawal policy is preserved at {profile.Maintenance.InDutyDurabilityPercent}% durability plus configured inventory pressure. It remains inactive until stock AutoDuty exposes a safe leave/resume contract; Nexus will not pretend Stop alone withdrew from a duty.");
+        if (profile is not null && ImGui.CollapsingHeader("Automation and maintenance settings"))
+            DrawOperationsProfileSettings(profile);
         EndAutoPanel();
+    }
+
+    private void DrawOperationsProfileSettings(AutoDutyProfileSnapshot profile)
+    {
+        AutoDutyMaintenancePolicy policy = profile.Maintenance;
+
+        void Toggle(string label, bool value, Func<AutoDutyMaintenancePolicy, bool, AutoDutyMaintenancePolicy> apply)
+        {
+            bool edited = value;
+            if (ImGui.Checkbox(label, ref edited))
+                UpdateOperationsProfile(profile, current => apply(current, edited));
+        }
+
+        void Number(string label, int value, int minimum, int maximum,
+            Func<AutoDutyMaintenancePolicy, int, AutoDutyMaintenancePolicy> apply)
+        {
+            int edited = value;
+            if (ImGui.InputInt(label, ref edited))
+                UpdateOperationsProfile(profile, current => apply(current, Math.Clamp(edited, minimum, maximum)));
+        }
+
+        ImGui.TextColored(NexusTheme.Gold, "GEAR");
+        Toggle("Buy verified vendor upgrades automatically", policy.AutoBuyVendorGear,
+            (value, enabled) => value with { AutoBuyVendorGear = enabled });
+        Toggle("Equip recommended gear automatically", policy.AutoEquipRecommendedGear,
+            (value, enabled) => value with { AutoEquipRecommendedGear = enabled });
+        Number("Minimum gil to keep for gear and maintenance", checked((int)Math.Min(policy.MinimumGilReserve, int.MaxValue)), 0, 999_999_999,
+            (value, amount) => value with { MinimumGilReserve = (uint)amount });
+
+        ImGui.Spacing();
+        ImGui.TextColored(NexusTheme.Gold, "REPAIR, EXTRACTION & COFFERS");
+        Toggle("Repair automatically", policy.AutoRepair,
+            (value, enabled) => value with { AutoRepair = enabled });
+        Number("Repair below durability percent", checked((int)policy.RepairBelowPercent), 1, 100,
+            (value, amount) => value with { RepairBelowPercent = (uint)amount });
+        Toggle("Use self-repair", policy.RepairWithCrafter,
+            (value, enabled) => value with { RepairWithCrafter = enabled });
+        Toggle("Extract materia automatically", policy.AutoExtract,
+            (value, enabled) => value with { AutoExtract = enabled });
+        Toggle("Extract from all equipment categories", policy.ExtractAllCategories,
+            (value, enabled) => value with { ExtractAllCategories = enabled });
+        Toggle("Open coffers automatically", policy.AutoOpenCoffers,
+            (value, enabled) => value with { AutoOpenCoffers = enabled });
+        int cofferGearset = policy.CofferGearset ?? -1;
+        if (ImGui.InputInt("Coffer target gearset (-1 uses the current gearset)", ref cofferGearset))
+        {
+            cofferGearset = Math.Clamp(cofferGearset, -1, 99);
+            UpdateOperationsProfile(profile, value => value with
+            {
+                CofferGearset = cofferGearset < 0 ? null : checked((byte)cofferGearset),
+            });
+        }
+        Toggle("Use the coffer blacklist", policy.UseCofferBlacklist,
+            (value, enabled) => value with { UseCofferBlacklist = enabled });
+        if (policy.UseCofferBlacklist)
+        {
+            foreach ((uint itemId, string label) in policy.CofferBlacklist.OrderBy(item => item.Value))
+            {
+                ImGui.BulletText($"{label} ({itemId})");
+                ImGui.SameLine();
+                if (ImGui.SmallButton($"Remove###RemoveCofferBlacklist{itemId}"))
+                {
+                    Dictionary<uint, string> updated = policy.CofferBlacklist.ToDictionary();
+                    updated.Remove(itemId);
+                    UpdateOperationsProfile(profile, value => value with { CofferBlacklist = updated });
+                }
+            }
+            ImGui.SetNextItemWidth(150f);
+            ImGui.InputInt("Item ID###CofferBlacklistItem", ref operationsCofferBlacklistItemId);
+            ImGui.SetNextItemWidth(320f);
+            ImGui.InputTextWithHint("Label###CofferBlacklistLabel", "Optional name", ref operationsCofferBlacklistLabel, 128);
+            if (operationsCofferBlacklistItemId > 0 && ImGui.Button("Add coffer blacklist item"))
+            {
+                Dictionary<uint, string> updated = policy.CofferBlacklist.ToDictionary();
+                uint itemId = checked((uint)operationsCofferBlacklistItemId);
+                updated[itemId] = string.IsNullOrWhiteSpace(operationsCofferBlacklistLabel)
+                    ? $"Item {itemId}"
+                    : operationsCofferBlacklistLabel.Trim();
+                UpdateOperationsProfile(profile, value => value with { CofferBlacklist = updated });
+                operationsCofferBlacklistItemId = 0;
+                operationsCofferBlacklistLabel = string.Empty;
+            }
+        }
+
+        ImGui.Spacing();
+        ImGui.TextColored(NexusTheme.Gold, "DESYNTHESIS");
+        Toggle("Desynthesize automatically", policy.AutoDesynth,
+            (value, enabled) => value with { AutoDesynth = enabled });
+        Toggle("Prefer desynthesis skill gains", policy.DesynthForSkill,
+            (value, enabled) => value with { DesynthForSkill = enabled });
+        Number("Maximum desynthesis skill gap", policy.DesynthSkillGapLimit, 0, 1_000,
+            (value, amount) => value with { DesynthSkillGapLimit = amount });
+        Toggle("Desynthesize normal-quality items only", policy.DesynthNormalQualityOnly,
+            (value, enabled) => value with { DesynthNormalQualityOnly = enabled });
+        Toggle("Protect gearset items from desynthesis", policy.ProtectGearsetsFromDesynth,
+            (value, enabled) => value with { ProtectGearsetsFromDesynth = enabled });
+        if (ImGui.CollapsingHeader("Desynthesis equipment categories"))
+        {
+            AgentSalvage.SalvageItemCategory[] categories = Enum.GetValues<AgentSalvage.SalvageItemCategory>();
+            for (int index = 0; index < categories.Length; index++)
+            {
+                bool enabled = (policy.DesynthCategories & 1UL << index) != 0;
+                if (ImGui.Checkbox($"{categories[index]}###DesynthCategory{index}", ref enabled))
+                {
+                    ulong mask = enabled
+                        ? policy.DesynthCategories | 1UL << index
+                        : policy.DesynthCategories & ~(1UL << index);
+                    UpdateOperationsProfile(profile, value => value with { DesynthCategories = mask });
+                }
+            }
+        }
+
+        ImGui.Spacing();
+        ImGui.TextColored(NexusTheme.Gold, "INVENTORY & COLLECTIONS");
+        Toggle("Grand Company turn-ins", policy.AutoGrandCompanyTurnIn,
+            (value, enabled) => value with { AutoGrandCompanyTurnIn = enabled });
+        Toggle("Turn in when free slots are low", policy.TurnInAtFreeSlotThreshold,
+            (value, enabled) => value with { TurnInAtFreeSlotThreshold = enabled });
+        Number("Grand Company turn-in free-slot threshold", policy.TurnInFreeSlotThreshold, 1, 140,
+            (value, amount) => value with { TurnInFreeSlotThreshold = amount });
+        Toggle("Use Grand Company Aetheryte tickets", policy.UseGrandCompanyAetheryteTickets,
+            (value, enabled) => value with { UseGrandCompanyAetheryteTickets = enabled });
+        Toggle("Entrust eligible items to the Armoire", policy.EntrustArmoire,
+            (value, enabled) => value with { EntrustArmoire = enabled });
+        Toggle("Entrust eligible items to the Glamour Dresser", policy.EntrustGlamourChest,
+            (value, enabled) => value with { EntrustGlamourChest = enabled });
+        Toggle("Register Triple Triad cards", policy.RegisterTripleTriadCards,
+            (value, enabled) => value with { RegisterTripleTriadCards = enabled });
+        Toggle("Register minions", policy.RegisterMinions,
+            (value, enabled) => value with { RegisterMinions = enabled });
+        Toggle("Register orchestrion rolls", policy.RegisterOrchestrionRolls,
+            (value, enabled) => value with { RegisterOrchestrionRolls = enabled });
+        Toggle("Sell duplicate Triple Triad cards", policy.SellTripleTriadCards,
+            (value, enabled) => value with { SellTripleTriadCards = enabled });
+        Number("Minimum Triple Triad card count", policy.TripleTriadMinimumItemCount, 1, 999,
+            (value, amount) => value with { TripleTriadMinimumItemCount = amount });
+        Number("Minimum Triple Triad inventory slots", policy.TripleTriadMinimumFreeSlots, 1, 140,
+            (value, amount) => value with { TripleTriadMinimumFreeSlots = amount });
+
+        ImGui.Spacing();
+        ImGui.TextColored(NexusTheme.Gold, "SELLING");
+        Toggle("Sell eligible inventory automatically", policy.AutoSell,
+            (value, enabled) => value with { AutoSell = enabled });
+        string sellModeLabel = policy.AutoSellMode.Equals("AutoRetainerList", StringComparison.OrdinalIgnoreCase)
+            ? "AutoRetainer vendor list"
+            : "Market-prohibited equipment (built in)";
+        if (ImGui.BeginCombo("Selling rules", sellModeLabel))
+        {
+            if (ImGui.Selectable("Market-prohibited equipment (built in)",
+                    !policy.AutoSellMode.Equals("AutoRetainerList", StringComparison.OrdinalIgnoreCase)))
+                UpdateOperationsProfile(profile, value => value with { AutoSellMode = "UnneededEquipment" });
+            if (ImGui.Selectable("AutoRetainer vendor list",
+                    policy.AutoSellMode.Equals("AutoRetainerList", StringComparison.OrdinalIgnoreCase)))
+                UpdateOperationsProfile(profile, value => value with { AutoSellMode = "AutoRetainerList" });
+            ImGui.EndCombo();
+        }
+        Toggle("Sell when occupied slots reach the threshold", policy.SellAtOccupiedSlotThreshold,
+            (value, enabled) => value with { SellAtOccupiedSlotThreshold = enabled });
+        Number("Occupied-slot selling threshold", policy.SellOccupiedSlotThreshold, 1, 140,
+            (value, amount) => value with { SellOccupiedSlotThreshold = amount });
+        Toggle("Sell when bag usage reaches the threshold", policy.SellAtBagPercentThreshold,
+            (value, enabled) => value with { SellAtBagPercentThreshold = enabled });
+        Number("Bag usage selling threshold percent", policy.SellBagPercentThreshold, 1, 100,
+            (value, amount) => value with { SellBagPercentThreshold = amount });
+        Toggle("Protect gearset items from selling", policy.ProtectGearsetsFromSelling,
+            (value, enabled) => value with { ProtectGearsetsFromSelling = enabled });
+        Toggle("Extract materia before selling", policy.ExtractBeforeSelling,
+            (value, enabled) => value with { ExtractBeforeSelling = enabled });
+        Toggle("Desynthesize eligible items before selling", policy.DesynthBeforeSelling,
+            (value, enabled) => value with { DesynthBeforeSelling = enabled });
+        Toggle("Return to the inn after maintenance", policy.ReturnToInnAfterMaintenance,
+            (value, enabled) => value with { ReturnToInnAfterMaintenance = enabled });
+
+        ImGui.Spacing();
+        ImGui.TextColored(NexusTheme.Gold, "TRAVEL");
+        (uint Id, string Name)[] bells =
+        [
+            (0, "Grand Company inn"), (1, "Apartment"), (2, "Personal home"), (3, "Free Company estate"),
+            (129, "Limsa Lominsa Lower Decks"), (133, "Old Gridania"), (131, "Ul'dah — Steps of Thal"),
+            (419, "The Pillars"), (635, "Rhalgr's Reach"), (628, "Kugane"), (759, "The Doman Enclave"),
+            (819, "The Crystarium"), (820, "Eulmore"), (962, "Old Sharlayan"), (963, "Radz-at-Han"),
+            (1185, "Tuliyollal"), (1186, "Solution Nine"),
+        ];
+        string preferredBell = bells.FirstOrDefault(item => item.Id == profile.PreferredSummoningBell).Name
+                               ?? "Grand Company inn";
+        if (ImGui.BeginCombo("Preferred summoning bell", preferredBell))
+        {
+            foreach ((uint id, string name) in bells)
+                if (ImGui.Selectable(name, profile.PreferredSummoningBell == id))
+                    UpdateOperationsSnapshot(profile, current => current with { PreferredSummoningBell = id });
+            ImGui.EndCombo();
+        }
+
+        ImGui.Spacing();
+        ImGui.TextColored(NexusTheme.Gold, "IN-DUTY SAFETY");
+        Toggle("Allow configured between-run maintenance", policy.InDutyMaintenance,
+            (value, enabled) => value with { InDutyMaintenance = enabled });
+        Toggle("Withdraw for low durability", policy.WithdrawForDurability,
+            (value, enabled) => value with { WithdrawForDurability = enabled });
+        Number("Withdraw below durability percent", policy.InDutyDurabilityPercent, 1, 100,
+            (value, amount) => value with { InDutyDurabilityPercent = amount });
+        Toggle("Withdraw for inventory pressure", policy.WithdrawForInventory,
+            (value, enabled) => value with { WithdrawForInventory = enabled });
+    }
+
+    private void UpdateOperationsProfile(
+        AutoDutyProfileSnapshot profile,
+        Func<AutoDutyMaintenancePolicy, AutoDutyMaintenancePolicy> update)
+    {
+        ulong characterId = Plugin.PlayerState.ContentId;
+        autoDutyMigration.UpdateProfile(
+            characterId,
+            current => current with { Maintenance = update(current.Maintenance) },
+            out maintenanceMessage);
+    }
+
+    private void UpdateOperationsSnapshot(
+        AutoDutyProfileSnapshot profile,
+        Func<AutoDutyProfileSnapshot, AutoDutyProfileSnapshot> update)
+    {
+        autoDutyMigration.UpdateProfile(Plugin.PlayerState.ContentId, update, out maintenanceMessage);
     }
 
     private void DrawAutomation()
@@ -4101,34 +4344,113 @@ internal sealed class NexusWindow : Window
 
     private void DrawAchievementAtlasDetails()
     {
-        var targets = progressAtlas.AchievementTargets
+        var allTargets = progressAtlas.AchievementTargets
             .Select(target => (Target: target, Complete: ProgressAtlasService.IsAchievementComplete(target.Id)))
+            .ToArray();
+        var targets = allTargets
             .Where(item => !progressAtlasRemainingOnly || !item.Complete)
-            .Where(item => AtlasMatches(item.Target.Name, item.Target.Category))
-            .GroupBy(item => item.Target.Category);
-        foreach (var category in targets)
+            .Where(item => AtlasMatches(
+                item.Target.Name,
+                item.Target.Description,
+                item.Target.Kind,
+                item.Target.Category))
+            .OrderBy(item => item.Target.DifficultyScore)
+            .ThenBy(item => item.Target.Order)
+            .ThenBy(item => item.Target.Name, StringComparer.CurrentCulture)
+            .ToArray();
+
+        foreach (var kind in targets
+                     .GroupBy(item => item.Target.Kind)
+                     .OrderBy(group => group.Min(item => item.Target.KindOrder))
+                     .ThenBy(group => group.Key, StringComparer.CurrentCulture))
         {
-            if (!ImGui.CollapsingHeader($"{category.Key} ({category.Count()})###AtlasAchievement{category.Key}"))
+            int kindComplete = allTargets.Count(item => item.Target.Kind == kind.Key && item.Complete);
+            int kindTotal = allTargets.Count(item => item.Target.Kind == kind.Key);
+            if (!ImGui.TreeNodeEx(
+                    $"{kind.Key} — {AtlasCompletionText(kindComplete, kindTotal)}###AtlasAchievementKind{kind.Key}",
+                    ImGuiTreeNodeFlags.SpanAvailWidth))
                 continue;
-            foreach (var item in category.Take(250))
+
+            foreach (var category in kind
+                         .GroupBy(item => item.Target.Category)
+                         .OrderBy(group => group.Min(item => item.Target.CategoryOrder))
+                         .ThenBy(group => group.Key, StringComparer.CurrentCulture))
             {
-                bool pursuable = progressAtlasActions.CanPursueAchievement(item.Target);
-                ImGui.TextColored(item.Complete ? NexusTheme.Green : pursuable ? NexusTheme.Cyan : NexusTheme.Muted,
-                    item.Complete ? "Complete" : pursuable ? "Automatic" : "Guided");
-                if (pursuable)
+                int categoryComplete = allTargets.Count(item =>
+                    item.Target.Kind == kind.Key && item.Target.Category == category.Key && item.Complete);
+                int categoryTotal = allTargets.Count(item =>
+                    item.Target.Kind == kind.Key && item.Target.Category == category.Key);
+                string categoryId = $"{kind.Key}/{category.Key}";
+                if (!ImGui.TreeNodeEx(
+                        $"{category.Key} — {AtlasCompletionText(categoryComplete, categoryTotal)}###AtlasAchievementCategory{categoryId}",
+                        ImGuiTreeNodeFlags.SpanAvailWidth))
+                    continue;
+
+                if (ImGui.BeginTable(
+                        $"###AtlasAchievementTable{categoryId}",
+                        4,
+                        ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.RowBg |
+                        ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.NoSavedSettings))
                 {
-                    ImGui.SameLine();
-                    ImGui.BeginDisabled(progressAtlasActions.Status.IsActive);
-                    if (ImGui.SmallButton($"Pursue###AtlasAchievementPursue{item.Target.Id}"))
-                        progressAtlasActions.StartAchievementTarget(item.Target, out progressAtlasMessage);
-                    ImGui.EndDisabled();
+                    ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 105f * ImGui.GetIO().FontGlobalScale);
+                    ImGui.TableSetupColumn("Achievement", ImGuiTableColumnFlags.WidthStretch, .40f);
+                    ImGui.TableSetupColumn("What is needed", ImGuiTableColumnFlags.WidthStretch, .60f);
+                    ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 150f * ImGui.GetIO().FontGlobalScale);
+                    ImGui.TableHeadersRow();
+                    foreach (var item in category)
+                    {
+                        bool pursuable = progressAtlasActions.CanPursueAchievement(item.Target);
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.TextColored(
+                            item.Complete ? NexusTheme.Green : pursuable ? NexusTheme.Cyan : NexusTheme.Muted,
+                            item.Complete ? "Complete" : pursuable ? "Automatic" : "Guided");
+
+                        ImGui.TableNextColumn();
+                        ImGui.TextWrapped(item.Target.Name);
+                        ImGui.TextColored(
+                            NexusTheme.Muted,
+                            $"{item.Target.Points} points · {ProgressAtlasService.AchievementDifficultyLabel(item.Target.DifficultyScore)}");
+
+                        ImGui.TableNextColumn();
+                        ImGui.TextWrapped(progressAtlasActions.DescribeAchievement(item.Target));
+
+                        ImGui.TableNextColumn();
+                        if (pursuable && !item.Complete)
+                        {
+                            ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                            if (ImGui.Button($"Pursue###AtlasAchievementPursue{item.Target.Id}"))
+                                progressAtlasActions.StartAchievementTarget(item.Target, out progressAtlasMessage);
+                            ImGui.EndDisabled();
+                            ImGui.Spacing();
+                        }
+                        if (ImGui.SmallButton($"Open in Game###AtlasAchievementOpen{item.Target.Id}"))
+                            OpenAchievementInGame(item.Target.Id);
+                    }
+                    ImGui.EndTable();
                 }
-                ImGui.SameLine();
-                ImGui.TextWrapped(item.Target.Name);
+
+                ImGui.TreePop();
             }
-            if (category.Count() > 250)
-                TextWrapped(NexusTheme.Muted, "Refine the search to show the remaining matching achievements.");
+
+            ImGui.TreePop();
         }
+    }
+
+    private static string AtlasCompletionText(int complete, int total)
+    {
+        double percentage = total == 0 ? 0d : complete * 100d / total;
+        return $"{complete:N0}/{total:N0} complete ({percentage:0.#}%)";
+    }
+
+    private static unsafe void OpenAchievementInGame(uint achievementId)
+    {
+        FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentAchievement* agent =
+            (FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentAchievement*)
+            FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentModule.Instance()
+                ->GetAgentByInternalId(FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentId.Achievement);
+        if (agent != null)
+            agent->OpenById(achievementId);
     }
 
     private void DrawExplorationAtlasDetails()
@@ -4167,41 +4489,97 @@ internal sealed class NexusWindow : Window
 
     private void DrawHuntingLogAtlasTargets()
     {
-        IReadOnlyList<HuntingLogTargetProgress> targets = progressAtlas.HuntingTargets;
-        HuntingLogTargetProgress[] current = targets
-            .Where(target => target.IsCurrentRank)
+        HuntingLogTargetProgress[] targets = progressAtlas.HuntingTargets
             .Where(target => !progressAtlasRemainingOnly || target.Killed < target.Required)
-            .Where(target => AtlasMatches(target.LogName, target.TargetName, $"Rank {target.Rank + 1}"))
+            .Where(target => AtlasMatches(
+                target.LogName,
+                target.TargetName,
+                $"Rank {target.Rank + 1}",
+                string.Join(' ', target.Locations.Select(location =>
+                    progressAtlas.TerritoryName(location.IsOpenWorld ? location.TerritoryId : location.DutyTerritoryId)))))
             .OrderBy(target => target.LogName, StringComparer.CurrentCulture)
             .ThenBy(target => target.Rank)
+            .ThenBy(target => target.TaskIndex)
+            .ThenBy(target => target.MonsterIndex)
             .ThenBy(target => target.TargetName, StringComparer.CurrentCulture)
             .ToArray();
-        if (current.Length == 0)
+        if (targets.Length == 0)
         {
-            TextWrapped(NexusTheme.Muted, "No incomplete targets are available in the current unlocked ranks.");
+            TextWrapped(NexusTheme.Muted,
+                progressAtlasRemainingOnly ? "Every matching Hunting Log entry is complete." : "No matching entries.");
             return;
         }
 
-        if (!ImGui.BeginTable("###AtlasHuntingTargetTable", 3,
-                ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
-            return;
-        ImGui.TableSetupColumn("Log", ImGuiTableColumnFlags.WidthStretch, .34f);
-        ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthStretch, .46f);
-        ImGui.TableSetupColumn("Progress", ImGuiTableColumnFlags.WidthStretch, .20f);
-        ImGui.TableHeadersRow();
-        foreach (HuntingLogTargetProgress target in current)
+        foreach (IGrouping<string, HuntingLogTargetProgress> log in targets.GroupBy(target => target.LogName))
         {
-            ImGui.TableNextRow();
-            ImGui.TableNextColumn();
-            ImGui.TextWrapped($"{target.LogName} • Rank {target.Rank + 1}");
-            ImGui.TableNextColumn();
-            ImGui.TextWrapped(target.TargetName);
-            if (!target.HasOpenWorldLocation)
-                ImGui.TextColored(NexusTheme.Muted, "Duty target");
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted($"{target.Killed}/{target.Required}");
+            int logComplete = progressAtlas.HuntingTargets.Count(target =>
+                target.LogName == log.Key && target.IsComplete);
+            int logTotal = progressAtlas.HuntingTargets.Count(target => target.LogName == log.Key);
+            if (!ImGui.TreeNodeEx(
+                    $"{log.Key} — {AtlasCompletionText(logComplete, logTotal)}###AtlasHuntingLog{log.Key}",
+                    ImGuiTreeNodeFlags.SpanAvailWidth))
+                continue;
+
+            foreach (IGrouping<int, HuntingLogTargetProgress> rank in log.GroupBy(target => target.Rank))
+            {
+                int rankComplete = progressAtlas.HuntingTargets.Count(target =>
+                    target.LogName == log.Key && target.Rank == rank.Key && target.IsComplete);
+                int rankTotal = progressAtlas.HuntingTargets.Count(target =>
+                    target.LogName == log.Key && target.Rank == rank.Key);
+                if (!ImGui.TreeNodeEx(
+                        $"Rank {rank.Key + 1} — {AtlasCompletionText(rankComplete, rankTotal)}###AtlasHuntingRank{log.Key}{rank.Key}",
+                        ImGuiTreeNodeFlags.SpanAvailWidth))
+                    continue;
+
+                if (ImGui.BeginTable($"###AtlasHuntingTargetTable{log.Key}{rank.Key}", 4,
+                        ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH |
+                        ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.NoSavedSettings))
+                {
+                    ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 105f);
+                    ImGui.TableSetupColumn("Progress item", ImGuiTableColumnFlags.WidthStretch, .44f);
+                    ImGui.TableSetupColumn("What is needed", ImGuiTableColumnFlags.WidthStretch, .56f);
+                    ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 130f);
+                    ImGui.TableHeadersRow();
+                    foreach (HuntingLogTargetProgress target in rank)
+                    {
+                        bool canPursue = progressAtlasActions.CanPursueHuntingTarget(target);
+                        bool complete = target.IsComplete;
+                        string location = string.Join(" • ", target.Locations.Select(item => item.IsOpenWorld
+                            ? $"{progressAtlas.TerritoryName(item.TerritoryId)} ({item.MapX:0.#}, {item.MapY:0.#})"
+                            : $"{progressAtlas.TerritoryName(item.DutyTerritoryId)} duty"));
+                        string needed = complete
+                            ? $"Required kills complete ({target.Required}/{target.Required})"
+                            : !target.IsCurrentRank
+                                ? $"Complete the prior rank or equip the matching class/job first. {location}"
+                                : canPursue
+                                    ? $"Defeat {target.TargetName} ({target.Killed}/{target.Required}). {location}"
+                                    : $"Unlock the required job, rank, level, travel point, or duty/provider path. {location}";
+
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.TextColored(
+                            complete ? NexusTheme.Green : canPursue ? NexusTheme.Cyan : NexusTheme.Muted,
+                            complete ? "Complete" : target.Killed > 0 ? "In progress" : canPursue ? "Ready" : "Locked");
+                        ImGui.TableNextColumn();
+                        ImGui.TextWrapped($"Entry {target.TaskIndex + 1}: {target.TargetName}");
+                        ImGui.TextColored(NexusTheme.Muted, $"{target.Killed}/{target.Required}");
+                        ImGui.TableNextColumn();
+                        ImGui.TextWrapped(needed);
+                        ImGui.TableNextColumn();
+                        if (canPursue)
+                        {
+                            ImGui.BeginDisabled(progressAtlasActions.Status.IsActive || worldAutomation.Status.IsActive);
+                            if (ImGui.SmallButton($"Hunt This###AtlasHunt{target.LogKey}-{target.Rank}-{target.TaskIndex}-{target.MonsterIndex}"))
+                                progressAtlasActions.StartHuntingTarget(target, out progressAtlasMessage);
+                            ImGui.EndDisabled();
+                        }
+                    }
+                    ImGui.EndTable();
+                }
+                ImGui.TreePop();
+            }
+            ImGui.TreePop();
         }
-        ImGui.EndTable();
     }
 
     private void DrawProgressionRuntime(
@@ -4491,11 +4869,44 @@ internal sealed class NexusWindow : Window
             plugin.Configuration.OperationsOverlayAnchorBottom = anchorOperationsBottom;
             plugin.Save();
         }
-        bool showOperationsStatus = plugin.Configuration.ShowOperationsStatus;
-        if (ImGui.Checkbox("Show current action below the overlay", ref showOperationsStatus))
+        bool showOperationsDutyStatus = plugin.Configuration.ShowOperationsDutyStatus;
+        if (ImGui.Checkbox("Show duty and goal status", ref showOperationsDutyStatus))
         {
-            plugin.Configuration.ShowOperationsStatus = showOperationsStatus;
+            plugin.Configuration.ShowOperationsDutyStatus = showOperationsDutyStatus;
+            plugin.Configuration.ShowOperationsStatus =
+                plugin.Configuration.ShowOperationsDutyStatus || plugin.Configuration.ShowOperationsActionStatus;
             plugin.Save();
+        }
+        bool showOperationsActionStatus = plugin.Configuration.ShowOperationsActionStatus;
+        if (ImGui.Checkbox("Show current action", ref showOperationsActionStatus))
+        {
+            plugin.Configuration.ShowOperationsActionStatus = showOperationsActionStatus;
+            plugin.Configuration.ShowOperationsStatus =
+                plugin.Configuration.ShowOperationsDutyStatus || plugin.Configuration.ShowOperationsActionStatus;
+            plugin.Save();
+        }
+        if (maintenanceRuntime.CurrentProfile is { } operationsProfile &&
+            ImGui.CollapsingHeader("Overlay buttons"))
+        {
+            AutoDutyOverlayPreferences overlay = operationsProfile.Overlay;
+            DrawOperationsOverlayToggle(operationsProfile, "Goto", overlay.ShowGoto,
+                (value, enabled) => value with { ShowGoto = enabled });
+            DrawOperationsOverlayToggle(operationsProfile, "Equip", overlay.ShowGear,
+                (value, enabled) => value with { ShowGear = enabled });
+            DrawOperationsOverlayToggle(operationsProfile, "Repair", overlay.ShowRepair,
+                (value, enabled) => value with { ShowRepair = enabled });
+            DrawOperationsOverlayToggle(operationsProfile, "Extract materia", overlay.ShowExtract,
+                (value, enabled) => value with { ShowExtract = enabled });
+            DrawOperationsOverlayToggle(operationsProfile, "Desynthesize", overlay.ShowDesynth,
+                (value, enabled) => value with { ShowDesynth = enabled });
+            DrawOperationsOverlayToggle(operationsProfile, "Sell inventory", overlay.ShowSell,
+                (value, enabled) => value with { ShowSell = enabled });
+            DrawOperationsOverlayToggle(operationsProfile, "Grand Company turn-ins", overlay.ShowTurnIn,
+                (value, enabled) => value with { ShowTurnIn = enabled });
+            DrawOperationsOverlayToggle(operationsProfile, "Open coffers", overlay.ShowCoffers,
+                (value, enabled) => value with { ShowCoffers = enabled });
+            DrawOperationsOverlayToggle(operationsProfile, "Triple Triad", overlay.ShowTripleTriad,
+                (value, enabled) => value with { ShowTripleTriad = enabled });
         }
 
         ImGui.Spacing();
@@ -4522,6 +4933,21 @@ internal sealed class NexusWindow : Window
             characterConfig.PauseOnManualTarget = manualTarget;
             plugin.Save();
         }
+    }
+
+    private void DrawOperationsOverlayToggle(
+        AutoDutyProfileSnapshot profile,
+        string label,
+        bool value,
+        Func<AutoDutyOverlayPreferences, bool, AutoDutyOverlayPreferences> update)
+    {
+        bool enabled = value;
+        if (!ImGui.Checkbox(label, ref enabled))
+            return;
+        autoDutyMigration.UpdateProfile(
+            Plugin.PlayerState.ContentId,
+            current => current with { Overlay = update(current.Overlay, enabled) },
+            out maintenanceMessage);
     }
 
     private void DrawModulePage(string page)

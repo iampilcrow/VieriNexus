@@ -1,6 +1,6 @@
 # VieriNexus implementation status
 
-Version 0.1.0.76 completes VieriCodex achievement-execution parity inside World Progression. Achievement goals can now advance through exact stock-Questionable quests and Nexus-owned class or Grand Company Hunting Logs in addition to the exploration and flying steps delivered in 0.1.0.75. Every action remains bounded, live-verified, stoppable, and replanned; genuinely manual/group/crafting/gathering/PvP/collection/time-gated goals remain tracked instead of being mislabeled automatic.
+Version 0.1.0.84 completes a broad VieriAutoDuty operations and VieriCodex Atlas parity pass. Stock AutoDuty remains the bounded duty runner, while Nexus owns and sequences the imported Vieri maintenance behavior around it: gear upgrades/equipping, repair thresholds, extraction, desynthesis, storage, coffers, minion/orchestrion/card registration, protected selling, Grand Company turn-ins, Triple Triad selling, and return to inn. Short vendor approaches preserve the predecessor's ground-navigation rule, and stalled flight calculations retry safely on the ground. The Atlas restores detailed expansion/category organization, requirements, prerequisites, completion state, Hunting Logs, direct pursuit, and game-detail actions. Optional stock AutoDuty presentation settings are synchronized once instead of being rewritten continuously.
 
 ## Foundation implemented
 

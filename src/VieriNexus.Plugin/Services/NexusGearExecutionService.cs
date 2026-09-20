@@ -75,6 +75,7 @@ internal sealed unsafe class NexusGearExecutionService
     private int startingItemLevel;
     private int endingItemLevel;
     private int itemsPurchased;
+    private bool equipAfterPurchase;
     private string detail = "Nexus gear shopping is inactive.";
 
     internal NexusGearExecutionService(
@@ -120,7 +121,7 @@ internal sealed unsafe class NexusGearExecutionService
         itemsPurchased,
         detail);
 
-    internal bool Start(GearShoppingApproval approval, out string message)
+    internal bool Start(GearShoppingApproval approval, bool equipAfterPurchase, out string message)
     {
         if (IsBusy)
         {
@@ -170,6 +171,7 @@ internal sealed unsafe class NexusGearExecutionService
         job = preview.Job;
         vendorLevel = preview.VendorLevel;
         minimumGilReserve = approval.MinimumGilReserve;
+        this.equipAfterPurchase = equipAfterPurchase;
         startingItemLevel = currentItemLevel();
         endingItemLevel = startingItemLevel;
         itemsPurchased = 0;
@@ -192,9 +194,18 @@ internal sealed unsafe class NexusGearExecutionService
         }
         else
         {
+            if (!equipAfterPurchase)
+            {
+                Complete("Nexus verified the approved gear is already owned. Automatic equipping is disabled.");
+                message = detail;
+                return true;
+            }
             SetState(RunState.Equipping, "Nexus verified the approved gear is already owned and is equipping it.", startedAt);
             message = detail;
         }
+        Plugin.Log.Information(
+            "Nexus gear transaction {Sequence} started for {Job}: {LineCount} approved line(s), {VendorCount} vendor stop(s). {Detail}",
+            startedSequence, job, lines.Count, vendors.Count, detail);
         return true;
     }
 
@@ -302,6 +313,9 @@ internal sealed unsafe class NexusGearExecutionService
             NavigationSuiteRouteRequest.Create(route, NavigationRoutePlanKind.Playback));
         if (!dispatch.Started)
         {
+            Plugin.Log.Warning(
+                "Nexus gear transaction {Sequence} could not dispatch vendor {VendorId} in territory {TerritoryId}: {Message}",
+                startedSequence, vendor.DataId, vendor.TerritoryId, dispatch.Message);
             message = dispatch.Message;
             return false;
         }
@@ -309,6 +323,9 @@ internal sealed unsafe class NexusGearExecutionService
         SetState(RunState.Traveling,
             $"Nexus is traveling to {route.Name} for {vendor.Lines.Sum(line => line.RemainingPurchases)} approved purchase(s).", now);
         message = detail;
+        Plugin.Log.Information(
+            "Nexus gear transaction {Sequence} dispatched route {RouteName} to vendor {VendorId} in territory {TerritoryId}.",
+            startedSequence, route.Name, vendor.DataId, vendor.TerritoryId);
         return true;
     }
 
@@ -529,6 +546,11 @@ internal sealed unsafe class NexusGearExecutionService
         CloseOwnedAddons();
         equipLineIndex = 0;
         equipTargetIndex = 0;
+        if (!equipAfterPurchase)
+        {
+            Complete("Nexus purchased every approved upgrade. Automatic equipping is disabled.");
+            return;
+        }
         SetState(RunState.Equipping, "All approved purchases are confirmed. Nexus is equipping and verifying them.", now);
     }
 
@@ -651,11 +673,14 @@ internal sealed unsafe class NexusGearExecutionService
     {
         endingItemLevel = currentItemLevel();
         completedSequence = startedSequence;
+        Plugin.Log.Information("Nexus gear transaction {Sequence} completed: {Message}", startedSequence, message);
         ResetRun(message);
     }
 
     private void Fail(string message)
     {
+        Plugin.Log.Error("Nexus gear transaction {Sequence} failed in {State}: {Message}",
+            startedSequence, state, message);
         travel.Stop();
         CloseOwnedAddons();
         ResetRun(message);
@@ -674,6 +699,8 @@ internal sealed unsafe class NexusGearExecutionService
         state = value;
         stateStartedAt = now;
         detail = message;
+        Plugin.Log.Information("Nexus gear transaction {Sequence} entered {State}: {Message}",
+            startedSequence, value, message);
     }
 
     private void Throttle(DateTimeOffset now) => nextActionAt = now.AddMilliseconds(500);

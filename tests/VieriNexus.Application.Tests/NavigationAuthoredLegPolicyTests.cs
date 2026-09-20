@@ -71,6 +71,23 @@ public sealed class NavigationAuthoredLegPolicyTests
         Assert.False(NavigationAuthoredLegPolicy.ShouldRetryPathOnGround(attemptedFlight: true, pathFound: true));
     }
 
+    [Theory]
+    [InlineData(true, true, 30f, false)]
+    [InlineData(true, true, 99.9f, false)]
+    [InlineData(true, true, 100f, true)]
+    [InlineData(true, false, 30f, true)]
+    [InlineData(false, true, 500f, false)]
+    public void ShortVendorApproachesStayOnTheGround(
+        bool requestedFlight,
+        bool vendorApproach,
+        float directDistance,
+        bool expected)
+    {
+        Assert.Equal(expected,
+            NavigationAuthoredLegPolicy.ShouldUseFlightForLeg(
+                requestedFlight, vendorApproach, directDistance));
+    }
+
     private static NavigationSuiteRouteRequest.PlaybackRequest Request(
         bool useMesh,
         float tolerance,

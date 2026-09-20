@@ -13,14 +13,25 @@ public enum NexusMaintenanceOperation
     GrandCompanyTurnIn,
     EntrustArmoire,
     EntrustGlamourChest,
+    SellTripleTriadCards,
+    ReturnToInn,
 }
 
 public static class OperationsExecutionPolicy
 {
+    public static bool NeedsRepair(AutoDutyMaintenancePolicy policy, float lowestEquippedDurability)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        float threshold = Math.Clamp(policy.RepairBelowPercent, 1u, 100u);
+        return policy.AutoRepair && lowestEquippedDurability < threshold;
+    }
+
     public static IReadOnlyList<NexusMaintenanceOperation> ConfiguredOperations(AutoDutyMaintenancePolicy policy)
     {
         ArgumentNullException.ThrowIfNull(policy);
         List<NexusMaintenanceOperation> result = [];
+        if (policy.AutoRepair)
+            result.Add(NexusMaintenanceOperation.Repair);
         if (policy.AutoExtract)
             result.Add(NexusMaintenanceOperation.ExtractMateria);
         if (policy.AutoDesynth)
@@ -37,10 +48,14 @@ public static class OperationsExecutionPolicy
             result.Add(NexusMaintenanceOperation.RegisterOrchestrionRolls);
         if (policy.AutoOpenCoffers)
             result.Add(NexusMaintenanceOperation.OpenCoffers);
+        if (policy.AutoSell)
+            result.Add(NexusMaintenanceOperation.Sell);
         if (policy.AutoGrandCompanyTurnIn)
             result.Add(NexusMaintenanceOperation.GrandCompanyTurnIn);
-        if (policy.AutoRepair && policy.RepairWithCrafter)
-            result.Add(NexusMaintenanceOperation.Repair);
+        if (policy.SellTripleTriadCards)
+            result.Add(NexusMaintenanceOperation.SellTripleTriadCards);
+        if (policy.ReturnToInnAfterMaintenance)
+            result.Add(NexusMaintenanceOperation.ReturnToInn);
         return result;
     }
 }

@@ -265,7 +265,8 @@ public sealed class Plugin : IDalamudPlugin
         progressAtlas = new ProgressAtlasService(DataManager, ClientState, PlayerState);
         progressionProviders = new ProgressionProviderService(
             PluginInterface, questionableCompatibility, dependencyService, DataManager, PlayerState, ObjectTable,
-            ClientState, Condition, GameGui, navigationLibrary, suiteTravelProvider, navigationStopProvider);
+            ClientState, Condition, GameGui, autoDutyMigration, navigationLibrary, suiteTravelProvider,
+            navigationStopProvider);
         huntingLog = new NexusHuntingLogService(
             PluginInterface,
             progressAtlas,
@@ -719,6 +720,8 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.HideOperationsOverlayWhenStopped = profile.Overlay.HideWhenStopped;
         Configuration.OperationsOverlayAnchorBottom = profile.Overlay.AnchorBottom;
         Configuration.ShowOperationsStatus = profile.Overlay.ShowDutyStatus || profile.Overlay.ShowActionStatus;
+        Configuration.ShowOperationsDutyStatus = profile.Overlay.ShowDutyStatus;
+        Configuration.ShowOperationsActionStatus = profile.Overlay.ShowActionStatus;
         Configuration.AppliedOperationsReceiptId = receipt.Id;
         Configuration.AppliedOperationsCharacterId = PlayerState.ContentId;
         Save();

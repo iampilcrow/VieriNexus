@@ -7,6 +7,7 @@ namespace VieriNexus.Services;
 
 internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, INavigationMovementProvider
 {
+    private static readonly TimeSpan PathfindTimeout = TimeSpan.FromSeconds(15);
     private readonly DependencyService dependencies;
     private readonly ICallGateSubscriber<object> stop;
     private readonly ICallGateSubscriber<bool> isRunning;
@@ -21,6 +22,7 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
     private Task<List<Vector3>>? pathfindTask;
     private NavigationRoutePoint? pathfindDestination;
     private bool pathfindUseFlight;
+    private DateTimeOffset pathfindStartedAt;
 
     internal VnavmeshNavigationStopProvider(
         IDalamudPluginInterface pluginInterface,
@@ -81,6 +83,7 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
         pathfindCancellation = new CancellationTokenSource();
         pathfindDestination = destination;
         pathfindUseFlight = useFlight;
+        pathfindStartedAt = DateTimeOffset.UtcNow;
         pathfindTask = pathfind.InvokeFunc(
             player.Position,
             new Vector3(destination.X, destination.Y, destination.Z),
@@ -145,8 +148,31 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
 
     private void PumpPendingPathfind()
     {
-        if (pathfindTask is not { IsCompleted: true } completed)
+        if (pathfindTask is not { } pending)
             return;
+
+        if (!pending.IsCompleted)
+        {
+            if (DateTimeOffset.UtcNow - pathfindStartedAt < PathfindTimeout)
+                return;
+
+            NavigationRoutePoint? timedOutDestination = pathfindDestination;
+            bool timedOutFlight = pathfindUseFlight;
+            CancelPendingPathfind();
+            if (timedOutFlight && timedOutDestination is { } groundFallbackDestination)
+            {
+                Plugin.Log.Warning(
+                    "A Nexus flight path calculation exceeded {TimeoutSeconds} seconds; retrying the leg on the ground.",
+                    PathfindTimeout.TotalSeconds);
+                BeginPathfind(groundFallbackDestination, false);
+                return;
+            }
+
+            throw new TimeoutException(
+                $"vnavmesh did not finish calculating the ground path within {PathfindTimeout.TotalSeconds:0} seconds.");
+        }
+
+        Task<List<Vector3>> completed = pending;
 
         CancellationTokenSource? cancellation = pathfindCancellation;
         NavigationRoutePoint? destination = pathfindDestination;
@@ -154,6 +180,7 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
         pathfindTask = null;
         pathfindCancellation = null;
         pathfindDestination = null;
+        pathfindStartedAt = default;
         List<Vector3>? points = null;
         Exception? failure = null;
         try
@@ -193,6 +220,7 @@ internal sealed class VnavmeshNavigationStopProvider : INavigationStopProvider, 
         pathfindTask = null;
         pathfindCancellation = null;
         pathfindDestination = null;
+        pathfindStartedAt = default;
         if (cancellation is null)
             return;
         try

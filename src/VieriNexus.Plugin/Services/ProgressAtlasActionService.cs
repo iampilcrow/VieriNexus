@@ -347,6 +347,74 @@ internal sealed class ProgressAtlasActionService
         => !ProgressAtlasService.IsAchievementComplete(achievement.Id) &&
            WorldAutomationPolicy.CanAutomateAchievementType(achievement.Type);
 
+    internal string DescribeAchievement(ProgressAtlasService.AchievementAtlasTarget achievement)
+    {
+        if (ProgressAtlasService.IsAchievementComplete(achievement.Id))
+            return "Completed by this character.";
+
+        if (achievement.Type == 8)
+        {
+            ProgressAtlasService.MapDiscoveryRegion? remaining = atlas.ExplorationTargets
+                .Where(target => target.MapId == achievement.Key)
+                .Where(target => !ProgressAtlasService.IsExplorationComplete(target.MapId, target.DiscoveryId))
+                .OrderByDescending(target => target.Positions.Count > 0 && IsTerritoryAccessible(target.TerritoryId))
+                .ThenBy(target => target.DiscoveryId)
+                .FirstOrDefault();
+            if (remaining is null)
+                return $"{achievement.Description} · All known regions are discovered; waiting for the game to confirm completion.";
+            if (remaining.IsDuty)
+                return $"{achievement.Description} · Enter {remaining.TerritoryName} and discover its remaining region.";
+            return $"{achievement.Description} · " +
+                   (IsTerritoryAccessible(remaining.TerritoryId)
+                       ? $"Travel to and discover the next missing region in {remaining.TerritoryName}."
+                       : $"Unlock travel access to {remaining.TerritoryName}, then discover its remaining region.");
+        }
+
+        if (achievement.Type == 20)
+        {
+            ProgressAtlasService.AetherCurrentAtlasTarget? field = atlas.AetherCurrentTargets
+                .Where(target => target.TerritoryId == achievement.TerritoryId)
+                .Where(target => !ProgressAtlasService.IsAetherCurrentUnlocked(target.AetherCurrentId))
+                .OrderByDescending(target => IsTerritoryAccessible(target.TerritoryId))
+                .ThenBy(target => target.AetherCurrentId)
+                .FirstOrDefault();
+            if (field is not null)
+                return $"{achievement.Description} · " +
+                       (IsTerritoryAccessible(field.TerritoryId)
+                           ? $"Collect the next open-world Aether Current in {field.TerritoryName}."
+                           : $"Unlock travel access to {field.TerritoryName}, then collect its remaining Aether Currents.");
+            ProgressionQuestCandidate? quest = questProvider
+                .EligibleAetherCurrentQuests(atlas.AetherCurrentQuestTargets, objectTable.LocalPlayer?.Level ?? 0)
+                .FirstOrDefault(candidate => candidate.TerritoryId == achievement.TerritoryId);
+            return quest is null
+                ? $"{achievement.Description} · Complete the remaining Aether Current quests in this area."
+                : $"{achievement.Description} · Complete {quest.Name} (level {quest.RequiredLevel}).";
+        }
+
+        if (achievement.Type == 9)
+        {
+            HashSet<uint> related = achievement.RelatedRows.Select(value => value & 0xFFFF).ToHashSet();
+            ProgressionQuestCandidate? quest = EligibleAchievementQuests().FirstOrDefault(candidate =>
+                uint.TryParse(candidate.QuestId, out uint questId) && related.Contains(questId));
+            return quest is null
+                ? $"{achievement.Description} · A related quest or prerequisite is not currently runnable."
+                : $"{achievement.Description} · Complete {quest.Name} (level {quest.RequiredLevel}).";
+        }
+
+        if (achievement.Type == 7)
+        {
+            ProgressionHuntingTargetCandidate? hunt = hunting.EligibleAchievementTarget(achievement.Key);
+            return hunt is null
+                ? $"{achievement.Description} · Complete the remaining entries in the related Hunting Log."
+                : $"{achievement.Description} · Defeat {hunt.TargetName} ({hunt.Killed}/{hunt.Required}) in {hunt.LogName}, rank {hunt.Rank + 1}.";
+        }
+
+        if (achievement.Type == 14)
+            return $"{achievement.Description} · Complete the related unlocked duty or its prerequisite unlock chain.";
+
+        return $"{achievement.Description} · This objective needs manual, group, crafting, gathering, PvP, collection, or time-gated play.";
+    }
+
     internal bool StartAchievementTarget(
         ProgressAtlasService.AchievementAtlasTarget achievement,
         out string result)
@@ -369,6 +437,29 @@ internal sealed class ProgressAtlasActionService
             return false;
         }
         return StartAchievementStep(achievement, achievementQuests, out result);
+    }
+
+    internal bool CanPursueHuntingTarget(HuntingLogTargetProgress target) =>
+        !target.IsComplete && hunting.EligibleAtlasTarget(target) is not null;
+
+    internal bool StartHuntingTarget(HuntingLogTargetProgress target, out string result)
+    {
+        if (target.IsComplete)
+        {
+            result = $"{target.TargetName} is already complete.";
+            return false;
+        }
+        ProgressionHuntingTargetCandidate? candidate = hunting.EligibleAtlasTarget(target);
+        if (candidate is null)
+        {
+            result = $"{target.TargetName} is locked by its job, rank, level, duty, travel, or provider requirement.";
+            return false;
+        }
+        return StartHunt(
+            $"{candidate.LogName}: {candidate.TargetName}",
+            candidate,
+            $"Nexus started {candidate.TargetName} ({candidate.Killed}/{candidate.Required}) in {candidate.LogName}.",
+            out result);
     }
 
     internal bool Stop(out string result)
@@ -1022,6 +1113,17 @@ internal sealed class ProgressAtlasActionService
         ProgressAtlasService.AchievementAtlasTarget achievement,
         ProgressionHuntingTargetCandidate hunt,
         out string result)
+        => StartHunt(
+            $"Pursue {achievement.Name}: {hunt.TargetName}",
+            hunt,
+            $"Nexus started the next exact Hunting Log step for {achievement.Name}: {hunt.TargetName}.",
+            out result);
+
+    private bool StartHunt(
+        string title,
+        ProgressionHuntingTargetCandidate hunt,
+        string startedMessage,
+        out string result)
     {
         if (phase != Phase.Idle)
         {
@@ -1035,7 +1137,6 @@ internal sealed class ProgressAtlasActionService
             return false;
         }
 
-        string title = $"Pursue {achievement.Name}: {hunt.TargetName}";
         LeaseOwner owner = new(GoalId.New(), TaskId.New(), AttemptId.New(), 60, $"Progress Atlas: {title}");
         if (!leases.TryAcquire(owner, QuestResources, LeaseLifetime, out lease, out ResourceLeaseSnapshot? blocking))
         {
@@ -1070,7 +1171,7 @@ internal sealed class ProgressAtlasActionService
         startedAt = DateTimeOffset.UtcNow;
         phaseStartedAt = startedAt;
         phase = Phase.Hunting;
-        message = $"Nexus started the next exact Hunting Log step for {achievement.Name}: {hunt.TargetName}.";
+        message = startedMessage;
         result = message;
         return true;
     }

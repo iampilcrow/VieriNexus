@@ -117,8 +117,14 @@ internal sealed class NexusOperationsOverlay : Window
         AutoDutyOverlayPreferences? overlay = maintenance.CurrentProfile?.Overlay;
         bool anyActive = navigationActive || gearActive || progressionActive || progressionPaused || maintenanceActive ||
                          dummyTravelActive || quickTravelRequested;
-        currentLineCount = plugin.Configuration.ShowOperationsStatus &&
-                           anyActive ? 2 : 1;
+        string? dutyStatus = plugin.Configuration.ShowOperationsDutyStatus
+            ? OverlayDutyText()
+            : null;
+        string? actionStatus = plugin.Configuration.ShowOperationsActionStatus
+            ? OverlayActionText(anyActive)
+            : null;
+        currentLineCount = 1 + (string.IsNullOrWhiteSpace(dutyStatus) ? 0 : 1) +
+                           (string.IsNullOrWhiteSpace(actionStatus) ? 0 : 1);
 
         if (anyActive)
         {
@@ -155,112 +161,113 @@ internal sealed class NexusOperationsOverlay : Window
         }
 
         bool controlsEnabled = !anyActive;
-        CategoryButton("Goto", "NexusGoto", controlsEnabled && overlay?.ShowGoto != false);
-        if (ImGui.BeginPopup("NexusGoto"))
+        if (!progressionActive && !progressionPaused)
         {
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.Barracks)) StartGrandCompanyPoint(barracks: true);
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.Inn)) StartInn();
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.GrandCompanySupply)) StartGrandCompanyPoint(barracks: false);
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.FlagMarker)) StartFlagMarker();
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.SummoningBell)) StartPreferredSummoningBell();
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.Apartment)) StartLifestream("apartment", "apartment");
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.PersonalHome)) StartLifestream("home", "personal home");
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.FreeCompanyEstate)) StartLifestream("fc", "Free Company estate");
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.TripleTriadTrader))
-                StartPoint("Triple Triad trader", 144, new(-56.1f, 1.6f, 16.6f), 4f);
-            if (ImGui.BeginMenu(VieriAutoDutyOverlayContract.StrikingDummies))
+            CategoryButton("Goto", "NexusGoto", controlsEnabled && overlay?.ShowGoto != false);
+            if (ImGui.BeginPopup("NexusGoto"))
             {
-                foreach (IGrouping<string, StrikingDummyDestination> expansion in
-                         StrikingDummyCatalog.Destinations.GroupBy(item => item.Expansion))
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.Barracks)) StartGrandCompanyPoint(barracks: true);
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.Inn)) StartInn();
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.GrandCompanySupply)) StartGrandCompanyPoint(barracks: false);
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.FlagMarker)) StartFlagMarker();
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.SummoningBell)) StartPreferredSummoningBell();
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.Apartment)) StartLifestream("apartment", "apartment");
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.PersonalHome)) StartLifestream("home", "personal home");
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.FreeCompanyEstate)) StartLifestream("fc", "Free Company estate");
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.TripleTriadTrader))
+                    StartPoint("Triple Triad trader", 144, new(-56.1f, 1.6f, 16.6f), 4f);
+                if (ImGui.BeginMenu(VieriAutoDutyOverlayContract.StrikingDummies))
                 {
-                    if (!ImGui.BeginMenu(expansion.Key))
-                        continue;
-                    foreach (StrikingDummyDestination destination in expansion)
+                    foreach (IGrouping<string, StrikingDummyDestination> expansion in
+                             StrikingDummyCatalog.Destinations.GroupBy(item => item.Expansion))
                     {
-                        if (ImGui.Selectable($"{destination.DisplayLocation} — Lv. {destination.Levels}"))
+                        if (!ImGui.BeginMenu(expansion.Key))
+                            continue;
+                        foreach (StrikingDummyDestination destination in expansion)
                         {
-                            ImGui.CloseCurrentPopup();
-                            strikingDummies.Start(destination, out message);
+                            if (ImGui.Selectable($"{destination.DisplayLocation} — Lv. {destination.Levels}"))
+                            {
+                                ImGui.CloseCurrentPopup();
+                                strikingDummies.Start(destination, out message);
+                            }
                         }
+                        ImGui.EndMenu();
                     }
                     ImGui.EndMenu();
                 }
-                ImGui.EndMenu();
+                ImGui.EndPopup();
             }
-            ImGui.EndPopup();
-        }
-        ImGui.SameLine(0, 5);
+            ImGui.SameLine(0, 5);
 
-        CategoryButton("Gear", "NexusGear", controlsEnabled);
-        if (ImGui.BeginPopup("NexusGear"))
-        {
-            if (ImGui.Selectable(VieriAutoDutyOverlayContract.ShopForUpgrades)) Open("Gear & Inventory");
-            if (Selectable(VieriAutoDutyOverlayContract.Equip, overlay?.ShowGear != false))
+            CategoryButton("Gear", "NexusGear", controlsEnabled);
+            if (ImGui.BeginPopup("NexusGear"))
             {
-                ImGui.CloseCurrentPopup();
-                message = Plugin.CommandManager.ProcessCommand("/ad autoequip")
-                    ? "AutoDuty is equipping its recommended gear."
-                    : "AutoDuty is not ready to equip recommended gear.";
-            }
-            if (Selectable(VieriAutoDutyOverlayContract.Repair, maintenance.HasWorkingProfile && overlay?.ShowRepair != false))
-                maintenance.Start(NexusMaintenanceOperation.Repair, out message);
-            if (Selectable(VieriAutoDutyOverlayContract.ExtractMateria, maintenance.HasWorkingProfile && overlay?.ShowExtract != false))
-                maintenance.Start(NexusMaintenanceOperation.ExtractMateria, out message);
-            if (Selectable(VieriAutoDutyOverlayContract.Desynth, maintenance.HasWorkingProfile && overlay?.ShowDesynth != false))
-                maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
-            ImGui.EndPopup();
-        }
-        ImGui.SameLine(0, 5);
-
-        CategoryButton("Inventory", "NexusInventory", controlsEnabled);
-        if (ImGui.BeginPopup("NexusInventory"))
-        {
-            if (Selectable(VieriAutoDutyOverlayContract.SellInventory, maintenance.HasWorkingProfile && overlay?.ShowSell != false))
-            {
-                ImGui.CloseCurrentPopup();
-                maintenance.StartProtectedSelling(out message);
-            }
-            if (Selectable(VieriAutoDutyOverlayContract.TurnIn, maintenance.HasWorkingProfile && overlay?.ShowTurnIn != false))
-            {
-                ImGui.CloseCurrentPopup();
-                maintenance.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out message);
-            }
-            if (Selectable(VieriAutoDutyOverlayContract.Coffers, maintenance.HasWorkingProfile && overlay?.ShowCoffers != false))
-            {
-                ImGui.CloseCurrentPopup();
-                maintenance.Start(NexusMaintenanceOperation.OpenCoffers, out message);
-            }
-            if (Selectable(VieriAutoDutyOverlayContract.Armoire, maintenance.HasWorkingProfile))
-                maintenance.Start(NexusMaintenanceOperation.EntrustArmoire, out message);
-            ImGui.EndPopup();
-        }
-
-        ImGui.SameLine(0, 5);
-        CategoryButton("Extras", "NexusExtras", controlsEnabled);
-        if (ImGui.BeginPopup("NexusExtras"))
-        {
-            bool tripleTriadEnabled = maintenance.HasWorkingProfile && overlay?.ShowTripleTriad != false;
-            if (!tripleTriadEnabled)
-                ImGui.BeginDisabled();
-            if (ImGui.BeginMenu(VieriAutoDutyOverlayContract.TripleTriad))
-            {
-                if (ImGui.Selectable(VieriAutoDutyOverlayContract.RegisterTripleTriadCards))
-                    maintenance.Start(NexusMaintenanceOperation.RegisterTripleTriadCards, out message);
-                if (ImGui.Selectable(VieriAutoDutyOverlayContract.SellTripleTriadCards))
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.ShopForUpgrades)) Open("Gear & Inventory");
+                if (Selectable(VieriAutoDutyOverlayContract.Equip, overlay?.ShowGear != false))
                 {
                     ImGui.CloseCurrentPopup();
-                    message = Plugin.CommandManager.ProcessCommand("/ad ttsell")
-                        ? "AutoDuty is selling duplicate Triple Triad cards."
-                        : "AutoDuty is not ready to sell Triple Triad cards.";
+                    message = Plugin.CommandManager.ProcessCommand("/ad autoequip")
+                        ? "AutoDuty is equipping its recommended gear."
+                        : "AutoDuty is not ready to equip recommended gear.";
                 }
-                ImGui.EndMenu();
+                if (Selectable(VieriAutoDutyOverlayContract.Repair, maintenance.HasWorkingProfile && overlay?.ShowRepair != false))
+                    maintenance.Start(NexusMaintenanceOperation.Repair, out message);
+                if (Selectable(VieriAutoDutyOverlayContract.ExtractMateria, maintenance.HasWorkingProfile && overlay?.ShowExtract != false))
+                    maintenance.Start(NexusMaintenanceOperation.ExtractMateria, out message);
+                if (Selectable(VieriAutoDutyOverlayContract.Desynth, maintenance.HasWorkingProfile && overlay?.ShowDesynth != false))
+                    maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
+                ImGui.EndPopup();
             }
-            if (!tripleTriadEnabled)
-                ImGui.EndDisabled();
-            ImGui.EndPopup();
+            ImGui.SameLine(0, 5);
+
+            CategoryButton("Inventory", "NexusInventory", controlsEnabled);
+            if (ImGui.BeginPopup("NexusInventory"))
+            {
+                if (Selectable(VieriAutoDutyOverlayContract.SellInventory, maintenance.HasWorkingProfile && overlay?.ShowSell != false))
+                {
+                    ImGui.CloseCurrentPopup();
+                    maintenance.StartProtectedSelling(out message);
+                }
+                if (Selectable(VieriAutoDutyOverlayContract.TurnIn, maintenance.HasWorkingProfile && overlay?.ShowTurnIn != false))
+                {
+                    ImGui.CloseCurrentPopup();
+                    maintenance.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out message);
+                }
+                if (Selectable(VieriAutoDutyOverlayContract.Coffers, maintenance.HasWorkingProfile && overlay?.ShowCoffers != false))
+                {
+                    ImGui.CloseCurrentPopup();
+                    maintenance.Start(NexusMaintenanceOperation.OpenCoffers, out message);
+                }
+                if (Selectable(VieriAutoDutyOverlayContract.Armoire, maintenance.HasWorkingProfile))
+                    maintenance.Start(NexusMaintenanceOperation.EntrustArmoire, out message);
+                ImGui.EndPopup();
+            }
+            ImGui.SameLine(0, 5);
+
+            CategoryButton("Extras", "NexusExtras", controlsEnabled);
+            if (ImGui.BeginPopup("NexusExtras"))
+            {
+                bool tripleTriadEnabled = maintenance.HasWorkingProfile && overlay?.ShowTripleTriad != false;
+                if (!tripleTriadEnabled)
+                    ImGui.BeginDisabled();
+                if (ImGui.BeginMenu(VieriAutoDutyOverlayContract.TripleTriad))
+                {
+                    if (ImGui.Selectable(VieriAutoDutyOverlayContract.RegisterTripleTriadCards))
+                        maintenance.Start(NexusMaintenanceOperation.RegisterTripleTriadCards, out message);
+                    if (ImGui.Selectable(VieriAutoDutyOverlayContract.SellTripleTriadCards))
+                    {
+                        ImGui.CloseCurrentPopup();
+                        maintenance.Start(NexusMaintenanceOperation.SellTripleTriadCards, out message);
+                    }
+                    ImGui.EndMenu();
+                }
+                if (!tripleTriadEnabled)
+                    ImGui.EndDisabled();
+                ImGui.EndPopup();
+            }
+            ImGui.SameLine(0, 5);
         }
 
-        ImGui.SameLine(0, 5);
         using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
         {
             if (ImGui.Button($"{FontAwesomeIcon.Cog.ToIconString()}###NexusOperationsSettings"))
@@ -273,14 +280,15 @@ internal sealed class NexusOperationsOverlay : Window
             }
         }
 
-        if (!plugin.Configuration.ShowOperationsStatus)
-            return;
-
-        string? status = OverlayActionText(anyActive);
-        if (!string.IsNullOrWhiteSpace(status))
+        if (!string.IsNullOrWhiteSpace(dutyStatus))
         {
             ImGui.NewLine();
-            ImGui.TextColored(new Vector4(0f, 1f, 0f, 1f), Truncate(status, 40));
+            ImGui.TextColored(new Vector4(93 / 255f, 226 / 255f, 231 / 255f, 1f), Truncate(dutyStatus, 40));
+        }
+        if (!string.IsNullOrWhiteSpace(actionStatus))
+        {
+            ImGui.NewLine();
+            ImGui.TextColored(new Vector4(0f, 1f, 0f, 1f), Truncate(actionStatus, 40));
         }
     }
 
@@ -325,11 +333,42 @@ internal sealed class NexusOperationsOverlay : Window
         if (navigation.Status.State is not NavigationRouteExecutionState.Idle and
             not NavigationRouteExecutionState.Completed and not NavigationRouteExecutionState.Failed)
             return navigation.Status.Message;
-        if (progression.State?.Goal.Status is VieriNexus.Domain.GoalStatus.Active or VieriNexus.Domain.GoalStatus.Paused)
-            return progression.State.Goal.Status == VieriNexus.Domain.GoalStatus.Paused
-                ? "Automation paused."
-                : "Running automation.";
+        if (progression.State is { } state &&
+            state.Goal.Status is VieriNexus.Domain.GoalStatus.Active or VieriNexus.Domain.GoalStatus.Paused)
+        {
+            if (state.Goal.Status == VieriNexus.Domain.GoalStatus.Paused)
+                return "Automation paused.";
+            return state.ActiveTask?.Kind.Value switch
+            {
+                "vieri.gear.ensure-readiness/v1" => "Checking and equipping gear.",
+                "vieri.inventory.run-between-duty-maintenance/v1" => "Running inventory maintenance.",
+                "vieri.quest.run-one/v1" => "Completing the current quest.",
+                "vieri.hunting-log.complete-target/v1" => "Completing the current Hunting Log target.",
+                "vieri.duties.run-one/v1" => "Running the current duty.",
+                _ => "Preparing the next automation step.",
+            };
+        }
         return string.IsNullOrWhiteSpace(message) ? null : message;
+    }
+
+    private string? OverlayDutyText()
+    {
+        VieriNexus.Application.ProgressionGoalState? state = progression.State;
+        if (state?.ActiveTask is not { Kind.Value: "vieri.duties.run-one/v1" } task)
+            return null;
+        try
+        {
+            VieriNexus.Application.ProgressionDutyTaskPayload? payload =
+                System.Text.Json.JsonSerializer.Deserialize<VieriNexus.Application.ProgressionDutyTaskPayload>(task.PayloadJson);
+            if (payload is null)
+                return null;
+            string suffix = state.StopAfterCurrentDuty ? " · Last Run" : string.Empty;
+            return $"{payload.DutyName}{suffix}";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return "Current duty";
+        }
     }
 
     private static string Truncate(string value, int maximum) =>

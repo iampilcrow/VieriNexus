@@ -42,6 +42,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly ICallGateSubscriber<string?> questionableCurrentQuest;
     private readonly ICallGateSubscriber<string, bool> questionableStartSingleQuest;
     private readonly ICallGateSubscriber<string, bool> questionableIsQuestLocked;
+    private readonly ICallGateSubscriber<string, (bool Locked, string Reason)> questionableIsQuestLockedReason;
     private readonly ICallGateSubscriber<string, bool> questionableIsQuestComplete;
     private readonly ICallGateSubscriber<string, bool> questionableIsReadyToAcceptQuest;
     private readonly ICallGateSubscriber<string, bool> questionableIsQuestAccepted;
@@ -51,11 +52,11 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly ICallGateSubscriber<uint, int, bool, object> autoDutyRun;
     private readonly ICallGateSubscriber<object> autoDutyStop;
     private readonly ICallGateSubscriber<int, object> autoDutySetLevelingMode;
-    private readonly ICallGateSubscriber<string, string> autoDutyGetConfig;
     private readonly ICallGateSubscriber<string, object, object> autoDutySetConfig;
     // Identity marker only. Nexus never dispatches this VieriAutoDuty-only endpoint.
     private readonly ICallGateSubscriber<int, string> vieriAutoDutyIdentityMarker;
     private readonly VnavmeshNavigationStopProvider navigationStop;
+    private readonly AutoDutyMigrationService operationsProfiles;
     private readonly NexusGearCatalogService gearCatalog;
     private readonly NexusGearExecutionService gearExecution;
     private long eligibleDutyCacheExpiresAt;
@@ -81,7 +82,6 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     private readonly Dictionary<string, HashSet<string>> unsupportedQuestIdsByProvider = [];
     private long nexusGearStartedSequence;
     private long nexusGearCompletedSequence;
-    private long nextDutyPresentationSync;
     private bool dutyPresentationInitialized;
 
     internal ProgressionProviderService(
@@ -94,6 +94,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         IClientState clientState,
         ICondition condition,
         IGameGui gameGui,
+        AutoDutyMigrationService operationsProfiles,
         NavigationLibraryService navigationLibrary,
         NexusRouteTravelProvider routeTravel,
         VnavmeshNavigationStopProvider navigationStop)
@@ -103,6 +104,7 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         this.clientState = clientState;
         this.playerState = playerState;
         this.navigationStop = navigationStop;
+        this.operationsProfiles = operationsProfiles;
         aetherCurrentQuestIds = dataManager.GetExcelSheet<AetherCurrentCompFlgSet>()
             .Where(row => row.RowId > 0)
             .SelectMany(row => row.AetherCurrents)
@@ -160,6 +162,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         questionableCurrentQuest = pluginInterface.GetIpcSubscriber<string?>("Questionable.GetCurrentQuestId");
         questionableStartSingleQuest = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.StartSingleQuest");
         questionableIsQuestLocked = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.IsQuestLocked");
+        questionableIsQuestLockedReason = pluginInterface
+            .GetIpcSubscriber<string, (bool Locked, string Reason)>("Questionable.IsQuestLockedReason");
         questionableIsQuestComplete = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.IsQuestComplete");
         questionableIsReadyToAcceptQuest = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.IsReadyToAcceptQuest");
         questionableIsQuestAccepted = pluginInterface.GetIpcSubscriber<string, bool>("Questionable.IsQuestAccepted");
@@ -169,7 +173,6 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         autoDutyRun = pluginInterface.GetIpcSubscriber<uint, int, bool, object>("AutoDuty.Run");
         autoDutyStop = pluginInterface.GetIpcSubscriber<object>("AutoDuty.Stop");
         autoDutySetLevelingMode = pluginInterface.GetIpcSubscriber<int, object>("AutoDuty.SetLevelingMode");
-        autoDutyGetConfig = pluginInterface.GetIpcSubscriber<string, string>("AutoDuty.GetConfig");
         autoDutySetConfig = pluginInterface.GetIpcSubscriber<string, object, object>("AutoDuty.SetConfig");
         vieriAutoDutyIdentityMarker = pluginInterface.GetIpcSubscriber<int, string>("AutoDuty.StartProgressionLeveling");
         gearCatalog = new NexusGearCatalogService(dataManager, playerState, objectTable);
@@ -250,10 +253,6 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
     private void ReconcileDutyPresentation(DateTimeOffset now)
     {
-        if (now.ToUnixTimeMilliseconds() < nextDutyPresentationSync)
-            return;
-        nextDutyPresentationSync = now.ToUnixTimeMilliseconds() + 3000;
-
         ProgressionProviderSelection selection = Snapshot().Duties;
         bool stockReady = selection.IsReady && selection.Selected?.Id == AutoDutyStockProviderId;
         if (!stockReady || !autoDutySetConfig.HasAction)
@@ -261,30 +260,28 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
             dutyPresentationInitialized = false;
             return;
         }
+        if (dutyPresentationInitialized)
+            return;
 
         try
         {
-            string? overlaySetting = autoDutyGetConfig.HasFunction
-                ? autoDutyGetConfig.InvokeFunc("Overlay.Show")
-                : null;
-            if (!dutyPresentationInitialized)
-            {
-                autoDutySetConfig.InvokeAction("DutyConfig.AutoManageRotationPluginState", "true");
-                autoDutySetConfig.InvokeAction("DutyConfig.RotationPlugin", "WrathCombo");
-            }
-            if (!dutyPresentationInitialized || !IsFalseSetting(overlaySetting))
-                autoDutySetConfig.InvokeAction("Overlay.Show", "false");
+            // Current stock AutoDuty exposes its profile settings under these nested names.
+            // Apply them once when the provider becomes ready. Re-reading or rewriting an
+            // unsupported setting every frame used to flood AutoDuty's log and could interfere
+            // with real duty work; presentation preferences must never be a runtime dependency.
+            autoDutySetConfig.InvokeAction("DutyConfig.AutoManageRotationPluginState", "true");
+            autoDutySetConfig.InvokeAction("DutyConfig.RotationPlugin", "WrathCombo");
+            autoDutySetConfig.InvokeAction("Overlay.Show", "false");
             dutyPresentationInitialized = true;
         }
-        catch
+        catch (Exception ex)
         {
-            // Provider reloads briefly invalidate IPC delegates. Retry on the next bounded sync.
-            dutyPresentationInitialized = false;
+            Plugin.Log.Debug(ex,
+                "Stock AutoDuty presentation preferences were unavailable; duty execution remains usable.");
+            // Do not repeatedly call a provider that rejected optional presentation settings.
+            dutyPresentationInitialized = true;
         }
     }
-
-    private static bool IsFalseSetting(string? value) =>
-        bool.TryParse(value?.Trim().Trim('"'), out bool parsed) && !parsed;
 
     internal ProgressionProviderSnapshot Snapshot()
     {
@@ -486,7 +483,19 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 bool complete = questionableIsQuestComplete.InvokeFunc(target.QuestId);
                 bool accepted = !complete && questionableIsQuestAccepted.InvokeFunc(target.QuestId);
                 bool ready = !complete && !accepted && questionableIsReadyToAcceptQuest.InvokeFunc(target.QuestId);
-                bool locked = !complete && !accepted && questionableIsQuestLocked.InvokeFunc(target.QuestId);
+                bool locked = false;
+                string lockReason = string.Empty;
+                if (!complete && !accepted)
+                {
+                    if (questionableIsQuestLockedReason.HasFunction)
+                    {
+                        (locked, lockReason) = questionableIsQuestLockedReason.InvokeFunc(target.QuestId);
+                    }
+                    else
+                    {
+                        locked = questionableIsQuestLocked.InvokeFunc(target.QuestId);
+                    }
+                }
                 observation = complete
                     ? new(ProgressAtlasEntryState.Complete, "Completed on this character.", false)
                     : accepted
@@ -499,7 +508,9 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                                 ? new(ProgressAtlasEntryState.Ready,
                                     "Ready to start through stock Questionable.", true)
                                 : new(ProgressAtlasEntryState.Locked,
-                                    "Requires earlier story, class/job/role, travel, or quest progress.", false);
+                                    string.IsNullOrWhiteSpace(lockReason)
+                                        ? "Requires earlier story, class/job/role, travel, or quest progress."
+                                        : $"Prerequisites: {lockReason.Replace(",", " • ")}.", false);
             }
             catch (Exception ex)
             {
@@ -1115,9 +1126,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 // Stock AutoDuty keeps duty mechanics; Nexus supplies the unified controls and
                 // stock Wrath supplies rotations. These public settings prevent two overlays or
                 // an accidental BossMod-only rotation selection from competing with that model.
-                autoDutySetConfig.InvokeAction("Overlay.Show", "false");
-                autoDutySetConfig.InvokeAction("DutyConfig.AutoManageRotationPluginState", "true");
-                autoDutySetConfig.InvokeAction("DutyConfig.RotationPlugin", "WrathCombo");
+                if (!dutyPresentationInitialized)
+                    ReconcileDutyPresentation(DateTimeOffset.UtcNow);
             }
             autoDutyRun.InvokeAction(territoryId, 1, false);
             message = $"Nexus asked {selection.Selected!.DisplayName} to run one duty, then return control for verification.";
@@ -1171,6 +1181,14 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
 
         try
         {
+            AutoDutyMaintenancePolicy? maintenance = operationsProfiles.ProfileFor(playerState.ContentId)?.Maintenance;
+            if (maintenance is { AutoBuyVendorGear: false })
+            {
+                CompleteGearReadinessLocally();
+                message = "Automatic vendor gear upgrades are disabled in Gear & Inventory settings.";
+                return true;
+            }
+
             if (autoDutyIsStopped.HasFunction && !autoDutyIsStopped.InvokeFunc())
             {
                 message = "AutoDuty is already running duty work. Stop it before Nexus starts gear readiness.";
@@ -1206,7 +1224,8 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
                 return true;
             }
 
-            if (!TryStartApprovedGearShopping(decision.Approval!, out message))
+            bool equipAfterPurchase = maintenance?.AutoEquipRecommendedGear != false;
+            if (!TryStartApprovedGearShopping(decision.Approval!, equipAfterPurchase, out message))
                 return false;
             message = $"Nexus selected and approved {decision.Approval!.Lines.Count} exact gear upgrade(s) " +
                       $"with a protected {minimumGilReserve:N0}-gil floor and started its native gear transaction.";
@@ -1244,6 +1263,12 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
     }
 
     internal bool TryStartApprovedGearShopping(GearShoppingApproval approval, out string message)
+        => TryStartApprovedGearShopping(approval, true, out message);
+
+    private bool TryStartApprovedGearShopping(
+        GearShoppingApproval approval,
+        bool equipAfterPurchase,
+        out string message)
     {
         if (!IsGearShoppingExecutionReady)
         {
@@ -1257,7 +1282,17 @@ internal sealed class ProgressionProviderService : IProgressionDutyProvider, IPr
         }
         ProgressionGearProviderObservation baseline = ObserveGearReadiness();
         gearExecution.EnsureSequenceAfter(Math.Max(baseline.StartedSequence, baseline.CompletedSequence));
-        return gearExecution.Start(approval, out message);
+        return gearExecution.Start(approval, equipAfterPurchase, out message);
+    }
+
+    private void CompleteGearReadinessLocally()
+    {
+        ProgressionGearProviderObservation baseline = ObserveGearReadiness();
+        long sequence = Math.Max(
+            Math.Max(baseline.StartedSequence, baseline.CompletedSequence),
+            Math.Max(nexusGearStartedSequence, nexusGearCompletedSequence)) + 1;
+        nexusGearStartedSequence = sequence;
+        nexusGearCompletedSequence = sequence;
     }
 
     internal bool TryStopGearReadiness(out string message)

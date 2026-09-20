@@ -134,6 +134,18 @@ internal sealed class NexusHuntingLogService : IProgressionHuntingProvider
         return selected is null ? null : ToCandidate(selected);
     }
 
+    internal ProgressionHuntingTargetCandidate? EligibleAtlasTarget(HuntingLogTargetProgress target)
+    {
+        if (!IsReady || !clientState.IsLoggedIn || objectTable.LocalPlayer is null)
+            return null;
+        HuntingLogTargetProgress? eligible = EligibleProgress(objectTable.LocalPlayer.Level)
+            .FirstOrDefault(candidate => candidate.LogKey == target.LogKey &&
+                                         candidate.Rank == target.Rank &&
+                                         candidate.TaskIndex == target.TaskIndex &&
+                                         candidate.MonsterIndex == target.MonsterIndex);
+        return eligible is null ? null : ToCandidate(eligible);
+    }
+
     private IEnumerable<HuntingLogTargetProgress> EligibleProgress(int currentLevel)
     {
         int grandCompanyRank = CurrentGrandCompanyRank();

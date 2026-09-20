@@ -31,6 +31,7 @@ internal sealed class ProgressAtlasService
     private readonly AetherCurrentAtlasTarget[] aetherCurrentTargets;
     private readonly AetherCurrentQuestAtlasTarget[] aetherCurrentQuestTargets;
     private readonly HuntingLogCatalog huntingLogCatalog;
+    private readonly IReadOnlyDictionary<uint, TerritoryAtlasInfo> territories;
     private DateTimeOffset lastRefresh = DateTimeOffset.MinValue;
     private DateTimeOffset lastAchievementRequest = DateTimeOffset.MinValue;
     private ProgressAtlasSnapshot current;
@@ -40,7 +41,7 @@ internal sealed class ProgressAtlasService
     {
         this.clientState = clientState;
         this.playerState = playerState;
-        Dictionary<uint, TerritoryAtlasInfo> territories = dataManager.GetExcelSheet<TerritoryType>()
+        territories = dataManager.GetExcelSheet<TerritoryType>()
             .Where(row => row.RowId > 0)
             .ToDictionary(row => row.RowId, row => new TerritoryAtlasInfo(
                 row.PlaceName.ValueNullable?.Name.ToString() ?? $"Territory {row.RowId}",
@@ -123,7 +124,14 @@ internal sealed class ProgressAtlasService
         achievementTargets = achievementRows.Select(row => new AchievementAtlasTarget(
                 row.RowId,
                 row.Name.ToString(),
-                row.AchievementCategory.Value.Name.ToString(),
+                row.Description.ToString(),
+                row.AchievementCategory.Value.AchievementKind.Value.Name.ToString(),
+                string.IsNullOrWhiteSpace(row.AchievementCategory.Value.Name.ToString())
+                    ? "General"
+                    : row.AchievementCategory.Value.Name.ToString(),
+                row.AchievementCategory.Value.AchievementKind.Value.Order,
+                row.AchievementCategory.Value.Order,
+                row.Order,
                 row.Type,
                 row.Key.RowId,
                 new[] { row.Key.RowId }
@@ -132,6 +140,17 @@ internal sealed class ProgressAtlasService
                     .Distinct()
                     .ToArray(),
                 row.Type == 20 ? aetherCurrentTerritories.GetValueOrDefault(row.Key.RowId) : 0,
+                row.Points,
+                AchievementDifficultyScore(
+                    row.Type,
+                    row.Key.RowId,
+                    new[] { row.Key.RowId }
+                        .Concat(row.Data.Select(value => value.RowId))
+                        .Where(value => value != 0)
+                        .Distinct()
+                        .ToArray(),
+                    row.Points,
+                    row.AchievementCategory.Value.AchievementKind.Value.Name.ToString()),
                 row.Type switch
                 {
                     8 => 0,
@@ -141,7 +160,10 @@ internal sealed class ProgressAtlasService
                     14 => 4,
                     _ => 10,
                 }))
-            .OrderBy(target => target.Category, StringComparer.CurrentCulture)
+            .OrderBy(target => target.KindOrder)
+            .ThenBy(target => target.CategoryOrder)
+            .ThenBy(target => target.DifficultyScore)
+            .ThenBy(target => target.Order)
             .ThenBy(target => target.Name, StringComparer.CurrentCulture)
             .ToArray();
         Dictionary<uint, (ContentFinderCondition Duty, uint ContentId)> dutiesByTerritory = dataManager
@@ -173,6 +195,8 @@ internal sealed class ProgressAtlasService
     internal IReadOnlyList<AetherCurrentQuestAtlasTarget> AetherCurrentQuestTargets => aetherCurrentQuestTargets;
     internal IReadOnlyList<MapDiscoveryRegion> ExplorationTargets => mapDiscoveryRegions;
     internal IReadOnlyList<AchievementAtlasTarget> AchievementTargets => achievementTargets;
+    internal string TerritoryName(uint territoryId) =>
+        territories.GetValueOrDefault(territoryId)?.Name ?? $"Territory {territoryId}";
 
     private static uint ContentRowId(ContentFinderCondition row)
     {
@@ -572,12 +596,55 @@ internal sealed class ProgressAtlasService
     internal sealed record AchievementAtlasTarget(
         uint Id,
         string Name,
+        string Description,
+        string Kind,
         string Category,
+        byte KindOrder,
+        byte CategoryOrder,
+        ushort Order,
         byte Type,
         uint Key,
         IReadOnlyList<uint> RelatedRows,
         uint TerritoryId,
+        byte Points,
+        int DifficultyScore,
         int AutomationPriority);
+
+    internal static int AchievementDifficultyScore(
+        byte type,
+        uint key,
+        IReadOnlyList<uint> relatedRows,
+        byte points,
+        string kind)
+    {
+        int baseScore = type switch
+        {
+            9 => 1_000,
+            8 => 1_500,
+            20 => 1_800,
+            7 => 2_500,
+            14 => 4_000,
+            3 => 5_000,
+            _ => 10_000,
+        };
+        uint target = relatedRows.FirstOrDefault(value => value > 0);
+        if (type is 1 or 3 or 5 or 10 or 12 or 13 or 17 or 18 or 19 or 21 or 23 or 25 or 26 or 27 or 28 or 29 or 31)
+            target = relatedRows.FirstOrDefault(value => value > 0, key);
+        int scale = target == 0 ? 0 : (int)(Math.Log10(target + 1d) * 700d);
+        int score = baseScore + scale + points * 10;
+        if (kind.Equals("PvP", StringComparison.OrdinalIgnoreCase))
+            score += 100_000;
+        return score;
+    }
+
+    internal static string AchievementDifficultyLabel(int score) => score switch
+    {
+        < 2_500 => "Quick",
+        < 5_000 => "Short",
+        < 12_000 => "Moderate",
+        < 100_000 => "Long-term",
+        _ => "PvP / group effort",
+    };
 
     private sealed record TerritoryAtlasInfo(string Name, string Expansion);
 

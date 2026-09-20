@@ -7,7 +7,7 @@ namespace VieriNexus;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 12;
+    public int Version { get; set; } = 13;
     public bool FirstRunComplete { get; set; }
     public bool OpenOnLogin { get; set; }
     public bool CompactNavigation { get; set; }
@@ -20,6 +20,8 @@ public sealed class Configuration : IPluginConfiguration
     public bool HideOperationsOverlayWhenStopped { get; set; }
     public bool OperationsOverlayAnchorBottom { get; set; }
     public bool ShowOperationsStatus { get; set; } = true;
+    public bool ShowOperationsDutyStatus { get; set; } = true;
+    public bool ShowOperationsActionStatus { get; set; } = true;
     public bool ManageQuestionableRouteCorrections { get; set; } = true;
     public bool MapClickNavigationHotkeyEnabled { get; set; } = true;
     public ushort MapClickNavigationHotkey { get; set; }
@@ -57,7 +59,12 @@ public sealed class Configuration : IPluginConfiguration
             ProgressionQueuePolicy.Normalize(character.ProgressionQueue);
             character.Atlas ??= new AtlasAutomationConfiguration();
         }
-        Version = 12;
+        if (storedVersion < 13)
+        {
+            ShowOperationsDutyStatus = ShowOperationsStatus;
+            ShowOperationsActionStatus = ShowOperationsStatus;
+        }
+        Version = 13;
     }
 
     public CharacterConfiguration ForCharacter(string key)

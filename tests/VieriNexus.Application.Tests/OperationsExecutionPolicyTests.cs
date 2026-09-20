@@ -19,17 +19,22 @@ public sealed class OperationsExecutionPolicyTests
             AutoSell = true,
             AutoDesynth = true,
             AutoGrandCompanyTurnIn = true,
+            SellTripleTriadCards = true,
+            ReturnToInnAfterMaintenance = true,
         };
 
         Assert.Equal([
+            NexusMaintenanceOperation.Repair,
             NexusMaintenanceOperation.ExtractMateria,
             NexusMaintenanceOperation.Desynthesize,
             NexusMaintenanceOperation.RegisterTripleTriadCards,
             NexusMaintenanceOperation.RegisterMinions,
             NexusMaintenanceOperation.RegisterOrchestrionRolls,
             NexusMaintenanceOperation.OpenCoffers,
+            NexusMaintenanceOperation.Sell,
             NexusMaintenanceOperation.GrandCompanyTurnIn,
-            NexusMaintenanceOperation.Repair,
+            NexusMaintenanceOperation.SellTripleTriadCards,
+            NexusMaintenanceOperation.ReturnToInn,
         ], OperationsExecutionPolicy.ConfiguredOperations(policy));
     }
 
@@ -75,11 +80,27 @@ public sealed class OperationsExecutionPolicyTests
     }
 
     [Fact]
-    public void VendorRepairIsNotSilentlyReplacedBySelfRepair()
+    public void VendorRepairRemainsAConfiguredRepairOperation()
     {
         AutoDutyMaintenancePolicy policy = Policy() with { AutoRepair = true, RepairWithCrafter = false };
-        Assert.DoesNotContain(NexusMaintenanceOperation.Repair,
+        Assert.Contains(NexusMaintenanceOperation.Repair,
             OperationsExecutionPolicy.ConfiguredOperations(policy));
+    }
+
+    [Theory]
+    [InlineData(49.9f, true)]
+    [InlineData(50f, false)]
+    [InlineData(100f, false)]
+    public void RepairUsesTheImportedDurabilityThreshold(float durability, bool expected)
+    {
+        AutoDutyMaintenancePolicy policy = Policy() with
+        {
+            AutoRepair = true,
+            RepairBelowPercent = 50,
+        };
+
+        Assert.Equal(expected, OperationsExecutionPolicy.NeedsRepair(policy, durability));
+        Assert.False(OperationsExecutionPolicy.NeedsRepair(policy with { AutoRepair = false }, durability));
     }
 
     [Fact]

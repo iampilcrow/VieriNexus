@@ -52,6 +52,51 @@ internal sealed class AutoDutyMigrationService
     internal AutoDutyProfileSnapshot? ProfileFor(ulong characterId) =>
         OperationsProfilePolicy.Resolve(WorkingSnapshot, characterId);
 
+    internal bool UpdateProfile(
+        ulong characterId,
+        Func<AutoDutyProfileSnapshot, AutoDutyProfileSnapshot> update,
+        out string result)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        AutoDutyMigrationSnapshot? snapshot = WorkingSnapshot;
+        if (snapshot is null)
+        {
+            result = "Prepare the VieriAutoDuty settings before editing this Nexus profile.";
+            return false;
+        }
+
+        AutoDutyProfileSnapshot? selected = OperationsProfilePolicy.Resolve(snapshot, characterId);
+        if (selected is null)
+        {
+            result = "No Nexus operations profile is available for this character.";
+            return false;
+        }
+
+        try
+        {
+            AutoDutyProfileSnapshot replacement = update(selected);
+            AutoDutyProfileSnapshot[] profiles = snapshot.Profiles
+                .Select(profile => ReferenceEquals(profile, selected) ||
+                                   profile.Name.Equals(selected.Name, StringComparison.OrdinalIgnoreCase)
+                    ? replacement
+                    : profile)
+                .ToArray();
+            AutoDutyMigrationSnapshot updated = snapshot with { Profiles = profiles };
+            OperationsProfileLibrary current = workingStore.Load()
+                ?? throw new InvalidDataException("The Nexus operations-profile working copy is unavailable.");
+            workingStore.Save(current with { Snapshot = updated });
+            Volatile.Write(ref workingSnapshot, updated);
+            result = $"Saved Nexus operations profile {replacement.Name}.";
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                          InvalidDataException or JsonException)
+        {
+            result = "The Nexus operations profile could not be saved; the previous working copy remains active.";
+            return false;
+        }
+    }
+
     internal AutoDutyMigrationStatus Status()
     {
         string? sourcePath = FindSourcePath();

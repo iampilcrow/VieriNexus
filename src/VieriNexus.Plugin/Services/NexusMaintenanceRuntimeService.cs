@@ -65,6 +65,9 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
     private readonly ICallGateSubscriber<bool> glamourLogEntrust;
     private readonly ICallGateSubscriber<uint, bool> glamourLogIsInArmoire;
     private readonly ICallGateSubscriber<uint, bool> glamourLogIsInDresser;
+    private readonly ICallGateSubscriber<int?, object> enqueueInnShortcut;
+    private readonly ICallGateSubscriber<bool> lifestreamBusy;
+    private readonly ICallGateSubscriber<object> lifestreamAbort;
     private readonly Queue<NexusMaintenanceOperation> queue = [];
     private readonly Dictionary<uint, int> skippedQuantities = [];
     private ResourceLeaseHandle? lease;
@@ -96,6 +99,9 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
     private DateTimeOffset providerPreparationStartedAt;
     private SaleVendor? saleVendor;
     private readonly Dictionary<uint, IReadOnlyList<SaleVendor>> saleVendorsByTerritory = [];
+    private readonly Dictionary<uint, IReadOnlyList<RepairVendor>> repairVendorsByTerritory = [];
+    private RepairVendor? repairVendor;
+    private bool sellingUsesAutoRetainerList;
     private long runStartedSequence;
     private long runCompletedSequence;
 
@@ -128,6 +134,9 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         glamourLogEntrust = pluginInterface.GetIpcSubscriber<bool>("GlamourLog.EntrustAll");
         glamourLogIsInArmoire = pluginInterface.GetIpcSubscriber<uint, bool>("GlamourLog.IsItemInArmoire");
         glamourLogIsInDresser = pluginInterface.GetIpcSubscriber<uint, bool>("GlamourLog.IsItemInDresser");
+        enqueueInnShortcut = pluginInterface.GetIpcSubscriber<int?, object>("Lifestream.EnqueueInnShortcut");
+        lifestreamBusy = pluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy");
+        lifestreamAbort = pluginInterface.GetIpcSubscriber<object>("Lifestream.Abort");
         gameInteropProvider.InitializeFromAttributes(this);
     }
 
@@ -181,7 +190,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         }
         approvedSale = new Queue<NexusInventoryItemSnapshot>(current.Items);
         latestSalePreview = null;
-        return Start([NexusMaintenanceOperation.Sell], selectedPolicy, out result);
+        return Start([NexusMaintenanceOperation.Sell], selectedPolicy, out result, forceBuiltInSelling: true);
     }
 
     internal bool StartProtectedSelling(out string result)
@@ -203,7 +212,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
 
         approvedSale = new Queue<NexusInventoryItemSnapshot>(current.Items);
         latestSalePreview = null;
-        return Start([NexusMaintenanceOperation.Sell], selectedPolicy, out result);
+        return Start([NexusMaintenanceOperation.Sell], selectedPolicy, out result, forceBuiltInSelling: true);
     }
 
     internal bool StartConfigured(out string result)
@@ -214,8 +223,12 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
             result = "Import VieriAutoDuty operations on the Migration page first.";
             return false;
         }
+        (int occupied, int totalSlots) = BagSlotCounts();
         NexusMaintenanceOperation[] operations = OperationsExecutionPolicy
-            .ConfiguredOperations(profile.Maintenance).ToArray();
+            .ConfiguredOperations(profile.Maintenance)
+            .Where(operation => operation != NexusMaintenanceOperation.Sell ||
+                                ItemTransactionPolicy.SellThresholdReached(profile.Maintenance, occupied, totalSlots))
+            .ToArray();
         if (operations.Length == 0)
         {
             result = "This profile has no currently supported native maintenance actions enabled.";
@@ -274,7 +287,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
     private bool Start(
         IReadOnlyList<NexusMaintenanceOperation> operations,
         AutoDutyMaintenancePolicy selectedPolicy,
-        out string result)
+        out string result,
+        bool forceBuiltInSelling = false)
     {
         if (current is not null)
         {
@@ -299,7 +313,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         List<ResourceKind> resources = [ResourceKind.UiInteraction, ResourceKind.InventoryMutation];
         if (operations.Any(operation => operation is NexusMaintenanceOperation.Sell or
                 NexusMaintenanceOperation.GrandCompanyTurnIn or
-                NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest))
+                NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest or
+                NexusMaintenanceOperation.SellTripleTriadCards or NexusMaintenanceOperation.ReturnToInn))
             resources.Add(ResourceKind.Teleport);
         if (operations.Contains(NexusMaintenanceOperation.GrandCompanyTurnIn))
             resources.Add(ResourceKind.Retainer);
@@ -317,6 +332,15 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         foreach (NexusMaintenanceOperation operation in operations.Distinct())
             queue.Enqueue(operation);
         policy = selectedPolicy;
+        sellingUsesAutoRetainerList = operations.Contains(NexusMaintenanceOperation.Sell) &&
+                                      !forceBuiltInSelling &&
+                                      selectedPolicy.AutoSellMode.Equals("AutoRetainerList", StringComparison.OrdinalIgnoreCase);
+        if (operations.Contains(NexusMaintenanceOperation.Sell) && !sellingUsesAutoRetainerList)
+        {
+            NexusItemTransactionPreview sale = ItemTransactionPolicy.CreateSellPreview(
+                ReadBagSnapshot(), selectedPolicy.ProtectGearsetsFromSelling);
+            approvedSale = new Queue<NexusInventoryItemSnapshot>(sale.Items);
+        }
         characterId = playerState.ContentId;
         total = queue.Count;
         completed = 0;
@@ -387,6 +411,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
                 case NexusMaintenanceOperation.GrandCompanyTurnIn: UpdateProviderOperation(now, true); break;
                 case NexusMaintenanceOperation.EntrustArmoire:
                 case NexusMaintenanceOperation.EntrustGlamourChest: UpdateProviderOperation(now, false); break;
+                case NexusMaintenanceOperation.SellTripleTriadCards: UpdateTripleTriadSelling(now); break;
+                case NexusMaintenanceOperation.ReturnToInn: UpdateReturnToInn(now); break;
             }
         }
         catch (Exception exception)
@@ -403,13 +429,18 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
             result = "No Nexus maintenance is active.";
             return false;
         }
-        if (providerStarted && current is NexusMaintenanceOperation.GrandCompanyTurnIn or
-            NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest)
+        if (providerStarted && current is NexusMaintenanceOperation.GrandCompanyTurnIn or NexusMaintenanceOperation.Sell or
+            NexusMaintenanceOperation.EntrustArmoire or NexusMaintenanceOperation.EntrustGlamourChest or
+            NexusMaintenanceOperation.ReturnToInn)
         {
             queue.Clear();
             stopRequested = true;
             if (current == NexusMaintenanceOperation.GrandCompanyTurnIn)
                 TryInvoke(autoRetainerAbort, "stop the Grand Company turn-in provider");
+            if (current == NexusMaintenanceOperation.Sell && sellingUsesAutoRetainerList)
+                TryInvoke(autoRetainerAbort, "stop AutoRetainer list selling");
+            if (current == NexusMaintenanceOperation.ReturnToInn)
+                TryInvoke(lifestreamAbort, "stop the return-to-inn request");
             message = "Nexus requested Stop and is retaining ownership until the provider confirms it is inactive.";
             result = message;
             return true;
@@ -436,6 +467,18 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         current = queue.Dequeue();
         operationStartedAt = now;
         nextActionAt = now;
+        if (current == NexusMaintenanceOperation.Sell && !sellingUsesAutoRetainerList && approvedSale.Count == 0)
+        {
+            completed++;
+            BeginNext(now);
+            return;
+        }
+        if (current == NexusMaintenanceOperation.SellTripleTriadCards && !EnoughTripleTriadCards())
+        {
+            completed++;
+            BeginNext(now);
+            return;
+        }
         if (current == NexusMaintenanceOperation.OpenCoffers)
         {
             RaptureGearsetModule* gearsets = RaptureGearsetModule.Instance();
@@ -452,10 +495,15 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
 
     private void UpdateRepair(DateTimeOffset now)
     {
-        if (LowestEquippedDurability() >= 100f)
+        if (!OperationsExecutionPolicy.NeedsRepair(policy!, LowestEquippedDurability()))
         {
             CloseAddon("Repair");
             CompleteCurrent(now);
+            return;
+        }
+        if (!policy!.RepairWithCrafter)
+        {
+            UpdateVendorRepair(now);
             return;
         }
         if (TryAddon<AddonSelectYesno>("SelectYesno", out AddonSelectYesno* confirm) && repairClicked)
@@ -478,6 +526,94 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         }
         ActionManager.Instance()->UseAction(ActionType.GeneralAction, 6);
         Throttle(now, 1_000);
+    }
+
+    private void UpdateVendorRepair(DateTimeOffset now)
+    {
+        if (TryAddon<AddonSelectYesno>("SelectYesno", out AddonSelectYesno* confirm) && repairClicked)
+        {
+            ClickButton(confirm->YesButton, (AtkUnitBase*)confirm);
+            Throttle(now, 750);
+            return;
+        }
+        if (TryAddon<AddonRepair>("Repair", out AddonRepair* repair))
+        {
+            ClickButton(repair->RepairAllButton, (AtkUnitBase*)repair);
+            repairClicked = true;
+            Throttle(now, 750);
+            return;
+        }
+        if (providerPreparation == ProviderPreparationPhase.None)
+        {
+            repairVendor = SelectRepairVendor();
+            if (repairVendor is null)
+            {
+                Fail("No repair vendor could be found for the configured repair action.");
+                return;
+            }
+            RepairVendor vendor = repairVendor.Value;
+            string request = JsonSerializer.Serialize(new
+            {
+                TerritoryId = vendor.TerritoryId,
+                Points = new[] { new { X = vendor.Position.X, Y = vendor.Position.Y, Z = vendor.Position.Z } },
+                UseMesh = true,
+                UseFlight = false,
+                Tolerance = 0.75f,
+                LastPointTolerance = 3f,
+                Mode = "travel",
+                VendorTargetDataId = vendor.DataId,
+                VendorPosition = new { X = vendor.Position.X, Y = vendor.Position.Y, Z = vendor.Position.Z },
+            });
+            SuiteRouteDispatchResult dispatch = travel.Dispatch(request);
+            if (!dispatch.Started)
+            {
+                Fail(dispatch.Message);
+                return;
+            }
+            providerPreparation = ProviderPreparationPhase.Traveling;
+            providerPreparationStartedAt = now;
+            message = "Traveling to the selected repair vendor.";
+            return;
+        }
+        if (providerPreparation is ProviderPreparationPhase.Traveling or ProviderPreparationPhase.Approaching)
+        {
+            SuiteRouteProviderObservation observation = travel.Observe(now);
+            if (observation.State == SuiteRouteProviderState.Failed)
+            {
+                Fail("Could not reach the selected repair vendor.");
+                return;
+            }
+            if (observation.State != SuiteRouteProviderState.Completed)
+                return;
+            providerPreparation = ProviderPreparationPhase.Interacting;
+            providerPreparationStartedAt = now;
+        }
+        if (repairVendor is not { } selected)
+            return;
+        if (TryAddon<AddonTalk>("Talk", out AddonTalk* talk))
+        {
+            ClickTalk(talk);
+            Throttle(now, 500);
+            return;
+        }
+        if (TryAddon<AddonSelectIconString>("SelectIconString", out AddonSelectIconString* icon))
+        {
+            Fire((AtkUnitBase*)icon, true, selected.RepairIndex);
+            Throttle(now, 500);
+            return;
+        }
+        IGameObject? target = objectTable.Where(candidate => candidate.BaseId == selected.DataId)
+            .OrderBy(candidate => objectTable.LocalPlayer is { } player
+                ? Vector3.DistanceSquared(player.Position, candidate.Position)
+                : float.MaxValue)
+            .FirstOrDefault();
+        if (target is { IsTargetable: true } && objectTable.LocalPlayer is { } localPlayer &&
+            Vector3.Distance(localPlayer.Position, target.Position) <= 7f)
+        {
+            TargetSystem.Instance()->InteractWithObject((GameObject*)target.Address, false);
+            message = "Opening the repair vendor.";
+            Throttle(now, 750);
+        }
     }
 
     private void UpdateExtraction(DateTimeOffset now)
@@ -655,6 +791,30 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
             return;
         }
         providerPreparation = ProviderPreparationPhase.Ready;
+        if (sellingUsesAutoRetainerList)
+        {
+            if (!providerStarted)
+            {
+                if (!autoRetainerBusy.HasFunction || !autoRetainerAbort.HasAction ||
+                    !Plugin.CommandManager.ProcessCommand("/autoretainer itemsell"))
+                {
+                    Fail("AutoRetainer is not ready for its configured vendor-list selling mode.");
+                    return;
+                }
+                providerStarted = true;
+                providerPreparationStartedAt = now;
+                message = "AutoRetainer is selling the configured vendor-list items.";
+                return;
+            }
+            bool busy = autoRetainerBusy.InvokeFunc();
+            sawProviderBusy |= busy;
+            if (!busy && (sawProviderBusy || now - providerPreparationStartedAt >= TimeSpan.FromSeconds(3)))
+            {
+                CloseAddon("Shop");
+                CompleteCurrent(now);
+            }
+            return;
+        }
         if (pendingSale is { } pending)
         {
             InventoryItem* slot = InventoryManager.Instance()->GetInventorySlot(
@@ -789,6 +949,10 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
 
     private SaleVendor? SelectSaleVendor()
     {
+        if (TryPreferredVendor(policy?.PreferredSellVendorJson, out VendorPreference preferred) &&
+            preferred.ShopIndex >= 0)
+            return new(preferred.DataId, preferred.TerritoryId, preferred.Position, preferred.ShopIndex);
+
         uint currentTerritory = clientState.TerritoryType;
         Vector3 origin = objectTable.LocalPlayer?.Position ?? Vector3.Zero;
         uint[] territories;
@@ -834,6 +998,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
             return cached;
 
         List<SaleVendor> vendors = [];
+        List<RepairVendor> repairVendors = [];
         try
         {
             TerritoryType? territory = dataManager.GetExcelSheet<TerritoryType>().GetRowOrDefault(territoryId);
@@ -856,21 +1021,24 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
                         if (npcBase is null)
                             continue;
                         int shopIndex = -1;
+                        int repairIndex = -1;
                         int referenceIndex = 0;
                         foreach (var reference in npcBase.Value.ENpcData)
                         {
-                            if (reference.Is<GilShop>())
-                            {
+                            if (shopIndex < 0 && reference.Is<GilShop>())
                                 shopIndex = referenceIndex;
-                                break;
-                            }
+                            if (repairIndex < 0 && reference.RowId == 720915)
+                                repairIndex = referenceIndex;
                             referenceIndex++;
                         }
-                        if (shopIndex < 0)
+                        if (shopIndex < 0 && repairIndex < 0)
                             continue;
-                        vendors.Add(new SaleVendor(dataId, territoryId,
-                            new Vector3(instance.Transform.Translation.X, instance.Transform.Translation.Y,
-                                instance.Transform.Translation.Z), shopIndex));
+                        Vector3 position = new(instance.Transform.Translation.X, instance.Transform.Translation.Y,
+                            instance.Transform.Translation.Z);
+                        if (shopIndex >= 0)
+                            vendors.Add(new SaleVendor(dataId, territoryId, position, shopIndex));
+                        if (repairIndex >= 0)
+                            repairVendors.Add(new RepairVendor(dataId, territoryId, position, repairIndex));
                     }
                 }
             }
@@ -881,7 +1049,193 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         }
         IReadOnlyList<SaleVendor> result = vendors.DistinctBy(vendor => vendor.DataId).ToArray();
         saleVendorsByTerritory[territoryId] = result;
+        repairVendorsByTerritory[territoryId] = repairVendors.DistinctBy(vendor => vendor.DataId).ToArray();
         return result;
+    }
+
+    private RepairVendor? SelectRepairVendor()
+    {
+        if (TryPreferredVendor(policy?.PreferredRepairVendorJson, out VendorPreference preferred) &&
+            preferred.RepairIndex >= 0)
+            return new(preferred.DataId, preferred.TerritoryId, preferred.Position, preferred.RepairIndex);
+
+        uint currentTerritory = clientState.TerritoryType;
+        uint[] territories = currentTerritory switch
+        {
+            177 => [128, 129],
+            178 => [130, 131],
+            179 => [132, 133],
+            _ => [currentTerritory],
+        };
+        List<RepairVendor> candidates = [];
+        foreach (uint territory in territories)
+        {
+            if (!repairVendorsByTerritory.ContainsKey(territory))
+                _ = ShopVendors(territory);
+            candidates.AddRange(repairVendorsByTerritory.GetValueOrDefault(territory) ?? []);
+        }
+        Vector3 origin = objectTable.LocalPlayer?.Position ?? Vector3.Zero;
+        RepairVendor? local = candidates
+            .OrderBy(vendor => vendor.TerritoryId == currentTerritory ? 0 : 1)
+            .ThenBy(vendor => Vector3.DistanceSquared(origin, vendor.Position))
+            .Select(vendor => (RepairVendor?)vendor)
+            .FirstOrDefault();
+        if (local is not null)
+            return local;
+
+        uint fallback = FFXIVClientStructs.FFXIV.Client.Game.UI.PlayerState.Instance()->GrandCompany switch
+        {
+            1 => 129u,
+            2 => 133u,
+            _ => 131u,
+        };
+        if (!repairVendorsByTerritory.ContainsKey(fallback))
+            _ = ShopVendors(fallback);
+        return (repairVendorsByTerritory.GetValueOrDefault(fallback) ?? [])
+            .Select(vendor => (RepairVendor?)vendor).FirstOrDefault();
+    }
+
+    private static bool TryPreferredVendor(string? json, out VendorPreference vendor)
+    {
+        vendor = default;
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(json);
+            JsonElement root = document.RootElement;
+            if (!root.TryGetProperty("DataId", out JsonElement dataId) ||
+                !root.TryGetProperty("TerritoryType", out JsonElement territory) ||
+                !root.TryGetProperty("Position", out JsonElement position))
+                return false;
+            float x = position.TryGetProperty("X", out JsonElement xValue) ? xValue.GetSingle() : 0;
+            float y = position.TryGetProperty("Y", out JsonElement yValue) ? yValue.GetSingle() : 0;
+            float z = position.TryGetProperty("Z", out JsonElement zValue) ? zValue.GetSingle() : 0;
+            int repairIndex = root.TryGetProperty("RepairIndex", out JsonElement repair) &&
+                              repair.ValueKind == JsonValueKind.Number ? repair.GetInt32() : -1;
+            int shopIndex = root.TryGetProperty("ShopIndex", out JsonElement shop) &&
+                            shop.ValueKind == JsonValueKind.Number ? shop.GetInt32() : -1;
+            vendor = new(dataId.GetUInt32(), territory.GetUInt32(), new(x, y, z), repairIndex, shopIndex);
+            return vendor.DataId > 0 && vendor.TerritoryId > 0;
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)
+        {
+            return false;
+        }
+    }
+
+    private bool EnoughTripleTriadCards()
+    {
+        int items = 0;
+        int slots = 0;
+        foreach (NexusInventoryItemSnapshot item in ReadBagSnapshot())
+        {
+            Item? row = dataManager.GetExcelSheet<Item>().GetRowOrDefault(item.ItemId % 1_000_000);
+            if (row is not { ItemUICategory.RowId: 86 })
+                continue;
+            items += item.Quantity;
+            slots++;
+        }
+        return items >= policy!.TripleTriadMinimumItemCount && slots >= policy.TripleTriadMinimumFreeSlots;
+    }
+
+    private void UpdateTripleTriadSelling(DateTimeOffset now)
+    {
+        const uint territoryId = 144;
+        const uint vendorDataId = 1016294;
+        Vector3 position = new(-56.1f, 1.6f, 16.6f);
+        if (providerPreparation == ProviderPreparationPhase.None)
+        {
+            string request = JsonSerializer.Serialize(new
+            {
+                TerritoryId = territoryId,
+                Points = new[] { new { X = position.X, Y = position.Y, Z = position.Z } },
+                UseMesh = true,
+                UseFlight = false,
+                Tolerance = 0.75f,
+                LastPointTolerance = 2f,
+                Mode = "travel",
+                VendorTargetDataId = vendorDataId,
+                VendorPosition = new { X = position.X, Y = position.Y, Z = position.Z },
+            });
+            SuiteRouteDispatchResult dispatch = travel.Dispatch(request);
+            if (!dispatch.Started)
+            {
+                Fail(dispatch.Message);
+                return;
+            }
+            providerPreparation = ProviderPreparationPhase.Traveling;
+            message = "Traveling to the Triple Triad trader.";
+            return;
+        }
+        if (providerPreparation is ProviderPreparationPhase.Traveling or ProviderPreparationPhase.Approaching)
+        {
+            SuiteRouteProviderObservation observation = travel.Observe(now);
+            if (observation.State == SuiteRouteProviderState.Failed)
+            {
+                Fail("Could not reach the Triple Triad trader.");
+                return;
+            }
+            if (observation.State != SuiteRouteProviderState.Completed)
+                return;
+            providerPreparation = ProviderPreparationPhase.Interacting;
+        }
+        if (TryAddon("ShopCardDialog", out AtkUnitBase* dialog))
+        {
+            if (TryAddon("TripleTriadCoinExchange", out AtkUnitBase* exchange) &&
+                exchange->AtkValuesCount > 124 && exchange->AtkValues[124].Type == AtkValueType.UInt)
+                Fire(dialog, true, 0, checked((int)exchange->AtkValues[124].UInt));
+            Throttle(now, 350);
+            return;
+        }
+        if (TryAddon("TripleTriadCoinExchange", out AtkUnitBase* cardExchange))
+        {
+            uint entries = cardExchange->AtkValuesCount > 1 && cardExchange->AtkValues[1].Type == AtkValueType.UInt
+                ? cardExchange->AtkValues[1].UInt
+                : 0;
+            if (entries == 0)
+            {
+                cardExchange->Close(true);
+                CompleteCurrent(now);
+                return;
+            }
+            Fire(cardExchange, true, 0, 0);
+            Throttle(now, 350);
+            return;
+        }
+        if (TryAddon<AddonSelectIconString>("SelectIconString", out AddonSelectIconString* icon))
+        {
+            Fire((AtkUnitBase*)icon, true, 1);
+            Throttle(now, 500);
+            return;
+        }
+        IGameObject? target = objectTable.FirstOrDefault(candidate => candidate.BaseId == vendorDataId);
+        if (target is { IsTargetable: true })
+        {
+            TargetSystem.Instance()->InteractWithObject((GameObject*)target.Address, false);
+            Throttle(now, 750);
+        }
+    }
+
+    private void UpdateReturnToInn(DateTimeOffset now)
+    {
+        if (!enqueueInnShortcut.HasAction || !lifestreamBusy.HasFunction)
+        {
+            Fail("Lifestream does not expose the required inn-travel contract.");
+            return;
+        }
+        if (!providerStarted)
+        {
+            enqueueInnShortcut.InvokeAction(null);
+            providerStarted = true;
+            providerPreparationStartedAt = now;
+            message = "Returning to the Grand Company inn.";
+            return;
+        }
+        bool busy = lifestreamBusy.InvokeFunc();
+        sawProviderBusy |= busy;
+        if (!busy && (sawProviderBusy || now - providerPreparationStartedAt >= TimeSpan.FromSeconds(4)))
+            CompleteCurrent(now);
     }
 
     private void UpdateDesynthesis(DateTimeOffset now)
@@ -1260,9 +1614,12 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         bool busy;
         try
         {
-            busy = current == NexusMaintenanceOperation.GrandCompanyTurnIn
-                ? autoRetainerBusy.InvokeFunc()
-                : glamourLogBusy.InvokeFunc();
+            busy = current switch
+            {
+                NexusMaintenanceOperation.GrandCompanyTurnIn or NexusMaintenanceOperation.Sell => autoRetainerBusy.InvokeFunc(),
+                NexusMaintenanceOperation.ReturnToInn => lifestreamBusy.InvokeFunc(),
+                _ => glamourLogBusy.InvokeFunc(),
+            };
         }
         catch
         {
@@ -1346,6 +1703,23 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
                     count++;
         }
         return count;
+    }
+
+    private static (int Occupied, int Total) BagSlotCounts()
+    {
+        int occupied = 0;
+        int total = 0;
+        foreach (InventoryType type in Bags)
+        {
+            InventoryContainer* container = InventoryManager.Instance()->GetInventoryContainer(type);
+            if (container is null || !container->IsLoaded)
+                continue;
+            total += container->Size;
+            for (int index = 0; index < container->Size; index++)
+                if (container->Items[index].ItemId != 0)
+                    occupied++;
+        }
+        return (occupied, total);
     }
 
     private static InventoryItem? FindBagItem(Func<InventoryItem, bool> predicate)
@@ -1479,8 +1853,10 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
     {
         if (providerPreparation is ProviderPreparationPhase.Traveling or ProviderPreparationPhase.Approaching)
             travel.Stop();
-        if (providerStarted && current == NexusMaintenanceOperation.GrandCompanyTurnIn)
-            TryInvoke(autoRetainerAbort, "stop Nexus-owned Grand Company turn-ins after failure");
+        if (providerStarted && current is NexusMaintenanceOperation.GrandCompanyTurnIn or NexusMaintenanceOperation.Sell)
+            TryInvoke(autoRetainerAbort, "stop the Nexus-owned AutoRetainer operation after failure");
+        if (providerStarted && current == NexusMaintenanceOperation.ReturnToInn)
+            TryInvoke(lifestreamAbort, "stop the return-to-inn request after failure");
         RestoreGearset();
         CloseOwnedAddons();
         Reset(result);
@@ -1497,6 +1873,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         approvedSale.Clear();
         message = result;
         ResetOperationState();
+        sellingUsesAutoRetainerList = false;
     }
 
     private void ResetOperationState()
@@ -1513,6 +1890,7 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         sawProviderBusy = false;
         pendingSale = null;
         saleVendor = null;
+        repairVendor = null;
         desynthCategory = default;
         desynthCategoryInitialized = false;
         stopRequested = false;
@@ -1554,6 +1932,9 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
                 CloseAddon(name);
         if (current == NexusMaintenanceOperation.GrandCompanyTurnIn)
             foreach (string name in new[] { "GrandCompanySupplyList", "GrandCompanySupplyReward", "SelectYesno", "SelectString" })
+                CloseAddon(name);
+        if (current == NexusMaintenanceOperation.SellTripleTriadCards)
+            foreach (string name in new[] { "SelectIconString", "TripleTriadCoinExchange", "ShopCardDialog" })
                 CloseAddon(name);
     }
 
@@ -1620,6 +2001,8 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         NexusMaintenanceOperation.GrandCompanyTurnIn => "running Grand Company turn-ins",
         NexusMaintenanceOperation.EntrustArmoire => "entrusting eligible Armoire items",
         NexusMaintenanceOperation.EntrustGlamourChest => "entrusting eligible Glamour Dresser items",
+        NexusMaintenanceOperation.SellTripleTriadCards => "selling duplicate Triple Triad cards",
+        NexusMaintenanceOperation.ReturnToInn => "returning to the inn",
         _ => "running maintenance",
     };
 
@@ -1645,4 +2028,11 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         Vector3 Position);
 
     private readonly record struct SaleVendor(uint DataId, uint TerritoryId, Vector3 Position, int ShopIndex);
+    private readonly record struct RepairVendor(uint DataId, uint TerritoryId, Vector3 Position, int RepairIndex);
+    private readonly record struct VendorPreference(
+        uint DataId,
+        uint TerritoryId,
+        Vector3 Position,
+        int RepairIndex,
+        int ShopIndex);
 }

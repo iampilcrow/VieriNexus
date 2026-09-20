@@ -44,6 +44,8 @@ public static class NavigationArrivalPolicy
 /// </summary>
 public static class NavigationAuthoredLegPolicy
 {
+    public const float MinimumVendorFlightDistance = 100f;
+
     public static NavigationAuthoredLeg Create(
         NavigationSuiteRouteRequest.PlaybackRequest request,
         int pointIndex,
@@ -64,4 +66,7 @@ public static class NavigationAuthoredLegPolicy
 
     public static bool ShouldRetryPathOnGround(bool attemptedFlight, bool pathFound) =>
         attemptedFlight && !pathFound;
+
+    public static bool ShouldUseFlightForLeg(bool requestedFlight, bool vendorApproach, float directDistance) =>
+        requestedFlight && (!vendorApproach || directDistance >= MinimumVendorFlightDistance);
 }
