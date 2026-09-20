@@ -2,6 +2,7 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
+using Lumina.Excel;
 using Lumina.Excel.Sheets;
 using System.Numerics;
 using VieriNexus.Application;
@@ -39,6 +40,7 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
     private uint rootTerritoryId;
     private string? aethernetDestination;
     private uint territoryOnlyTarget;
+    private Dictionary<uint, Vector2>? aetherytePositions;
     private SuiteRouteProviderObservation observation = Idle();
 
     internal NexusRouteTravelProvider(
@@ -114,7 +116,8 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
                 return new(true, StartMessage());
             }
 
-            if (!TryResolveTeleport(request.TerritoryId, out TeleportDestination destination))
+            NavigationRoutePoint target = request.Points[0];
+            if (!TryResolveTeleport(request.TerritoryId, target.X, target.Z, out TeleportDestination destination))
                 return FailDispatch($"Nexus could not find an unlocked Aetheryte or Aethernet route to territory {request.TerritoryId}.");
 
             if (!teleport.InvokeFunc(destination.RootAetheryteId, 0))
@@ -389,48 +392,84 @@ internal sealed class NexusRouteTravelProvider : INavigationSuiteTravelProvider
         return territory?.TerritoryIntendedUse.RowId is 1 or 47 or 49;
     }
 
-    private bool TryResolveTeleport(uint territoryId, out TeleportDestination destination)
+    private bool TryResolveTeleport(uint territoryId, float targetX, float targetZ, out TeleportDestination destination)
     {
         var sheet = dataManager.GetExcelSheet<Aetheryte>();
-        Aetheryte? direct = sheet
-            .Where(row => row.IsAetheryte && row.Territory.RowId == territoryId && IsUnlocked(row.RowId))
-            .OrderBy(row => row.RowId)
-            .Cast<Aetheryte?>()
-            .FirstOrDefault();
-        if (direct is { } directValue)
-        {
-            destination = new TeleportDestination(directValue.RowId, territoryId, null);
-            return true;
-        }
-
-        Aetheryte? node = sheet
-            .Where(row => !row.IsAetheryte && row.Territory.RowId == territoryId && row.AethernetGroup != 0 &&
-                          row.AethernetName.ValueNullable is not null)
-            .OrderBy(row => row.RowId)
-            .Cast<Aetheryte?>()
-            .FirstOrDefault();
-        if (node is not { } nodeValue)
-        {
-            destination = default;
-            return false;
-        }
-
-        Aetheryte? root = sheet
-            .Where(row => row.IsAetheryte && row.AethernetGroup == nodeValue.AethernetGroup && IsUnlocked(row.RowId))
-            .OrderBy(row => row.RowId)
-            .Cast<Aetheryte?>()
-            .FirstOrDefault();
-        if (root is not { } rootValue)
+        IReadOnlyDictionary<uint, Vector2> positions = AetherytePositions(sheet);
+        NavigationArrivalCandidate[] candidates = sheet
+            .Where(row => row.Territory.RowId != 0)
+            .Select(row =>
+            {
+                Vector2? position = positions.TryGetValue(row.RowId, out Vector2 value) ? value : null;
+                return new NavigationArrivalCandidate(
+                    row.RowId,
+                    row.Territory.RowId,
+                    row.AethernetGroup,
+                    row.IsAetheryte,
+                    row.AethernetName.ValueNullable?.Name.ToString(),
+                    IsUnlocked(row.RowId),
+                    position?.X,
+                    position?.Y);
+            })
+            .ToArray();
+        NavigationArrivalSelection? selected = NavigationEndpointPolicy.Select(
+            territoryId, targetX, targetZ, candidates);
+        if (selected is null)
         {
             destination = default;
             return false;
         }
 
         destination = new TeleportDestination(
-            rootValue.RowId,
-            rootValue.Territory.RowId,
-            nodeValue.AethernetName.Value.Name.ToString());
+            selected.RootAetheryteId,
+            selected.RootTerritoryId,
+            selected.AethernetName);
         return true;
+    }
+
+    private IReadOnlyDictionary<uint, Vector2> AetherytePositions(ExcelSheet<Aetheryte> aetherytes) =>
+        aetherytePositions ??= BuildAetherytePositions(aetherytes);
+
+    private Dictionary<uint, Vector2> BuildAetherytePositions(ExcelSheet<Aetheryte> aetherytes)
+    {
+        ExcelSheet<Map> maps = dataManager.GetExcelSheet<Map>();
+        SubrowExcelSheet<MapMarker> markers = dataManager.GetSubrowExcelSheet<MapMarker>();
+        Dictionary<uint, uint> aetheryteByAethernetName = [];
+        foreach (Aetheryte aetheryte in aetherytes)
+        {
+            if (aetheryte.AethernetName.RowId != 0)
+                aetheryteByAethernetName[aetheryte.AethernetName.RowId] = aetheryte.RowId;
+        }
+
+        Dictionary<uint, Vector2> positions = [];
+        foreach (Map map in maps)
+        {
+            if (map.MapMarkerRange == 0 || map.SizeFactor == 0 ||
+                !markers.TryGetRow(map.MapMarkerRange, out SubrowCollection<MapMarker> group))
+                continue;
+
+            foreach (MapMarker marker in group)
+            {
+                uint? aetheryteId = marker.DataType switch
+                {
+                    3 => marker.DataKey.RowId,
+                    4 when aetheryteByAethernetName.TryGetValue(marker.DataKey.RowId, out uint id) => id,
+                    _ => null,
+                };
+                if (aetheryteId is not { } id2 || id2 == 0)
+                    continue;
+
+                float scale = map.SizeFactor / 100f;
+                Vector2 world = new(
+                    (marker.X - 1024f) / scale - map.OffsetX,
+                    (marker.Y - 1024f) / scale - map.OffsetY);
+                bool preferred = map.TerritoryType.RowId != 0 &&
+                                 map.TerritoryType.RowId == aetherytes.GetRowOrDefault(id2)?.Territory.RowId;
+                if (preferred || !positions.ContainsKey(id2))
+                    positions[id2] = world;
+            }
+        }
+        return positions;
     }
 
     private bool IsUnlocked(uint aetheryteId) =>
