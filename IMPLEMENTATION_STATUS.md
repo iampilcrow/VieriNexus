@@ -1,6 +1,6 @@
 # VieriNexus implementation status
 
-Version 0.1.0.85 restores VieriAutoDuty's complete overlay Shop for Upgrades interaction: the menu action now scans immediately and opens the selectable upgrade modal rather than redirecting to a Nexus page. Recommended slots, full current/replacement details, active-EXP protection, imported gil reserve, refresh, selection controls, direct Start Shopping, and Cancel are present. The modal enters the same Nexus-owned transaction used by automatic gear readiness. Version 0.1.0.84's broad maintenance and Atlas parity work remains intact: stock AutoDuty runs duties, stock Questionable runs ordinary quests, and Nexus owns the custom Vieri behavior and unified presentation around them.
+Version 0.1.0.86 restores the intended one-click VieriAutoDuty overlay behavior for Shop for Upgrades. The menu action scans the current job, selects only strict recommended upgrades, protects active EXP equipment, enforces the imported per-character gil reserve, and immediately starts the Nexus-owned shopping transaction. It opens neither a Nexus page nor a review/confirmation window; a concise overlay result appears only when there is nothing eligible to buy or the action cannot start. Version 0.1.0.84's broad maintenance and Atlas parity work remains intact: stock AutoDuty runs duties, stock Questionable runs ordinary quests, and Nexus owns the custom Vieri behavior and unified presentation around them.
 
 ## Foundation implemented
 
