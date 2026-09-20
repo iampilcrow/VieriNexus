@@ -1,9 +1,14 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Interface;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Interface.Windowing;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using VieriNexus.Application;
 using VieriNexus.Services;
 
@@ -48,6 +53,9 @@ internal sealed class NexusOperationsOverlay : Window
     private bool quickTravelObservedBusy;
     private string quickTravelDestination = string.Empty;
     private DateTimeOffset quickTravelStartedAt;
+    private GrandCompanyOverlayDestination? barracksDestination;
+    private DateTimeOffset barracksStartedAt;
+    private DateTimeOffset nextBarracksActionAt;
     private Vector2 lastPosition;
     private int priorLineCount = 1;
     private int currentLineCount = 1;
@@ -112,7 +120,6 @@ internal sealed class NexusOperationsOverlay : Window
     public override void Draw()
     {
         lastPosition = ImGui.GetWindowPos();
-        UpdateQuickTravel();
         bool navigationActive = navigation.Status.State is not NavigationRouteExecutionState.Idle and
             not NavigationRouteExecutionState.Completed and not NavigationRouteExecutionState.Failed;
         bool gearActive = gear.Status.IsActive;
@@ -121,8 +128,11 @@ internal sealed class NexusOperationsOverlay : Window
         bool maintenanceActive = maintenance.Status.IsActive;
         bool dummyTravelActive = strikingDummies.Status.IsActive;
         AutoDutyOverlayPreferences? overlay = maintenance.CurrentProfile?.Overlay;
+        AutoDutyMaintenancePolicy? maintenancePolicy = maintenance.CurrentProfile?.Maintenance;
+        VieriAutoDutyOverlayButtonState buttonState = VieriAutoDutyOverlayButtonPolicy.Evaluate(
+            overlay, maintenancePolicy, maintenance.HasWorkingProfile);
         bool anyActive = navigationActive || gearActive || progressionActive || progressionPaused || maintenanceActive ||
-                         dummyTravelActive || quickTravelRequested;
+                         dummyTravelActive || quickTravelRequested || barracksDestination is not null;
         string? dutyStatus = plugin.Configuration.ShowOperationsDutyStatus
             ? OverlayDutyText()
             : null;
@@ -137,8 +147,9 @@ internal sealed class NexusOperationsOverlay : Window
             if (ImGui.Button("Stop"))
             {
                 bool quickStopped = StopQuickTravel();
+                bool barracksStopped = StopBarracksTravel();
                 VieriNexus.Contracts.NexusCommandResultDto stopped = control.StopAll();
-                message = quickStopped && !stopped.Accepted
+                message = (quickStopped || barracksStopped) && !stopped.Accepted
                     ? "Stopped the Nexus travel request."
                     : stopped.Message;
             }
@@ -169,10 +180,10 @@ internal sealed class NexusOperationsOverlay : Window
         bool controlsEnabled = !anyActive;
         if (!progressionActive && !progressionPaused)
         {
-            CategoryButton("Goto", "NexusGoto", controlsEnabled && overlay?.ShowGoto != false);
+            CategoryButton("Goto", "NexusGoto", controlsEnabled && buttonState.Goto);
             if (ImGui.BeginPopup("NexusGoto"))
             {
-                if (ImGui.Selectable(VieriAutoDutyOverlayContract.Barracks)) StartGrandCompanyPoint(barracks: true);
+                if (ImGui.Selectable(VieriAutoDutyOverlayContract.Barracks)) StartBarracks();
                 if (ImGui.Selectable(VieriAutoDutyOverlayContract.Inn)) StartInn();
                 if (ImGui.Selectable(VieriAutoDutyOverlayContract.GrandCompanySupply)) StartGrandCompanyPoint(barracks: false);
                 if (ImGui.Selectable(VieriAutoDutyOverlayContract.FlagMarker)) StartFlagMarker();
@@ -210,18 +221,18 @@ internal sealed class NexusOperationsOverlay : Window
             {
                 if (ImGui.Selectable(VieriAutoDutyOverlayContract.ShopForUpgrades))
                     StartRecommendedGearShopping();
-                if (Selectable(VieriAutoDutyOverlayContract.Equip, overlay?.ShowGear != false))
+                if (Selectable(VieriAutoDutyOverlayContract.Equip, buttonState.Equip))
                 {
                     ImGui.CloseCurrentPopup();
                     message = Plugin.CommandManager.ProcessCommand("/ad autoequip")
                         ? "AutoDuty is equipping its recommended gear."
                         : "AutoDuty is not ready to equip recommended gear.";
                 }
-                if (Selectable(VieriAutoDutyOverlayContract.Repair, maintenance.HasWorkingProfile && overlay?.ShowRepair != false))
+                if (Selectable(VieriAutoDutyOverlayContract.Repair, buttonState.Repair))
                     maintenance.Start(NexusMaintenanceOperation.Repair, out message);
-                if (Selectable(VieriAutoDutyOverlayContract.ExtractMateria, maintenance.HasWorkingProfile && overlay?.ShowExtract != false))
+                if (Selectable(VieriAutoDutyOverlayContract.ExtractMateria, buttonState.Extract))
                     maintenance.Start(NexusMaintenanceOperation.ExtractMateria, out message);
-                if (Selectable(VieriAutoDutyOverlayContract.Desynth, maintenance.HasWorkingProfile && overlay?.ShowDesynth != false))
+                if (Selectable(VieriAutoDutyOverlayContract.Desynth, buttonState.Desynth))
                     maintenance.Start(NexusMaintenanceOperation.Desynthesize, out message);
                 ImGui.EndPopup();
             }
@@ -230,17 +241,17 @@ internal sealed class NexusOperationsOverlay : Window
             CategoryButton("Inventory", "NexusInventory", controlsEnabled);
             if (ImGui.BeginPopup("NexusInventory"))
             {
-                if (Selectable(VieriAutoDutyOverlayContract.SellInventory, maintenance.HasWorkingProfile && overlay?.ShowSell != false))
+                if (Selectable(VieriAutoDutyOverlayContract.SellInventory, buttonState.Sell))
                 {
                     ImGui.CloseCurrentPopup();
                     maintenance.StartProtectedSelling(out message);
                 }
-                if (Selectable(VieriAutoDutyOverlayContract.TurnIn, maintenance.HasWorkingProfile && overlay?.ShowTurnIn != false))
+                if (Selectable(VieriAutoDutyOverlayContract.TurnIn, buttonState.TurnIn))
                 {
                     ImGui.CloseCurrentPopup();
                     maintenance.Start(NexusMaintenanceOperation.GrandCompanyTurnIn, out message);
                 }
-                if (Selectable(VieriAutoDutyOverlayContract.Coffers, maintenance.HasWorkingProfile && overlay?.ShowCoffers != false))
+                if (Selectable(VieriAutoDutyOverlayContract.Coffers, buttonState.Coffers))
                 {
                     ImGui.CloseCurrentPopup();
                     maintenance.Start(NexusMaintenanceOperation.OpenCoffers, out message);
@@ -254,7 +265,7 @@ internal sealed class NexusOperationsOverlay : Window
             CategoryButton("Extras", "NexusExtras", controlsEnabled);
             if (ImGui.BeginPopup("NexusExtras"))
             {
-                bool tripleTriadEnabled = maintenance.HasWorkingProfile && overlay?.ShowTripleTriad != false;
+                bool tripleTriadEnabled = buttonState.TripleTriad;
                 if (!tripleTriadEnabled)
                     ImGui.BeginDisabled();
                 if (ImGui.BeginMenu(VieriAutoDutyOverlayContract.TripleTriad))
@@ -374,6 +385,8 @@ internal sealed class NexusOperationsOverlay : Window
             return strikingDummies.Status.Message;
         if (quickTravelRequested)
             return $"Traveling to {quickTravelDestination}.";
+        if (barracksDestination is not null)
+            return message;
         if (navigation.Status.State is not NavigationRouteExecutionState.Idle and
             not NavigationRouteExecutionState.Completed and not NavigationRouteExecutionState.Failed)
             return navigation.Status.Message;
@@ -447,7 +460,7 @@ internal sealed class NexusOperationsOverlay : Window
         }
     }
 
-    private void StartInn()
+    private unsafe void StartInn()
     {
         ImGui.CloseCurrentPopup();
         if (!enqueueInnShortcut.HasAction || !lifestreamBusy.HasFunction || !lifestreamAbort.HasAction)
@@ -462,14 +475,16 @@ internal sealed class NexusOperationsOverlay : Window
                 message = "Lifestream is already handling another trip.";
                 return;
             }
-            // A null selection deliberately means the current character's Grand Company,
-            // matching AutoDuty's proven Goto Inn behavior (including Twin Adder/Gridania).
-            enqueueInnShortcut.InvokeAction(null);
+            PlayerState* playerState = PlayerState.Instance();
+            byte grandCompany = playerState is null ? (byte)0 : playerState->GrandCompany;
+            GrandCompanyOverlayDestination destination =
+                VieriAutoDutyGrandCompanyContract.Resolve(grandCompany);
+            enqueueInnShortcut.InvokeAction(destination.InnShortcutIndex);
             quickTravelRequested = true;
             quickTravelObservedBusy = false;
-            quickTravelDestination = "Grand Company inn";
+            quickTravelDestination = $"{destination.CompanyName} inn";
             quickTravelStartedAt = DateTimeOffset.UtcNow;
-            message = "Nexus asked Lifestream to travel to your Grand Company inn.";
+            message = $"Traveling to the {destination.CompanyName} inn.";
         }
         catch (Exception exception)
         {
@@ -510,7 +525,20 @@ internal sealed class NexusOperationsOverlay : Window
             not NavigationRouteExecutionState.Completed and not NavigationRouteExecutionState.Failed ||
         gear.Status.IsActive ||
         progression.State?.Goal.Status is VieriNexus.Domain.GoalStatus.Active or VieriNexus.Domain.GoalStatus.Paused ||
-        maintenance.Status.IsActive || strikingDummies.Status.IsActive || quickTravelRequested;
+        maintenance.Status.IsActive || strikingDummies.Status.IsActive || quickTravelRequested ||
+        barracksDestination is not null;
+
+    internal void Update(DateTimeOffset now)
+    {
+        UpdateQuickTravel();
+        UpdateBarracksTravel(now);
+    }
+
+    internal void Shutdown()
+    {
+        StopQuickTravel();
+        StopBarracksTravel();
+    }
 
     private void UpdateQuickTravel()
     {
@@ -557,18 +585,138 @@ internal sealed class NexusOperationsOverlay : Window
         return true;
     }
 
+    private unsafe void StartBarracks()
+    {
+        ImGui.CloseCurrentPopup();
+        PlayerState* playerState = PlayerState.Instance();
+        byte grandCompany = playerState is null ? (byte)0 : playerState->GrandCompany;
+        GrandCompanyOverlayDestination destination =
+            VieriAutoDutyGrandCompanyContract.Resolve(grandCompany);
+        if (Plugin.ClientState.TerritoryType == destination.BarracksTerritoryId)
+        {
+            message = $"Already inside the {destination.CompanyName} barracks.";
+            return;
+        }
+
+        var route = new NavigationRouteSnapshot(
+            Guid.NewGuid(), $"{destination.CompanyName} barracks", destination.HeadquartersTerritoryId,
+            [new(destination.BarracksX, destination.BarracksY, destination.BarracksZ)],
+            "Exact VieriAutoDuty Grand Company barracks entrance.", "built-in, overlay, vieriautoduty",
+            true, false, 0.25f, 2f, 0, 0, string.Empty, false, DateTime.UtcNow);
+        NavigationRouteExecutionStatus started = navigation.Start(route, NavigationRoutePlanKind.Playback);
+        message = started.Message;
+        if (started.State is NavigationRouteExecutionState.Running)
+        {
+            barracksDestination = destination;
+            barracksStartedAt = DateTimeOffset.UtcNow;
+            nextBarracksActionAt = DateTimeOffset.UtcNow;
+        }
+    }
+
+    private unsafe void UpdateBarracksTravel(DateTimeOffset now)
+    {
+        if (barracksDestination is not { } destination)
+            return;
+        if (Plugin.ClientState.TerritoryType == destination.BarracksTerritoryId)
+        {
+            barracksDestination = null;
+            message = string.Empty;
+            return;
+        }
+        if (now - barracksStartedAt >= TimeSpan.FromMinutes(10))
+        {
+            navigation.Stop();
+            barracksDestination = null;
+            message = $"Travel to the {destination.CompanyName} barracks timed out and was stopped.";
+            return;
+        }
+        if (Plugin.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas] ||
+            Plugin.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51])
+            return;
+
+        NavigationRouteExecutionStatus status = navigation.Status;
+        if (status.IsActive)
+        {
+            message = $"Traveling to the {destination.CompanyName} barracks.";
+            return;
+        }
+        if (status.State is NavigationRouteExecutionState.Failed or NavigationRouteExecutionState.Blocked or
+            NavigationRouteExecutionState.AwaitingAcknowledgement)
+        {
+            barracksDestination = null;
+            message = status.Message;
+            return;
+        }
+        if (Plugin.ClientState.TerritoryType != destination.HeadquartersTerritoryId)
+        {
+            barracksDestination = null;
+            message = $"Nexus stopped because it did not reach the {destination.CompanyName} barracks entrance.";
+            return;
+        }
+
+        nint confirmationAddress = Plugin.GameGui.GetAddonByName("SelectYesno", 1);
+        AddonSelectYesno* confirmation = (AddonSelectYesno*)confirmationAddress;
+        if (confirmation is not null && confirmation->AtkUnitBase.IsReady && confirmation->AtkUnitBase.IsVisible)
+        {
+            ClickButton(confirmation->YesButton, (AtkUnitBase*)confirmation);
+            message = $"Entering the {destination.CompanyName} barracks.";
+            nextBarracksActionAt = now.AddMilliseconds(750);
+            return;
+        }
+        if (now < nextBarracksActionAt)
+            return;
+
+        IGameObject? door = Plugin.ObjectTable
+            .Where(candidate => candidate.BaseId == destination.BarracksDoorDataId)
+            .OrderBy(candidate => Plugin.ObjectTable.LocalPlayer is { } player
+                ? Vector3.DistanceSquared(player.Position, candidate.Position)
+                : float.MaxValue)
+            .FirstOrDefault();
+        if (door is not { IsTargetable: true } || Plugin.ObjectTable.LocalPlayer is not { } localPlayer ||
+            Vector3.Distance(localPlayer.Position, door.Position) > 4f)
+        {
+            message = $"Waiting for the {destination.CompanyName} barracks entrance.";
+            nextBarracksActionAt = now.AddSeconds(1);
+            return;
+        }
+
+        TargetSystem* targets = TargetSystem.Instance();
+        if (targets is not null)
+            targets->InteractWithObject((GameObject*)door.Address, false);
+        message = $"Entering the {destination.CompanyName} barracks.";
+        nextBarracksActionAt = now.AddSeconds(1);
+    }
+
+    private bool StopBarracksTravel()
+    {
+        if (barracksDestination is null)
+            return false;
+        navigation.Stop();
+        barracksDestination = null;
+        return true;
+    }
+
+    private static unsafe void ClickButton(AtkComponentButton* button, AtkUnitBase* addon)
+    {
+        if (button is null || !button->IsEnabled)
+            return;
+        AtkComponentNode* node = button->AtkComponentBase.OwnerNode;
+        if (node is null)
+            return;
+        AtkEvent* evt = (AtkEvent*)node->AtkEventManager.Event;
+        if (evt is not null)
+            addon->ReceiveEvent(evt->State.EventType, checked((int)evt->Param), evt);
+    }
+
     private unsafe void StartGrandCompanyPoint(bool barracks)
     {
         byte grandCompany = PlayerState.Instance()->GrandCompany;
-        QuickPoint destination = (grandCompany, barracks) switch
-        {
-            (1, false) => new("Maelstrom supply counter", 128, new(94.02183f, 40.27537f, 74.475525f)),
-            (2, false) => new("Twin Adder supply counter", 132, new(-68.678566f, -0.5015295f, -8.470145f)),
-            (_, false) => new("Immortal Flames supply counter", 130, new(-142.82619f, 4.0999994f, -106.31349f)),
-            (1, true) => new("Maelstrom barracks entrance", 128, new(98.00867f, 41.275635f, 62.790894f)),
-            (2, true) => new("Twin Adder barracks entrance", 132, new(-80.216736f, 0.47296143f, -7.0039062f)),
-            _ => new("Immortal Flames barracks entrance", 130, new(-153.30743f, 5.2338257f, -98.039246f)),
-        };
+        GrandCompanyOverlayDestination company = VieriAutoDutyGrandCompanyContract.Resolve(grandCompany);
+        QuickPoint destination = barracks
+            ? new($"{company.CompanyName} barracks entrance", company.HeadquartersTerritoryId,
+                new(company.BarracksX, company.BarracksY, company.BarracksZ))
+            : new($"{company.CompanyName} supply counter", company.HeadquartersTerritoryId,
+                new(company.SupplyX, company.SupplyY, company.SupplyZ));
         StartPoint(destination.Name, destination.TerritoryId, destination.Position, barracks ? 2f : 3f);
     }
 

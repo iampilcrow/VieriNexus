@@ -417,6 +417,7 @@ public sealed class Plugin : IDalamudPlugin
         worldAutomation.Shutdown();
         progressAtlasActions.Shutdown();
         huntingLog.Shutdown();
+        operationsOverlay.Shutdown();
         maintenanceRuntime.Shutdown();
         strikingDummyTravel.Stop(out _);
         mapClickNavigation.Stop(out _);
@@ -487,6 +488,7 @@ public sealed class Plugin : IDalamudPlugin
         gearShoppingRuntime.Update();
         maintenanceRuntime.Update(DateTimeOffset.UtcNow);
         strikingDummyTravel.Update(DateTimeOffset.UtcNow);
+        operationsOverlay.Update(DateTimeOffset.UtcNow);
         bool isInDuty = Condition[ConditionFlag.BoundByDuty] ||
                         Condition[ConditionFlag.BoundByDuty56] ||
                         Condition[ConditionFlag.BoundByDuty95];

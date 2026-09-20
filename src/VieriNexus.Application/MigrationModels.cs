@@ -84,7 +84,8 @@ public sealed record AutoDutyOverlayPreferences(
     bool ShowSell,
     bool ShowTurnIn,
     bool ShowCoffers,
-    bool ShowTripleTriad);
+    bool ShowTripleTriad,
+    bool OverrideButtons = true);
 
 public sealed record AutoDutyMaintenancePolicy(
     bool AutoBuyVendorGear,

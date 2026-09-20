@@ -106,8 +106,15 @@ public sealed class OperationsExecutionPolicyTests
     [Fact]
     public void StrikingDummyCatalogPreservesExpansionCoverageAndCoordinateConversion()
     {
+        Assert.Equal(24, StrikingDummyCatalog.Destinations.Count);
         Assert.Contains(StrikingDummyCatalog.Destinations, item => item.Expansion == "A Realm Reborn");
         Assert.Contains(StrikingDummyCatalog.Destinations, item => item.Expansion == "Dawntrail");
+        Assert.Equal("PvP (level not listed)", Assert.Single(StrikingDummyCatalog.Destinations,
+            item => item.Zone == "Wolves' Den Pier").Levels);
+        List<StrikingDummyDestination> ordered = StrikingDummyCatalog.Destinations.ToList();
+        Assert.True(
+            ordered.IndexOf(ordered.Single(item => item.Zone == "Zadnor")) <
+            ordered.IndexOf(ordered.Single(item => item.Zone == "Thavnair")));
         (float x, float z) = StrikingDummyCatalog.MapToWorld(24, 19.5f, 100, 0, 0);
         Assert.True(float.IsFinite(x));
         Assert.True(float.IsFinite(z));

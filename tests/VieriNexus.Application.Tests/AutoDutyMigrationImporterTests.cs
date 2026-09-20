@@ -20,6 +20,7 @@ public sealed class AutoDutyMigrationImporterTests
                 "LockOverlay": true,
                 "OverlayNoBG": true,
                 "OverlayAnchorBottom": true,
+                "OverrideOverlayButtons": false,
                 "PreferredSummoningBellEnum": 133,
                 "RepairButton": false,
                 "AutoBuyGilVendorGear": true,
@@ -88,6 +89,7 @@ public sealed class AutoDutyMigrationImporterTests
         Assert.True(profile.Overlay.LockPosition);
         Assert.True(profile.Overlay.TransparentBackground);
         Assert.True(profile.Overlay.AnchorBottom);
+        Assert.False(profile.Overlay.OverrideButtons);
         Assert.Equal(133u, profile.PreferredSummoningBell);
         Assert.False(profile.Overlay.ShowRepair);
         Assert.True(profile.Maintenance.AutoBuyVendorGear);

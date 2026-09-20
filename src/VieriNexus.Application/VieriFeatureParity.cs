@@ -98,3 +98,89 @@ public static class VieriAutoDutyOverlayContract
     public static IReadOnlyList<string> ExtraActions { get; } =
         [TripleTriad, RegisterTripleTriadCards, SellTripleTriadCards];
 }
+
+public sealed record GrandCompanyOverlayDestination(
+    string CompanyName,
+    uint HeadquartersTerritoryId,
+    uint InnTerritoryId,
+    int InnShortcutIndex,
+    uint BarracksTerritoryId,
+    uint BarracksDoorDataId,
+    float BarracksX,
+    float BarracksY,
+    float BarracksZ,
+    float SupplyX,
+    float SupplyY,
+    float SupplyZ);
+
+/// <summary>
+/// Exact Grand Company destination mapping used by VieriAutoDuty's overlay helpers.
+/// Lifestream's nullable inn shortcut is intentionally not used: a null shortcut may
+/// resolve a configured suite instead of the active character's Grand Company inn.
+/// </summary>
+public static class VieriAutoDutyGrandCompanyContract
+{
+    public static GrandCompanyOverlayDestination Resolve(byte grandCompany) => grandCompany switch
+    {
+        1 => new(
+            "Maelstrom", 128, 177, 0, 536, 2007527,
+            98.00867f, 41.275635f, 62.790894f,
+            94.02183f, 40.27537f, 74.475525f),
+        2 => new(
+            "Twin Adder", 132, 179, 2, 534, 2006962,
+            -80.216736f, 0.47296143f, -7.0039062f,
+            -68.678566f, -0.5015295f, -8.470145f),
+        _ => new(
+            "Immortal Flames", 130, 178, 1, 535, 2007529,
+            -153.30743f, 5.2338257f, -98.039246f,
+            -142.82619f, 4.0999994f, -106.31349f),
+    };
+}
+
+public sealed record VieriAutoDutyOverlayButtonState(
+    bool Goto,
+    bool Equip,
+    bool Repair,
+    bool Extract,
+    bool Desynth,
+    bool Sell,
+    bool TurnIn,
+    bool Coffers,
+    bool TripleTriad);
+
+/// <summary>
+/// Preserves VieriAutoDuty's exact Override Overlay Buttons behavior. When override is disabled,
+/// automatic maintenance choices govern most buttons; Goto and Sell retain their predecessor
+/// behavior, and the individual button switches still remain authoritative where applicable.
+/// </summary>
+public static class VieriAutoDutyOverlayButtonPolicy
+{
+    public static VieriAutoDutyOverlayButtonState Evaluate(
+        AutoDutyOverlayPreferences? overlay,
+        AutoDutyMaintenancePolicy? maintenance,
+        bool hasWorkingProfile)
+    {
+        bool overrideButtons = overlay?.OverrideButtons ?? true;
+        bool gotoEnabled = overlay is null || !overrideButtons || overlay.ShowGoto;
+        bool equipEnabled = overlay is null ||
+            overlay.ShowGear && (overrideButtons || maintenance?.AutoEquipRecommendedGear == true);
+        bool repairEnabled = hasWorkingProfile && (overlay is null ||
+            overlay.ShowRepair && (overrideButtons || maintenance?.AutoRepair == true));
+        bool extractEnabled = hasWorkingProfile && (overlay is null ||
+            overlay.ShowExtract && (overrideButtons || maintenance?.AutoExtract == true));
+        bool desynthEnabled = hasWorkingProfile && (overlay is null ||
+            overlay.ShowDesynth && (overrideButtons || maintenance?.AutoDesynth == true));
+        bool sellEnabled = hasWorkingProfile &&
+            (overlay is null || !overrideButtons || overlay.ShowSell);
+        bool turnInEnabled = hasWorkingProfile && (overlay is null ||
+            overlay.ShowTurnIn && (overrideButtons || maintenance?.AutoGrandCompanyTurnIn == true));
+        bool coffersEnabled = hasWorkingProfile && (overlay is null ||
+            overlay.ShowCoffers && (overrideButtons || maintenance?.AutoOpenCoffers == true));
+        bool tripleTriadConfigured = maintenance is
+            { RegisterTripleTriadCards: true } or { SellTripleTriadCards: true };
+        bool tripleTriadEnabled = hasWorkingProfile && (overlay is null ||
+            tripleTriadConfigured || overrideButtons && overlay.ShowTripleTriad);
+        return new(gotoEnabled, equipEnabled, repairEnabled, extractEnabled, desynthEnabled,
+            sellEnabled, turnInEnabled, coffersEnabled, tripleTriadEnabled);
+    }
+}

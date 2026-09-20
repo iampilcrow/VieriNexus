@@ -106,7 +106,8 @@ public sealed class AutoDutyMigrationImporter
         Bool(value, "SellButton", true),
         Bool(value, "TurninButton", true),
         Bool(value, "CofferButton", true),
-        Bool(value, "TTButton", true));
+        Bool(value, "TTButton", true),
+        Bool(value, "OverrideOverlayButtons", true));
 
     private static AutoDutyMaintenancePolicy ReadMaintenance(JsonElement value) => new(
         Bool(value, "AutoBuyGilVendorGear", false),

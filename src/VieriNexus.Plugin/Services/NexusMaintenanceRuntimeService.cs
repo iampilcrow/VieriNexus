@@ -1226,10 +1226,12 @@ internal sealed unsafe class NexusMaintenanceRuntimeService : IProgressionMainte
         }
         if (!providerStarted)
         {
-            enqueueInnShortcut.InvokeAction(null);
+            GrandCompanyOverlayDestination destination = VieriAutoDutyGrandCompanyContract.Resolve(
+                PlayerState.Instance() is null ? (byte)0 : PlayerState.Instance()->GrandCompany);
+            enqueueInnShortcut.InvokeAction(destination.InnShortcutIndex);
             providerStarted = true;
             providerPreparationStartedAt = now;
-            message = "Returning to the Grand Company inn.";
+            message = $"Returning to the {destination.CompanyName} inn.";
             return;
         }
         bool busy = lifestreamBusy.InvokeFunc();

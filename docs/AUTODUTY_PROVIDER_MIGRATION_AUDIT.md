@@ -1,7 +1,7 @@
 # AutoDuty provider migration audit
 
-Snapshot: 2026-09-12
-Vieri source: `e1318fcf3cc950cf928a5a95058cb806a27f76a4` (`1.0.0.443`)
+Snapshot: 2026-09-20
+Vieri source: `d993fc979350dc8ac83c733cee56314c19e0d01d` (`1.0.0.444`)
 Stock upstream: `2b0943ed113da76f3ce9df0df2f302151f828292`
 Common ancestor: `17f54e99235d84fe39582258eca7058fc5fb3e2b`
 
@@ -107,7 +107,29 @@ Destination: Nexus command gateway, world snapshots, provider health, activity h
 
 Vieri branding, the cleaned-up categorized overlay actions, manual shopping windows, striking-dummy menus, support-link changes, tags, versioning, and the Vieri changelog differ from stock.
 
-Destination: Nexus owns and preserves the custom overlay experience—not stock AutoDuty's overlay—including the compact categorized Goto, Gear, Inventory, and Extras actions; striking-dummy destinations; manual Shop for Upgrades review; and the useful duty controls/status. These are rebuilt as coherent Nexus UI over Nexus commands and narrow provider capabilities. Fork branding and duplicate AutoDuty windows retire; the user-facing functionality and cleaner organization do not.
+Destination: Nexus owns and preserves the custom overlay experience—not stock AutoDuty's overlay—including the compact categorized Goto, Gear, Inventory, and Extras actions; striking-dummy destinations; one-click Shop for Upgrades; and the useful duty controls/status. These are rebuilt as coherent Nexus UI over Nexus commands and narrow provider capabilities. Fork branding and duplicate AutoDuty windows retire; the user-facing functionality and cleaner organization do not.
+
+#### Overlay source-parity contract
+
+The overlay is audited against `AutoDuty/Windows/MainWindow.cs::GotoAndActions` and the exact helpers it invokes. Similar labels are not sufficient; each button must preserve the predecessor outcome:
+
+| Vieri overlay action | Exact predecessor behavior preserved by Nexus |
+| --- | --- |
+| Stop / Pause / Last Run / Resume | Nexus owns the combined operation and duty lifecycle while stock AutoDuty remains the bounded duty provider. |
+| Goto → Barracks | Select the active character's Grand Company, travel to its exact headquarters door, interact, confirm entry, and verify territory 536/534/535. Walking only to the exterior door is not parity. |
+| Goto → Inn | Select the active character's Grand Company and pass Lifestream the explicit Maelstrom/Twin Adder/Immortal Flames inn index. A nullable/default shortcut is forbidden because it can resolve a different suite. |
+| Goto → GCSupply | Use the exact company-specific headquarters territory and supply-counter standing point from VieriAutoDuty. |
+| Goto → Flag Marker | Resolve the current flag and use Nexus route travel to the mesh floor at that marker. |
+| Goto → Summoning Bell | Honor the migrated preferred bell exactly: Grand Company inn, apartment, personal home, Free Company estate, or the same city bell coordinate catalog. |
+| Goto → Apartment / Personal Home / FC Estate | Invoke the corresponding stock Lifestream owned-property shortcut and track it as the active overlay trip. |
+| Goto → Triple Triad Trader | Travel to territory 144 and the exact VieriAutoDuty vendor standing point `(-56.1, 1.6, 16.6)`. |
+| Goto → Striking Dummies | Preserve the complete Vieri catalog, expansion ordering, display labels, instance constraints, teleport selection, and final vnavmesh approach. |
+| Gear → Shop for Upgrades | One click starts the exact Nexus-approved shopping transaction with the migrated gil floor; it must not open another approval or Start Shopping screen. |
+| Gear → Equip / Repair / Extract Materia / Desynth | Preserve the Vieri button-override rules and invoke the corresponding stock-compatible/native operation directly. |
+| Inventory → Sell Inventory / TurnIn / Coffers / Armoire | Preserve one-click behavior and Vieri button-override rules; Nexus owns item selection/protection, while only the narrow mechanics provider is delegated. |
+| Extras → Triple Triad | Preserve Register TT Cards and Sell TT Cards as direct actions and the predecessor enablement rules. |
+
+Nexus 0.1.0.88 makes the Grand Company destination table and overlay-button enablement rules executable, tested Application contracts. It also moves quick-travel/interior progress observation outside window rendering so hiding the overlay cannot stall an action.
 
 ### 9. Tests and provenance
 
